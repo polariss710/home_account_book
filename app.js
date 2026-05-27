@@ -24,7 +24,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInitialDates();
   initSupabaseClient();
   await refreshSession();
-  await syncAllToCloud();
+  processAuthHash();
+  await syncAllToCloud({ silent: true });
   await loadCloudData();
   render();
 });
@@ -48,6 +49,7 @@ function bindElements() {
     "authState",
     "signOutBtn",
     "syncLocalBtn",
+    "actionMessage",
     "supabaseForm",
     "clearCloudBtn",
     "monthIncome",
@@ -179,11 +181,12 @@ function bindEvents() {
 
   els.syncLocalBtn.addEventListener("click", async () => {
     if (!isCloudReady()) {
-      alert("请先登录后再同步。");
+      setActionMessage("请先登录后再同步。", "error");
       return;
     }
     await syncAllToCloud();
     await loadCloudData();
+    setActionMessage("本地数据已同步到 Supabase。", "success");
     render();
   });
 
@@ -501,7 +504,7 @@ function initSupabaseClient() {
   supabaseClient.auth.onAuthStateChange(async (_event, session) => {
     currentUser = session?.user || null;
     if (currentUser) {
-      await syncAllToCloud();
+      await syncAllToCloud({ silent: true });
       await loadCloudData();
     }
     render();
@@ -533,10 +536,10 @@ async function loadCloudData() {
     selectCloud("home_months"),
   ]);
   if (accounts && categories && transactions && months) {
-    state.accounts = accounts;
-    state.categories = categories;
-    state.transactions = transactions;
-    state.months = Object.fromEntries(months.map((item) => [item.month_key, item]));
+    state.accounts = mergeById(state.accounts, accounts);
+    state.categories = mergeById(state.categories, categories);
+    state.transactions = mergeById(state.transactions, transactions);
+    state.months = mergeMonths(state.months, months);
     saveLocal();
   }
 }
@@ -572,7 +575,7 @@ async function removeCloud(kind, id) {
   if (error) alert(`Supabase 删除失败：${error.message}`);
 }
 
-async function syncAllToCloud() {
+async function syncAllToCloud({ silent = false } = {}) {
   if (!isCloudReady()) return;
   const operations = [
     ["home_accounts", state.accounts.map(withUser), undefined],
@@ -581,14 +584,21 @@ async function syncAllToCloud() {
     ["home_months", Object.values(state.months).map(withUser), "user_id,month_key"],
   ].filter(([, rows]) => rows.length);
 
+  if (!operations.length) {
+    if (!silent) setActionMessage("当前没有本地数据可同步。可以先点“初始化示例”。", "error");
+    return;
+  }
+
   for (const [table, rows, onConflict] of operations) {
     const options = onConflict ? { onConflict } : undefined;
     const { error } = await supabaseClient.from(table).upsert(rows, options);
     if (error) {
-      alert(`Supabase 同步失败：${error.message}`);
+      if (!silent) setActionMessage(`Supabase 同步失败：${error.message}`, "error");
+      else alert(`Supabase 同步失败：${error.message}`);
       return;
     }
   }
+  if (!silent) setActionMessage("同步完成。", "success");
 }
 
 async function refreshSession() {
@@ -610,6 +620,34 @@ function isCloudReady() {
 
 function withUser(record) {
   return { ...record, user_id: currentUser.id };
+}
+
+function mergeById(localRows, cloudRows) {
+  const map = new Map();
+  [...cloudRows, ...localRows].forEach((row) => {
+    map.set(row.id, row);
+  });
+  return [...map.values()].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+}
+
+function mergeMonths(localMonths, cloudMonths) {
+  const merged = { ...Object.fromEntries(cloudMonths.map((item) => [item.month_key, item])), ...localMonths };
+  return merged;
+}
+
+function setActionMessage(message, type = "") {
+  if (!els.actionMessage) return;
+  els.actionMessage.textContent = message;
+  els.actionMessage.className = `form-message ${type}`;
+}
+
+function processAuthHash() {
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const errorDescription = hash.get("error_description");
+  if (errorDescription) {
+    setActionMessage(`登录链接无效或已过期，请重新发送登录链接。`, "error");
+    window.history.replaceState({}, document.title, `${window.location.origin}${window.location.pathname}`);
+  }
 }
 
 function formData(form) {

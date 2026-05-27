@@ -90,7 +90,7 @@ create policy home_accounts_user_all
   on home_accounts
   for all
   to authenticated
-  using (user_id = auth.uid())
+  using (user_id = auth.uid() or user_id is null)
   with check (user_id = auth.uid());
 
 drop policy if exists home_categories_anon_all on home_categories;
@@ -99,7 +99,7 @@ create policy home_categories_user_all
   on home_categories
   for all
   to authenticated
-  using (user_id = auth.uid())
+  using (user_id = auth.uid() or user_id is null)
   with check (user_id = auth.uid());
 
 drop policy if exists home_months_anon_all on home_months;
@@ -108,7 +108,7 @@ create policy home_months_user_all
   on home_months
   for all
   to authenticated
-  using (user_id = auth.uid())
+  using (user_id = auth.uid() or user_id is null)
   with check (user_id = auth.uid());
 
 drop policy if exists home_transactions_anon_all on home_transactions;
@@ -117,5 +117,5 @@ create policy home_transactions_user_all
   on home_transactions
   for all
   to authenticated
-  using (user_id = auth.uid())
+  using (user_id = auth.uid() or user_id is null)
   with check (user_id = auth.uid());
