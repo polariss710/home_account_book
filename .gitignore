@@ -1,0 +1,6 @@
+.DS_Store
+docs:excel-template:/
+*.xls
+*.xlsx
+*.xlsm
+*.xlsb

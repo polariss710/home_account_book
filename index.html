@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>家庭账本</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">家</div>
+          <div>
+            <h1>家庭账本</h1>
+            <p id="syncStatus">本地模式</p>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="主导航">
+          <button class="nav-button is-active" data-view="dashboard">总览</button>
+          <button class="nav-button" data-view="transactions">流水</button>
+          <button class="nav-button" data-view="accounts">账户</button>
+          <button class="nav-button" data-view="categories">分类</button>
+          <button class="nav-button" data-view="settings">设置</button>
+        </nav>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <label for="monthPicker">账期</label>
+            <input id="monthPicker" type="month" />
+          </div>
+          <div class="topbar-actions">
+            <button id="settleMonthBtn" class="ghost-button" type="button">切换净结</button>
+            <button id="exportBtn" class="ghost-button" type="button">导出 JSON</button>
+            <button id="seedBtn" class="primary-button" type="button">初始化示例</button>
+          </div>
+        </header>
+
+        <section id="dashboard" class="view is-active">
+          <div class="metric-grid">
+            <article class="metric">
+              <span>本月收入</span>
+              <strong id="monthIncome">0</strong>
+            </article>
+            <article class="metric">
+              <span>本月支出</span>
+              <strong id="monthExpense">0</strong>
+            </article>
+            <article class="metric">
+              <span>未付金额</span>
+              <strong id="monthUnpaid">0</strong>
+            </article>
+            <article class="metric">
+              <span>月末余额</span>
+              <strong id="monthBalance">0</strong>
+            </article>
+          </div>
+
+          <div class="content-grid">
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>账户余额</h2>
+              </div>
+              <div id="accountBalances" class="balance-list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>本月待处理</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>日期</th>
+                      <th>内容</th>
+                      <th>分类</th>
+                      <th>金额</th>
+                      <th>状态</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pendingRows"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="transactions" class="view">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>新增流水</h2>
+            </div>
+            <form id="transactionForm" class="form-grid">
+              <label>
+                日期
+                <input name="date" type="date" required />
+              </label>
+              <label>
+                类型
+                <select name="type" required>
+                  <option value="income">收入</option>
+                  <option value="expense">支出</option>
+                  <option value="transfer">转账</option>
+                  <option value="adjustment">调整</option>
+                </select>
+              </label>
+              <label>
+                金额
+                <input name="amount" type="number" inputmode="decimal" step="0.01" required />
+              </label>
+              <label>
+                分类
+                <select name="category_id"></select>
+              </label>
+              <label>
+                来源账户
+                <select name="source_account_id"></select>
+              </label>
+              <label>
+                去向账户
+                <select name="target_account_id"></select>
+              </label>
+              <label>
+                状态
+                <select name="status" required>
+                  <option value="paid">已付</option>
+                  <option value="unpaid">未付</option>
+                </select>
+              </label>
+              <label>
+                说明
+                <input name="description" type="text" maxlength="80" />
+              </label>
+              <button class="primary-button form-submit" type="submit">保存流水</button>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>本月流水</h2>
+              <div class="segmented" role="group" aria-label="流水筛选">
+                <button class="segment is-active" data-filter="all" type="button">全部</button>
+                <button class="segment" data-filter="paid" type="button">已付</button>
+                <button class="segment" data-filter="unpaid" type="button">未付</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>类型</th>
+                    <th>说明</th>
+                    <th>分类</th>
+                    <th>账户</th>
+                    <th>金额</th>
+                    <th>状态</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="transactionRows"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section id="accounts" class="view">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>账户</h2>
+            </div>
+            <form id="accountForm" class="inline-form">
+              <input name="name" type="text" placeholder="账户名称" required />
+              <select name="kind" required>
+                <option value="cash">现金</option>
+                <option value="wallet">钱包</option>
+                <option value="bank">银行</option>
+                <option value="credit">信用卡</option>
+              </select>
+              <input name="opening_balance" type="number" step="0.01" placeholder="期初余额" required />
+              <button class="primary-button" type="submit">添加</button>
+            </form>
+            <div id="accountRows" class="settings-list"></div>
+          </section>
+        </section>
+
+        <section id="categories" class="view">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>分类</h2>
+            </div>
+            <form id="categoryForm" class="inline-form">
+              <input name="name" type="text" placeholder="分类名称" required />
+              <select name="kind" required>
+                <option value="income">收入</option>
+                <option value="expense">支出</option>
+                <option value="transfer">转账</option>
+                <option value="adjustment">调整</option>
+              </select>
+              <button class="primary-button" type="submit">添加</button>
+            </form>
+            <div id="categoryRows" class="settings-list"></div>
+          </section>
+        </section>
+
+        <section id="settings" class="view">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>Supabase</h2>
+            </div>
+            <form id="supabaseForm" class="settings-form">
+              <label>
+                Project URL
+                <input name="url" type="url" placeholder="https://xxxxx.supabase.co" />
+              </label>
+              <label>
+                Anon Key
+                <input name="anonKey" type="password" />
+              </label>
+              <div class="button-row">
+                <button class="primary-button" type="submit">保存并同步</button>
+                <button id="clearCloudBtn" class="ghost-button" type="button">使用本地模式</button>
+              </div>
+            </form>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <template id="emptyRowTemplate">
+      <tr>
+        <td colspan="8" class="empty-state">暂无数据</td>
+      </tr>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
