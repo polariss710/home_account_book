@@ -23,7 +23,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindElements();
   bindEvents();
   setInitialDates();
-  initSupabaseClient();
+  await initSupabaseClient();
   warnIfFileMode();
   await refreshSession();
   processAuthHash();
@@ -144,7 +144,7 @@ function bindEvents() {
     event.preventDefault();
     const data = formData(event.currentTarget);
     localStorage.setItem(CONFIG_KEY, JSON.stringify({ url: data.url.trim(), anonKey: data.anonKey.trim() }));
-    initSupabaseClient();
+    await initSupabaseClient();
     await refreshSession();
     await syncAllToCloud();
     await loadCloudData();
@@ -506,11 +506,20 @@ function saveLocal() {
   localStorage.setItem(STORE_KEY, JSON.stringify(state));
 }
 
-function initSupabaseClient() {
+async function initSupabaseClient() {
   const config = getConfig();
-  if (!config?.url || !config?.anonKey || !window.supabase) {
+  if (!config?.url || !config?.anonKey) {
     supabaseClient = null;
     currentUser = null;
+    return;
+  }
+  if (!window.supabase) {
+    await loadSupabaseSdk();
+  }
+  if (!window.supabase) {
+    supabaseClient = null;
+    currentUser = null;
+    setActionMessage("Supabase SDK 加载失败，请刷新页面或检查网络。", "error");
     return;
   }
   supabaseClient = window.supabase.createClient(config.url, config.anonKey);
@@ -521,6 +530,32 @@ function initSupabaseClient() {
       await loadCloudData();
     }
     render();
+  });
+}
+
+async function loadSupabaseSdk() {
+  const sources = [
+    "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2",
+    "https://unpkg.com/@supabase/supabase-js@2",
+  ];
+  for (const src of sources) {
+    try {
+      await loadScript(src);
+      if (window.supabase) return;
+    } catch {
+      // Try the next CDN.
+    }
+  }
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
   });
 }
 
