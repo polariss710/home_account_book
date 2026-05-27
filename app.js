@@ -2,6 +2,7 @@ const STORE_KEY = "home_book_mvp_v1";
 const CONFIG_KEY = "home_book_supabase_v1";
 const DEFAULT_SUPABASE_URL = "https://ahtgiwdzocerkonrjmdo.supabase.co";
 const DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_HTCFg_w3vmdNqfG2ZE46-A_6KXpxAnz";
+const PUBLIC_APP_URL = "https://polariss710.github.io/home_account_book/";
 
 const defaultData = {
   accounts: [],
@@ -23,6 +24,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindEvents();
   setInitialDates();
   initSupabaseClient();
+  warnIfFileMode();
   await refreshSession();
   processAuthHash();
   await syncAllToCloud({ silent: true });
@@ -162,7 +164,7 @@ function bindEvents() {
       return;
     }
     const data = formData(event.currentTarget);
-    const redirectTo = `${window.location.origin}${window.location.pathname}`;
+    const redirectTo = getRedirectUrl();
     const { error } = await supabaseClient.auth.signInWithOtp({
       email: data.email.trim(),
       options: { emailRedirectTo: redirectTo },
@@ -645,7 +647,7 @@ async function passwordAuth(mode) {
     mode === "signUp"
       ? await supabaseClient.auth.signUp({
           ...payload,
-          options: { emailRedirectTo: `${window.location.origin}${window.location.pathname}` },
+          options: { emailRedirectTo: getRedirectUrl() },
         })
       : await supabaseClient.auth.signInWithPassword(payload);
 
@@ -694,6 +696,16 @@ function processAuthHash() {
     setActionMessage(`登录链接无效或已过期，请重新发送登录链接。`, "error");
     window.history.replaceState({}, document.title, `${window.location.origin}${window.location.pathname}`);
   }
+}
+
+function getRedirectUrl() {
+  if (window.location.protocol === "file:") return PUBLIC_APP_URL;
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+function warnIfFileMode() {
+  if (window.location.protocol !== "file:") return;
+  setActionMessage(`当前是本地文件模式，登录请使用线上地址：${PUBLIC_APP_URL}`, "error");
 }
 
 function formData(form) {
