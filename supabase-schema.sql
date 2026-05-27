@@ -40,3 +40,40 @@ create table if not exists home_transactions (
 create index if not exists home_transactions_date_idx on home_transactions(date);
 create index if not exists home_transactions_status_idx on home_transactions(status);
 create index if not exists home_transactions_type_idx on home_transactions(type);
+
+alter table home_accounts enable row level security;
+alter table home_categories enable row level security;
+alter table home_months enable row level security;
+alter table home_transactions enable row level security;
+
+drop policy if exists home_accounts_anon_all on home_accounts;
+create policy home_accounts_anon_all
+  on home_accounts
+  for all
+  to anon
+  using (true)
+  with check (true);
+
+drop policy if exists home_categories_anon_all on home_categories;
+create policy home_categories_anon_all
+  on home_categories
+  for all
+  to anon
+  using (true)
+  with check (true);
+
+drop policy if exists home_months_anon_all on home_months;
+create policy home_months_anon_all
+  on home_months
+  for all
+  to anon
+  using (true)
+  with check (true);
+
+drop policy if exists home_transactions_anon_all on home_transactions;
+create policy home_transactions_anon_all
+  on home_transactions
+  for all
+  to anon
+  using (true)
+  with check (true);
