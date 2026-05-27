@@ -47,6 +47,8 @@ function bindElements() {
     "categoryRows",
     "authForm",
     "authState",
+    "passwordSignInBtn",
+    "passwordSignUpBtn",
     "signOutBtn",
     "syncLocalBtn",
     "actionMessage",
@@ -178,6 +180,15 @@ function bindEvents() {
     currentUser = null;
     render();
   });
+
+  els.passwordSignInBtn.addEventListener("click", async () => {
+    await passwordAuth("signIn");
+  });
+
+  els.passwordSignUpBtn.addEventListener("click", async () => {
+    await passwordAuth("signUp");
+  });
+
 
   els.syncLocalBtn.addEventListener("click", async () => {
     if (!isCloudReady()) {
@@ -616,6 +627,41 @@ async function refreshSession() {
 
 function isCloudReady() {
   return Boolean(supabaseClient && currentUser);
+}
+
+async function passwordAuth(mode) {
+  if (!supabaseClient) {
+    setActionMessage("请先配置 Supabase。", "error");
+    return;
+  }
+  const email = els.authForm.elements.email.value.trim();
+  const password = els.authForm.elements.password.value;
+  if (!email || !password) {
+    setActionMessage("请输入 Email 和密码。", "error");
+    return;
+  }
+  const payload = { email, password };
+  const { data, error } =
+    mode === "signUp"
+      ? await supabaseClient.auth.signUp({
+          ...payload,
+          options: { emailRedirectTo: `${window.location.origin}${window.location.pathname}` },
+        })
+      : await supabaseClient.auth.signInWithPassword(payload);
+
+  if (error) {
+    setActionMessage(`${mode === "signUp" ? "注册" : "登录"}失败：${error.message}`, "error");
+    return;
+  }
+  currentUser = data.session?.user || data.user || null;
+  if (currentUser) {
+    await syncAllToCloud({ silent: true });
+    await loadCloudData();
+    setActionMessage(`${mode === "signUp" ? "注册" : "登录"}成功。`, "success");
+    render();
+    return;
+  }
+  setActionMessage("注册成功，请按邮箱确认后再登录。", "success");
 }
 
 function withUser(record) {

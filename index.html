@@ -219,8 +219,14 @@
                 Email
                 <input name="email" type="email" placeholder="you@example.com" required />
               </label>
+              <label>
+                Password
+                <input name="password" type="password" placeholder="密码登录时填写" minlength="6" />
+              </label>
               <div class="button-row">
                 <button class="primary-button" type="submit">发送登录链接</button>
+                <button id="passwordSignInBtn" class="ghost-button" type="button">密码登录</button>
+                <button id="passwordSignUpBtn" class="ghost-button" type="button">注册账号</button>
                 <button id="signOutBtn" class="ghost-button" type="button">退出登录</button>
                 <button id="syncLocalBtn" class="ghost-button" type="button">同步本地数据</button>
               </div>
