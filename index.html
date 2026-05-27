@@ -211,6 +211,24 @@
         <section id="settings" class="view">
           <section class="panel">
             <div class="panel-heading">
+              <h2>登录</h2>
+              <span id="authState" class="badge unpaid">未登录</span>
+            </div>
+            <form id="authForm" class="settings-form">
+              <label>
+                Email
+                <input name="email" type="email" placeholder="you@example.com" required />
+              </label>
+              <div class="button-row">
+                <button class="primary-button" type="submit">发送登录链接</button>
+                <button id="signOutBtn" class="ghost-button" type="button">退出登录</button>
+                <button id="syncLocalBtn" class="ghost-button" type="button">同步本地数据</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
               <h2>Supabase</h2>
             </div>
             <form id="supabaseForm" class="settings-form">

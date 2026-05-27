@@ -264,6 +264,10 @@ select {
   max-width: 760px;
 }
 
+.settings-form .button-row {
+  align-items: center;
+}
+
 .segmented {
   display: flex;
   border: 1px solid var(--line);

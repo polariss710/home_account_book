@@ -14,6 +14,7 @@ let state = loadLocal();
 let activeMonth = monthKey(new Date());
 let transactionFilter = "all";
 let supabaseClient = null;
+let currentUser = null;
 
 const els = {};
 
@@ -22,6 +23,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindEvents();
   setInitialDates();
   initSupabaseClient();
+  await refreshSession();
+  await syncAllToCloud();
   await loadCloudData();
   render();
 });
@@ -41,6 +44,10 @@ function bindElements() {
     "accountRows",
     "categoryForm",
     "categoryRows",
+    "authForm",
+    "authState",
+    "signOutBtn",
+    "syncLocalBtn",
     "supabaseForm",
     "clearCloudBtn",
     "monthIncome",
@@ -132,6 +139,7 @@ function bindEvents() {
     const data = formData(event.currentTarget);
     localStorage.setItem(CONFIG_KEY, JSON.stringify({ url: data.url.trim(), anonKey: data.anonKey.trim() }));
     initSupabaseClient();
+    await refreshSession();
     await syncAllToCloud();
     await loadCloudData();
     render();
@@ -141,6 +149,42 @@ function bindEvents() {
     localStorage.removeItem(CONFIG_KEY);
     supabaseClient = null;
     renderSyncStatus();
+  });
+
+  els.authForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!supabaseClient) {
+      alert("请先配置 Supabase。");
+      return;
+    }
+    const data = formData(event.currentTarget);
+    const redirectTo = `${window.location.origin}${window.location.pathname}`;
+    const { error } = await supabaseClient.auth.signInWithOtp({
+      email: data.email.trim(),
+      options: { emailRedirectTo: redirectTo },
+    });
+    if (error) {
+      alert(`登录链接发送失败：${error.message}`);
+      return;
+    }
+    alert("登录链接已发送，请打开邮箱完成登录。");
+  });
+
+  els.signOutBtn.addEventListener("click", async () => {
+    if (!supabaseClient) return;
+    await supabaseClient.auth.signOut();
+    currentUser = null;
+    render();
+  });
+
+  els.syncLocalBtn.addEventListener("click", async () => {
+    if (!isCloudReady()) {
+      alert("请先登录后再同步。");
+      return;
+    }
+    await syncAllToCloud();
+    await loadCloudData();
+    render();
   });
 
   els.seedBtn.addEventListener("click", async () => {
@@ -200,8 +244,13 @@ function render() {
 function renderSyncStatus() {
   const month = state.months[activeMonth];
   const lockText = month?.status === "locked" ? "已净结" : "未净结";
-  els.syncStatus.textContent = `${supabaseClient ? "Supabase 模式" : "本地模式"} · ${lockText}`;
+  const modeText = isCloudReady() ? `已登录 · ${currentUser.email}` : supabaseClient ? "Supabase 未登录" : "本地模式";
+  els.syncStatus.textContent = `${modeText} · ${lockText}`;
   els.settleMonthBtn.textContent = month?.status === "locked" ? "取消净结" : "标记净结";
+  if (els.authState) {
+    els.authState.className = `badge ${currentUser ? "paid" : "unpaid"}`;
+    els.authState.textContent = currentUser ? "已登录" : "未登录";
+  }
 }
 
 function renderSelectOptions() {
@@ -445,9 +494,18 @@ function initSupabaseClient() {
   const config = getConfig();
   if (!config?.url || !config?.anonKey || !window.supabase) {
     supabaseClient = null;
+    currentUser = null;
     return;
   }
   supabaseClient = window.supabase.createClient(config.url, config.anonKey);
+  supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+    currentUser = session?.user || null;
+    if (currentUser) {
+      await syncAllToCloud();
+      await loadCloudData();
+    }
+    render();
+  });
 }
 
 function getConfig() {
@@ -467,7 +525,7 @@ function getConfig() {
 }
 
 async function loadCloudData() {
-  if (!supabaseClient) return;
+  if (!isCloudReady()) return;
   const [accounts, categories, transactions, months] = await Promise.all([
     selectCloud("home_accounts"),
     selectCloud("home_categories"),
@@ -494,42 +552,64 @@ async function selectCloud(table) {
 
 async function persist(kind, record) {
   saveLocal();
-  if (!supabaseClient) return;
+  if (!isCloudReady()) return;
   const table = `home_${kind}`;
-  const { error } = await supabaseClient.from(table).upsert(record);
+  const { error } = await supabaseClient.from(table).upsert(withUser(record));
   if (error) alert(`Supabase 保存失败：${error.message}`);
 }
 
 async function persistMonth(record) {
   saveLocal();
-  if (!supabaseClient) return;
-  const { error } = await supabaseClient.from("home_months").upsert(record);
+  if (!isCloudReady()) return;
+  const { error } = await supabaseClient.from("home_months").upsert(withUser(record), { onConflict: "user_id,month_key" });
   if (error) alert(`Supabase 保存失败：${error.message}`);
 }
 
 async function removeCloud(kind, id) {
   saveLocal();
-  if (!supabaseClient) return;
-  const { error } = await supabaseClient.from(`home_${kind}`).delete().eq("id", id);
+  if (!isCloudReady()) return;
+  const { error } = await supabaseClient.from(`home_${kind}`).delete().eq("id", id).eq("user_id", currentUser.id);
   if (error) alert(`Supabase 删除失败：${error.message}`);
 }
 
 async function syncAllToCloud() {
-  if (!supabaseClient) return;
+  if (!isCloudReady()) return;
   const operations = [
-    ["home_accounts", state.accounts],
-    ["home_categories", state.categories],
-    ["home_transactions", state.transactions],
-    ["home_months", Object.values(state.months)],
+    ["home_accounts", state.accounts.map(withUser), undefined],
+    ["home_categories", state.categories.map(withUser), undefined],
+    ["home_transactions", state.transactions.map(withUser), undefined],
+    ["home_months", Object.values(state.months).map(withUser), "user_id,month_key"],
   ].filter(([, rows]) => rows.length);
 
-  for (const [table, rows] of operations) {
-    const { error } = await supabaseClient.from(table).upsert(rows);
+  for (const [table, rows, onConflict] of operations) {
+    const options = onConflict ? { onConflict } : undefined;
+    const { error } = await supabaseClient.from(table).upsert(rows, options);
     if (error) {
       alert(`Supabase 同步失败：${error.message}`);
       return;
     }
   }
+}
+
+async function refreshSession() {
+  if (!supabaseClient) {
+    currentUser = null;
+    return;
+  }
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error) {
+    currentUser = null;
+    return;
+  }
+  currentUser = data.session?.user || null;
+}
+
+function isCloudReady() {
+  return Boolean(supabaseClient && currentUser);
+}
+
+function withUser(record) {
+  return { ...record, user_id: currentUser.id };
 }
 
 function formData(form) {
