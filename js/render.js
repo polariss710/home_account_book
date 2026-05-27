@@ -1,18 +1,8 @@
 import { els } from "./elements.js";
-import { appState, monthTransactions, saveLocal } from "./state.js";
+import { appState, saveLocal } from "./state.js";
 import { renderSyncStatus } from "./ui.js";
-import {
-  emptyRow,
-  endOfMonth,
-  escapeHtml,
-  money,
-  nameById,
-  sortByDate,
-  sortByDateDesc,
-  sum,
-  toNumber,
-} from "./utils.js";
-import { persist, removeCloud } from "./supabase.js";
+import { emptyRow, escapeHtml, money } from "./utils.js";
+import { loadMonthPageData, persist, removeCloud } from "./supabase.js";
 
 export function render() {
   saveLocal();
@@ -38,21 +28,16 @@ function renderSelectOptions() {
 }
 
 function renderDashboard() {
-  const txs = monthTransactions(appState.activeMonth);
-  const paid = txs.filter((item) => item.status === "paid");
-  const income = sum(paid.filter((item) => item.type === "income").map((item) => item.amount));
-  const expense = sum(paid.filter((item) => item.type === "expense").map((item) => item.amount));
-  const unpaid = sum(txs.filter((item) => item.status === "unpaid").map((item) => item.amount));
-  const balances = calculateBalances(endOfMonth(appState.activeMonth));
-  const totalBalance = sum(Object.values(balances));
+  const page = appState.data.monthPage;
+  const metrics = page?.metrics || {};
 
-  els.monthIncome.textContent = money(income);
-  els.monthExpense.textContent = money(expense);
-  els.monthUnpaid.textContent = money(unpaid);
-  els.monthBalance.textContent = money(totalBalance);
+  els.monthIncome.textContent = money(metrics.income || 0);
+  els.monthExpense.textContent = money(metrics.expense || 0);
+  els.monthUnpaid.textContent = money(metrics.unpaid || 0);
+  els.monthBalance.textContent = money(metrics.balance || 0);
 
-  els.accountBalances.innerHTML = appState.data.accounts.length
-    ? appState.data.accounts
+  els.accountBalances.innerHTML = page?.balances?.length
+    ? page.balances
         .map(
           (account) => `
             <div class="balance-item">
@@ -60,19 +45,19 @@ function renderDashboard() {
                 <strong>${escapeHtml(account.name)}</strong>
                 <span>${labelAccountKind(account.kind)}</span>
               </div>
-              <strong>${money(balances[account.id] || 0)}</strong>
+              <strong>${money(account.balance || 0)}</strong>
             </div>
           `,
         )
         .join("")
     : `<div class="empty-state">暂无账户</div>`;
 
-  const pending = txs.filter((item) => item.status === "unpaid").sort(sortByDate);
-  els.pendingRows.innerHTML = pending.length ? pending.map(pendingRow).join("") : emptyRow(5);
+  els.pendingRows.innerHTML = page?.pending?.length ? page.pending.map(pendingRow).join("") : emptyRow(5);
 }
 
 function renderTransactions() {
-  let txs = monthTransactions(appState.activeMonth).sort(sortByDateDesc);
+  const page = appState.data.monthPage;
+  let txs = page?.transactions || [];
   if (appState.transactionFilter !== "all") {
     txs = txs.filter((item) => item.status === appState.transactionFilter);
   }
@@ -83,6 +68,7 @@ function renderTransactions() {
       const id = button.dataset.delete;
       appState.data.transactions = appState.data.transactions.filter((item) => item.id !== id);
       await removeCloud("transactions", id);
+      await loadMonthPageData();
       render();
     });
   });
@@ -91,8 +77,10 @@ function renderTransactions() {
     button.addEventListener("click", async () => {
       const id = button.dataset.toggleStatus;
       const tx = appState.data.transactions.find((item) => item.id === id);
+      if (!tx) return;
       tx.status = tx.status === "paid" ? "unpaid" : "paid";
       await persist("transactions", tx);
+      await loadMonthPageData();
       render();
     });
   });
@@ -157,7 +145,7 @@ function pendingRow(item) {
     <tr>
       <td>${item.date}</td>
       <td>${escapeHtml(item.description || "-")}</td>
-      <td>${escapeHtml(nameById(appState.data.categories, item.category_id))}</td>
+      <td>${escapeHtml(item.category_name || "-")}</td>
       <td class="amount">${money(item.amount)}</td>
       <td>${statusBadge(item.status)}</td>
     </tr>
@@ -170,8 +158,8 @@ function transactionRow(item) {
       <td>${item.date}</td>
       <td>${labelType(item.type)}</td>
       <td>${escapeHtml(item.description || "-")}</td>
-      <td>${escapeHtml(nameById(appState.data.categories, item.category_id))}</td>
-      <td>${escapeHtml(accountPair(item))}</td>
+      <td>${escapeHtml(item.category_name || "-")}</td>
+      <td>${escapeHtml(item.account_label || "-")}</td>
       <td class="amount">${money(item.amount)}</td>
       <td><button class="plain-button" type="button" data-toggle-status="${item.id}">${statusBadge(item.status)}</button></td>
       <td><button class="danger-button" type="button" data-delete="${item.id}">删除</button></td>
@@ -181,32 +169,6 @@ function transactionRow(item) {
 
 function statusBadge(status) {
   return `<span class="badge ${status}">${status === "paid" ? "已付" : "未付"}</span>`;
-}
-
-function calculateBalances(endDate) {
-  const balances = Object.fromEntries(appState.data.accounts.map((account) => [account.id, toNumber(account.opening_balance)]));
-  appState.data.transactions
-    .filter((tx) => tx.status === "paid" && tx.date <= endDate)
-    .forEach((tx) => {
-      const amount = toNumber(tx.amount);
-      if (tx.type === "income" && tx.target_account_id) balances[tx.target_account_id] += amount;
-      if (tx.type === "expense" && tx.source_account_id) balances[tx.source_account_id] -= amount;
-      if (tx.type === "transfer") {
-        if (tx.source_account_id) balances[tx.source_account_id] -= amount;
-        if (tx.target_account_id) balances[tx.target_account_id] += amount;
-      }
-      if (tx.type === "adjustment" && tx.target_account_id) balances[tx.target_account_id] += amount;
-    });
-  return balances;
-}
-
-function accountPair(tx) {
-  if (tx.type === "income") return nameById(appState.data.accounts, tx.target_account_id);
-  if (tx.type === "expense") return nameById(appState.data.accounts, tx.source_account_id);
-  if (tx.type === "transfer") {
-    return `${nameById(appState.data.accounts, tx.source_account_id)} -> ${nameById(appState.data.accounts, tx.target_account_id)}`;
-  }
-  return nameById(appState.data.accounts, tx.target_account_id);
 }
 
 function labelType(type) {

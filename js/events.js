@@ -7,6 +7,7 @@ import {
   initSupabaseClient,
   isCloudReady,
   loadCloudData,
+  loadMonthPageData,
   passwordAuth,
   persist,
   persistMonth,
@@ -32,8 +33,9 @@ export function bindEvents() {
     });
   });
 
-  els.monthPicker.addEventListener("change", () => {
+  els.monthPicker.addEventListener("change", async () => {
     appState.activeMonth = els.monthPicker.value;
+    await loadMonthPageData();
     render();
   });
 
@@ -54,6 +56,7 @@ export function bindEvents() {
     };
     appState.data.transactions.push(record);
     await persist("transactions", record);
+    await loadMonthPageData();
     event.currentTarget.reset();
     event.currentTarget.elements.date.value = todayString();
     render();
@@ -73,6 +76,7 @@ export function bindEvents() {
     };
     appState.data.accounts.push(record);
     await persist("accounts", record);
+    await loadMonthPageData();
     event.currentTarget.reset();
     render();
   });
@@ -89,6 +93,7 @@ export function bindEvents() {
     };
     appState.data.categories.push(record);
     await persist("categories", record);
+    await loadMonthPageData();
     event.currentTarget.reset();
     render();
   });
@@ -143,6 +148,7 @@ export function bindEvents() {
   els.seedBtn.addEventListener("click", async () => {
     seedDefaults(appState.data);
     await syncAllToCloud();
+    await loadMonthPageData();
     render();
   });
 
@@ -161,6 +167,7 @@ export function bindEvents() {
     current.status = current.status === "locked" ? "open" : "locked";
     appState.data.months[appState.activeMonth] = current;
     await persistMonth(current);
+    await loadMonthPageData();
     render();
   });
 }

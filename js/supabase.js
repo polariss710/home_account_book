@@ -122,6 +122,24 @@ export async function loadCloudData() {
     appState.data.months = mergeMonths(appState.data.months, months);
     saveLocal();
   }
+  await loadMonthPageData();
+}
+
+export async function loadMonthPageData() {
+  if (!isCloudReady()) {
+    appState.data.monthPage = null;
+    return;
+  }
+  const { data, error } = await appState.supabaseClient.rpc("home_get_month_page", {
+    p_month_key: appState.activeMonth,
+  });
+  if (error) {
+    setActionMessage(`月度数据读取失败：${error.message}`, "error");
+    appState.data.monthPage = null;
+    return;
+  }
+  appState.data.monthPage = data;
+  saveLocal();
 }
 
 export async function persist(kind, record) {

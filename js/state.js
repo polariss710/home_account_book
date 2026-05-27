@@ -6,6 +6,7 @@ const defaultData = {
   categories: [],
   transactions: [],
   months: {},
+  monthPage: null,
 };
 
 export const appState = {
@@ -26,8 +27,4 @@ export function loadLocal() {
 
 export function saveLocal() {
   localStorage.setItem(STORE_KEY, JSON.stringify(appState.data));
-}
-
-export function monthTransactions(key) {
-  return appState.data.transactions.filter((item) => item.date?.startsWith(key));
 }

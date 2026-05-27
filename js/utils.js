@@ -12,18 +12,9 @@ export function todayString() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function endOfMonth(key) {
-  const [year, month] = key.split("-").map(Number);
-  return new Date(year, month, 0).toISOString().slice(0, 10);
-}
-
 export function toNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
-}
-
-export function sum(values) {
-  return values.reduce((total, value) => total + toNumber(value), 0);
 }
 
 export function money(value) {
