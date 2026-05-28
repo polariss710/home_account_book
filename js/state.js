@@ -1,5 +1,5 @@
-import { STORE_KEY } from "./config.js?v=20260528-config-1";
-import { monthKey } from "./utils.js?v=20260528-config-1";
+import { STORE_KEY } from "./config.js?v=20260528-session-1";
+import { monthKey } from "./utils.js?v=20260528-session-1";
 
 const defaultData = {
   accounts: [],

@@ -1,6 +1,6 @@
-import { appState, saveLocal } from "./state.js?v=20260528-config-1";
-import { mergeById, mergeMonths, getRedirectUrl } from "./utils.js?v=20260528-config-1";
-import { getConfig, setActionMessage } from "./ui.js?v=20260528-config-1";
+import { appState, saveLocal } from "./state.js?v=20260528-session-1";
+import { mergeById, mergeMonths, getRedirectUrl } from "./utils.js?v=20260528-session-1";
+import { getConfig, setActionMessage } from "./ui.js?v=20260528-session-1";
 
 let onCloudChange = () => {};
 

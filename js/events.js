@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260528-config-1";
-import { appState } from "./state.js?v=20260528-config-1";
-import { seedDefaults } from "./seed.js?v=20260528-config-1";
-import { render } from "./render.js?v=20260528-config-1";
-import { renderSyncStatus, setActionMessage, switchView } from "./ui.js?v=20260528-config-1";
+import { els } from "./elements.js?v=20260528-session-1";
+import { appState } from "./state.js?v=20260528-session-1";
+import { seedDefaults } from "./seed.js?v=20260528-session-1";
+import { render } from "./render.js?v=20260528-session-1";
+import { renderSyncStatus, setActionMessage, switchView } from "./ui.js?v=20260528-session-1";
 import {
   initSupabaseClient,
   isCloudReady,
@@ -15,9 +15,9 @@ import {
   signOut,
   syncAllToCloud,
   refreshSession,
-} from "./supabase.js?v=20260528-config-1";
-import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260528-config-1";
-import { CONFIG_KEY, LOCAL_MODE_KEY } from "./config.js?v=20260528-config-1";
+} from "./supabase.js?v=20260528-session-1";
+import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260528-session-1";
+import { CONFIG_KEY, LOCAL_MODE_KEY } from "./config.js?v=20260528-session-1";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
@@ -102,6 +102,7 @@ export function bindEvents() {
     event.preventDefault();
     const data = formData(event.currentTarget);
     localStorage.removeItem(LOCAL_MODE_KEY);
+    sessionStorage.removeItem(LOCAL_MODE_KEY);
     localStorage.setItem(CONFIG_KEY, JSON.stringify({ url: data.url.trim(), anonKey: data.anonKey.trim() }));
     await initSupabaseClient();
     await refreshSession();
@@ -111,7 +112,8 @@ export function bindEvents() {
   });
 
   els.clearCloudBtn.addEventListener("click", () => {
-    localStorage.setItem(LOCAL_MODE_KEY, "true");
+    localStorage.removeItem(LOCAL_MODE_KEY);
+    sessionStorage.setItem(LOCAL_MODE_KEY, "true");
     appState.supabaseClient = null;
     appState.currentUser = null;
     renderSyncStatus();

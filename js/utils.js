@@ -1,4 +1,4 @@
-import { PUBLIC_APP_URL } from "./config.js?v=20260528-config-1";
+import { PUBLIC_APP_URL } from "./config.js?v=20260528-session-1";
 
 export function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
