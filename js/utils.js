@@ -23,20 +23,8 @@ export function emptyToNull(value) {
   return value === "" ? null : value;
 }
 
-export function nameById(list, id) {
-  return list.find((item) => item.id === id)?.name || "-";
-}
-
 export function emptyRow(colspan) {
   return `<tr><td colspan="${colspan}" class="empty-state">暂无数据</td></tr>`;
-}
-
-export function sortByDate(a, b) {
-  return a.date.localeCompare(b.date);
-}
-
-export function sortByDateDesc(a, b) {
-  return b.date.localeCompare(a.date);
 }
 
 export function escapeHtml(value) {
