@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260528-cloud-4";
-import { appState } from "./state.js?v=20260528-cloud-4";
-import { seedDefaults } from "./seed.js?v=20260528-cloud-4";
-import { render } from "./render.js?v=20260528-cloud-4";
-import { setActionMessage, switchView } from "./ui.js?v=20260528-cloud-4";
+import { els } from "./elements.js?v=20260528-cloud-5";
+import { appState } from "./state.js?v=20260528-cloud-5";
+import { seedDefaults } from "./seed.js?v=20260528-cloud-5";
+import { render } from "./render.js?v=20260528-cloud-5";
+import { setActionMessage, switchView } from "./ui.js?v=20260528-cloud-5";
 import {
   isCloudReady,
   loadCloudData,
@@ -12,8 +12,8 @@ import {
   persistMonth,
   sendMagicLink,
   signOut,
-} from "./supabase.js?v=20260528-cloud-4";
-import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260528-cloud-4";
+} from "./supabase.js?v=20260528-cloud-5";
+import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260528-cloud-5";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
@@ -151,6 +151,7 @@ export function bindEvents() {
 async function runPasswordAuth(mode) {
   const email = els.authForm.elements.email.value.trim();
   const password = els.authForm.elements.password.value;
+  setActionMessage(`${mode === "signUp" ? "注册" : "登录"}处理中...`);
   await passwordAuth(mode, email, password);
 }
 

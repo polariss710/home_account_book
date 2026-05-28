@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260528-cloud-4";
-import { appState } from "./state.js?v=20260528-cloud-4";
-import { renderSyncStatus, setActionMessage } from "./ui.js?v=20260528-cloud-4";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260528-cloud-4";
-import { isCloudReady, loadMonthPageData, persist, removeCloud } from "./supabase.js?v=20260528-cloud-4";
+import { els } from "./elements.js?v=20260528-cloud-5";
+import { appState } from "./state.js?v=20260528-cloud-5";
+import { renderSyncStatus, setActionMessage } from "./ui.js?v=20260528-cloud-5";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260528-cloud-5";
+import { isCloudReady, loadMonthPageData, persist, removeCloud } from "./supabase.js?v=20260528-cloud-5";
 
 export function render() {
   renderSyncStatus();

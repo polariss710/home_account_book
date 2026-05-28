@@ -1,8 +1,9 @@
-import { appState } from "./state.js?v=20260528-cloud-4";
-import { mergeById, mergeMonths, getRedirectUrl } from "./utils.js?v=20260528-cloud-4";
-import { getConfig, setActionMessage } from "./ui.js?v=20260528-cloud-4";
+import { appState } from "./state.js?v=20260528-cloud-5";
+import { mergeById, mergeMonths, getRedirectUrl } from "./utils.js?v=20260528-cloud-5";
+import { getConfig, setActionMessage } from "./ui.js?v=20260528-cloud-5";
 
 let onCloudChange = () => {};
+let cloudLoadPromise = null;
 
 export function setCloudChangeHandler(handler) {
   onCloudChange = handler;
@@ -24,10 +25,10 @@ export async function initSupabaseClient() {
   appState.supabaseClient = window.supabase.createClient(config.url, config.anonKey);
   appState.supabaseClient.auth.onAuthStateChange(async (_event, session) => {
     appState.currentUser = session?.user || null;
-    if (appState.currentUser) {
-      await loadCloudData();
-    }
     onCloudChange();
+    if (appState.currentUser) {
+      queueCloudDataLoad();
+    }
   });
 }
 
@@ -94,12 +95,27 @@ export async function passwordAuth(mode, email, password) {
   }
   appState.currentUser = data.session?.user || data.user || null;
   if (appState.currentUser) {
-    await loadCloudData();
     setActionMessage(`${mode === "signUp" ? "注册" : "登录"}成功。`, "success");
     onCloudChange();
+    queueCloudDataLoad();
     return;
   }
   setActionMessage("注册成功，请按邮箱确认后再登录。", "success");
+}
+
+export function queueCloudDataLoad() {
+  if (!isCloudReady()) return Promise.resolve();
+  if (!cloudLoadPromise) {
+    cloudLoadPromise = loadCloudData()
+      .catch((error) => {
+        setActionMessage(`数据读取失败：${error.message}`, "error");
+      })
+      .finally(() => {
+        cloudLoadPromise = null;
+        onCloudChange();
+      });
+  }
+  return cloudLoadPromise;
 }
 
 export async function loadCloudData() {

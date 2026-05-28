@@ -1,7 +1,7 @@
-import { DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260528-cloud-4";
-import { els } from "./elements.js?v=20260528-cloud-4";
-import { appState } from "./state.js?v=20260528-cloud-4";
-import { todayString } from "./utils.js?v=20260528-cloud-4";
+import { DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260528-cloud-5";
+import { els } from "./elements.js?v=20260528-cloud-5";
+import { appState } from "./state.js?v=20260528-cloud-5";
+import { todayString } from "./utils.js?v=20260528-cloud-5";
 
 export function setInitialDates() {
   els.monthPicker.value = appState.activeMonth;
