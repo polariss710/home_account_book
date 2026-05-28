@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260528-cloud-6";
-import { appState } from "./state.js?v=20260528-cloud-6";
-import { seedDefaults } from "./seed.js?v=20260528-cloud-6";
-import { render } from "./render.js?v=20260528-cloud-6";
-import { setActionMessage, switchView } from "./ui.js?v=20260528-cloud-6";
+import { els } from "./elements.js?v=20260529-form-1";
+import { appState } from "./state.js?v=20260529-form-1";
+import { seedDefaults } from "./seed.js?v=20260529-form-1";
+import { render } from "./render.js?v=20260529-form-1";
+import { setActionMessage, switchView } from "./ui.js?v=20260529-form-1";
 import {
   isCloudReady,
   loadCloudData,
@@ -12,8 +12,8 @@ import {
   persistMonth,
   sendMagicLink,
   signOut,
-} from "./supabase.js?v=20260528-cloud-6";
-import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260528-cloud-6";
+} from "./supabase.js?v=20260529-form-1";
+import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260529-form-1";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
@@ -38,7 +38,8 @@ export function bindEvents() {
   els.transactionForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!requireCloudReady("请先登录后再新增流水。")) return;
-    const data = formData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = formData(form);
     const record = {
       id: crypto.randomUUID(),
       date: data.date,
@@ -54,15 +55,16 @@ export function bindEvents() {
     const ok = await persist("transactions", record);
     if (!ok) return;
     await loadCloudData();
-    event.currentTarget.reset();
-    event.currentTarget.elements.date.value = todayString();
+    form.reset();
+    form.elements.date.value = todayString();
     render();
   });
 
   els.accountForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!requireCloudReady("请先登录后再新增账户。")) return;
-    const data = formData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = formData(form);
     const record = {
       id: crypto.randomUUID(),
       name: data.name.trim(),
@@ -75,14 +77,15 @@ export function bindEvents() {
     const ok = await persist("accounts", record);
     if (!ok) return;
     await loadCloudData();
-    event.currentTarget.reset();
+    form.reset();
     render();
   });
 
   els.categoryForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!requireCloudReady("请先登录后再新增分类。")) return;
-    const data = formData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = formData(form);
     const record = {
       id: crypto.randomUUID(),
       name: data.name.trim(),
@@ -93,7 +96,7 @@ export function bindEvents() {
     const ok = await persist("categories", record);
     if (!ok) return;
     await loadCloudData();
-    event.currentTarget.reset();
+    form.reset();
     render();
   });
 
