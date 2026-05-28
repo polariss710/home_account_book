@@ -1,8 +1,7 @@
-import { DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260528-cloud-3";
-import { els } from "./elements.js?v=20260528-cloud-3";
-import { appState } from "./state.js?v=20260528-cloud-3";
-import { todayString } from "./utils.js?v=20260528-cloud-3";
-import { isCloudReady } from "./supabase.js?v=20260528-cloud-3";
+import { DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260528-cloud-4";
+import { els } from "./elements.js?v=20260528-cloud-4";
+import { appState } from "./state.js?v=20260528-cloud-4";
+import { todayString } from "./utils.js?v=20260528-cloud-4";
 
 export function setInitialDates() {
   els.monthPicker.value = appState.activeMonth;
@@ -22,7 +21,7 @@ export function renderSyncStatus() {
   renderAuthGate();
   const month = appState.data.months[appState.activeMonth];
   const lockText = month?.status === "locked" ? "已净结" : "未净结";
-  const modeText = isCloudReady()
+  const modeText = isLoggedIn()
     ? `已登录 · ${appState.currentUser.email}`
     : appState.supabaseClient
       ? "Supabase 未登录"
@@ -36,9 +35,13 @@ export function renderSyncStatus() {
 }
 
 function renderAuthGate() {
-  const loggedIn = isCloudReady();
+  const loggedIn = isLoggedIn();
   els.authGate.hidden = loggedIn;
   els.appShell.hidden = !loggedIn;
+}
+
+function isLoggedIn() {
+  return Boolean(appState.supabaseClient && appState.currentUser);
 }
 
 export function setActionMessage(message, type = "") {

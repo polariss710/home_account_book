@@ -1,4 +1,4 @@
-import { monthKey } from "./utils.js?v=20260528-cloud-3";
+import { monthKey } from "./utils.js?v=20260528-cloud-4";
 
 const defaultData = {
   accounts: [],
