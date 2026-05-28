@@ -1,8 +1,8 @@
-import { PUBLIC_APP_URL, CONFIG_KEY, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL, LOCAL_MODE_KEY } from "./config.js?v=20260528-session-1";
-import { els } from "./elements.js?v=20260528-session-1";
-import { appState } from "./state.js?v=20260528-session-1";
-import { todayString } from "./utils.js?v=20260528-session-1";
-import { isCloudReady } from "./supabase.js?v=20260528-session-1";
+import { PUBLIC_APP_URL, CONFIG_KEY, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260528-cloud-1";
+import { els } from "./elements.js?v=20260528-cloud-1";
+import { appState } from "./state.js?v=20260528-cloud-1";
+import { todayString } from "./utils.js?v=20260528-cloud-1";
+import { isCloudReady } from "./supabase.js?v=20260528-cloud-1";
 
 export function setInitialDates() {
   els.monthPicker.value = appState.activeMonth;
@@ -30,7 +30,7 @@ export function renderSyncStatus() {
     ? `已登录 · ${appState.currentUser.email}`
     : appState.supabaseClient
       ? "Supabase 未登录"
-      : "本地模式";
+      : "Supabase 未配置";
   els.syncStatus.textContent = `${modeText} · ${lockText}`;
   els.settleMonthBtn.textContent = month?.status === "locked" ? "取消净结" : "标记净结";
   if (els.authState) {
@@ -60,8 +60,6 @@ export function warnIfFileMode() {
 }
 
 export function getConfig() {
-  localStorage.removeItem(LOCAL_MODE_KEY);
-  if (sessionStorage.getItem(LOCAL_MODE_KEY) === "true") return null;
   try {
     const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || "null") || {};
     return normalizeConfig(saved);

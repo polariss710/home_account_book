@@ -1,5 +1,4 @@
-import { STORE_KEY } from "./config.js?v=20260528-session-1";
-import { monthKey } from "./utils.js?v=20260528-session-1";
+import { monthKey } from "./utils.js?v=20260528-cloud-1";
 
 const defaultData = {
   accounts: [],
@@ -10,21 +9,9 @@ const defaultData = {
 };
 
 export const appState = {
-  data: loadLocal(),
+  data: structuredClone(defaultData),
   activeMonth: monthKey(new Date()),
   transactionFilter: "all",
   supabaseClient: null,
   currentUser: null,
 };
-
-export function loadLocal() {
-  try {
-    return { ...defaultData, ...JSON.parse(localStorage.getItem(STORE_KEY) || "{}") };
-  } catch {
-    return structuredClone(defaultData);
-  }
-}
-
-export function saveLocal() {
-  localStorage.setItem(STORE_KEY, JSON.stringify(appState.data));
-}

@@ -1,6 +1,6 @@
-import { appState, saveLocal } from "./state.js?v=20260528-session-1";
-import { mergeById, mergeMonths, getRedirectUrl } from "./utils.js?v=20260528-session-1";
-import { getConfig, setActionMessage } from "./ui.js?v=20260528-session-1";
+import { appState } from "./state.js?v=20260528-cloud-1";
+import { mergeById, mergeMonths, getRedirectUrl } from "./utils.js?v=20260528-cloud-1";
+import { getConfig, setActionMessage } from "./ui.js?v=20260528-cloud-1";
 
 let onCloudChange = () => {};
 
@@ -28,7 +28,6 @@ export async function initSupabaseClient() {
   appState.supabaseClient.auth.onAuthStateChange(async (_event, session) => {
     appState.currentUser = session?.user || null;
     if (appState.currentUser) {
-      await syncAllToCloud({ silent: true });
       await loadCloudData();
     }
     onCloudChange();
@@ -98,7 +97,6 @@ export async function passwordAuth(mode, email, password) {
   }
   appState.currentUser = data.session?.user || data.user || null;
   if (appState.currentUser) {
-    await syncAllToCloud({ silent: true });
     await loadCloudData();
     setActionMessage(`${mode === "signUp" ? "注册" : "登录"}成功。`, "success");
     onCloudChange();
@@ -120,7 +118,6 @@ export async function loadCloudData() {
     appState.data.categories = mergeById(appState.data.categories, categories);
     appState.data.transactions = mergeById(appState.data.transactions, transactions);
     appState.data.months = mergeMonths(appState.data.months, months);
-    saveLocal();
   }
   await loadMonthPageData();
 }
@@ -139,11 +136,9 @@ export async function loadMonthPageData() {
     return;
   }
   appState.data.monthPage = data;
-  saveLocal();
 }
 
 export async function persist(kind, record) {
-  saveLocal();
   if (!isCloudReady()) return;
   const table = `home_${kind}`;
   const { error } = await appState.supabaseClient.from(table).upsert(withUser(record));
@@ -151,7 +146,6 @@ export async function persist(kind, record) {
 }
 
 export async function persistMonth(record) {
-  saveLocal();
   if (!isCloudReady()) return;
   const { error } = await appState.supabaseClient
     .from("home_months")
@@ -160,36 +154,9 @@ export async function persistMonth(record) {
 }
 
 export async function removeCloud(kind, id) {
-  saveLocal();
   if (!isCloudReady()) return;
   const { error } = await appState.supabaseClient.from(`home_${kind}`).delete().eq("id", id).eq("user_id", appState.currentUser.id);
   if (error) alert(`Supabase 删除失败：${error.message}`);
-}
-
-export async function syncAllToCloud({ silent = false } = {}) {
-  if (!isCloudReady()) return;
-  const operations = [
-    ["home_accounts", appState.data.accounts.map(withUser), undefined],
-    ["home_categories", appState.data.categories.map(withUser), undefined],
-    ["home_transactions", appState.data.transactions.map(withUser), undefined],
-    ["home_months", Object.values(appState.data.months).map(withUser), "user_id,month_key"],
-  ].filter(([, rows]) => rows.length);
-
-  if (!operations.length) {
-    if (!silent) setActionMessage("当前没有本地数据可同步。可以先点“初始化示例”。", "error");
-    return;
-  }
-
-  for (const [table, rows, onConflict] of operations) {
-    const options = onConflict ? { onConflict } : undefined;
-    const { error } = await appState.supabaseClient.from(table).upsert(rows, options);
-    if (error) {
-      if (!silent) setActionMessage(`Supabase 同步失败：${error.message}`, "error");
-      else alert(`Supabase 同步失败：${error.message}`);
-      return;
-    }
-  }
-  if (!silent) setActionMessage("同步完成。", "success");
 }
 
 async function selectCloud(table) {

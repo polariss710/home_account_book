@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260528-session-1";
-import { appState } from "./state.js?v=20260528-session-1";
-import { seedDefaults } from "./seed.js?v=20260528-session-1";
-import { render } from "./render.js?v=20260528-session-1";
-import { renderSyncStatus, setActionMessage, switchView } from "./ui.js?v=20260528-session-1";
+import { els } from "./elements.js?v=20260528-cloud-1";
+import { appState } from "./state.js?v=20260528-cloud-1";
+import { seedDefaults } from "./seed.js?v=20260528-cloud-1";
+import { render } from "./render.js?v=20260528-cloud-1";
+import { renderSyncStatus, setActionMessage, switchView } from "./ui.js?v=20260528-cloud-1";
 import {
   initSupabaseClient,
   isCloudReady,
@@ -13,11 +13,10 @@ import {
   persistMonth,
   sendMagicLink,
   signOut,
-  syncAllToCloud,
   refreshSession,
-} from "./supabase.js?v=20260528-session-1";
-import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260528-session-1";
-import { CONFIG_KEY, LOCAL_MODE_KEY } from "./config.js?v=20260528-session-1";
+} from "./supabase.js?v=20260528-cloud-1";
+import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260528-cloud-1";
+import { CONFIG_KEY } from "./config.js?v=20260528-cloud-1";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
@@ -41,6 +40,7 @@ export function bindEvents() {
 
   els.transactionForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!requireCloudReady("请先登录后再新增流水。")) return;
     const data = formData(event.currentTarget);
     const record = {
       id: crypto.randomUUID(),
@@ -64,6 +64,7 @@ export function bindEvents() {
 
   els.accountForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!requireCloudReady("请先登录后再新增账户。")) return;
     const data = formData(event.currentTarget);
     const record = {
       id: crypto.randomUUID(),
@@ -83,6 +84,7 @@ export function bindEvents() {
 
   els.categoryForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!requireCloudReady("请先登录后再新增分类。")) return;
     const data = formData(event.currentTarget);
     const record = {
       id: crypto.randomUUID(),
@@ -101,22 +103,11 @@ export function bindEvents() {
   els.supabaseForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = formData(event.currentTarget);
-    localStorage.removeItem(LOCAL_MODE_KEY);
-    sessionStorage.removeItem(LOCAL_MODE_KEY);
     localStorage.setItem(CONFIG_KEY, JSON.stringify({ url: data.url.trim(), anonKey: data.anonKey.trim() }));
     await initSupabaseClient();
     await refreshSession();
-    await syncAllToCloud();
     await loadCloudData();
     render();
-  });
-
-  els.clearCloudBtn.addEventListener("click", () => {
-    localStorage.removeItem(LOCAL_MODE_KEY);
-    sessionStorage.setItem(LOCAL_MODE_KEY, "true");
-    appState.supabaseClient = null;
-    appState.currentUser = null;
-    renderSyncStatus();
   });
 
   els.authForm.addEventListener("submit", async (event) => {
@@ -138,21 +129,14 @@ export function bindEvents() {
     await runPasswordAuth("signUp");
   });
 
-  els.syncLocalBtn.addEventListener("click", async () => {
-    if (!isCloudReady()) {
-      setActionMessage("请先登录后再同步。", "error");
-      return;
-    }
-    await syncAllToCloud();
-    await loadCloudData();
-    setActionMessage("本地数据已同步到 Supabase。", "success");
-    render();
-  });
-
   els.seedBtn.addEventListener("click", async () => {
-    seedDefaults(appState.data);
-    await syncAllToCloud();
+    if (!requireCloudReady("请先登录后再初始化示例。")) return;
+    const seeded = seedDefaults();
+    const ok = await upsertSeedData(seeded);
+    if (!ok) return;
+    await loadCloudData();
     await loadMonthPageData();
+    setActionMessage("示例数据已写入 Supabase。", "success");
     render();
   });
 
@@ -167,6 +151,7 @@ export function bindEvents() {
   });
 
   els.settleMonthBtn.addEventListener("click", async () => {
+    if (!requireCloudReady("请先登录后再标记净结。")) return;
     const current = appState.data.months[appState.activeMonth] || { month_key: appState.activeMonth, status: "open" };
     current.status = current.status === "locked" ? "open" : "locked";
     appState.data.months[appState.activeMonth] = current;
@@ -180,4 +165,27 @@ async function runPasswordAuth(mode) {
   const email = els.authForm.elements.email.value.trim();
   const password = els.authForm.elements.password.value;
   await passwordAuth(mode, email, password);
+}
+
+function requireCloudReady(message) {
+  if (isCloudReady()) return true;
+  setActionMessage(message, "error");
+  return false;
+}
+
+async function upsertSeedData(seeded) {
+  const withUser = (row) => ({ ...row, user_id: appState.currentUser.id });
+  const operations = [
+    ["home_accounts", seeded.accounts.map(withUser)],
+    ["home_categories", seeded.categories.map(withUser)],
+  ];
+  for (const [table, rows] of operations) {
+    if (!rows.length) continue;
+    const { error } = await appState.supabaseClient.from(table).upsert(rows);
+    if (error) {
+      setActionMessage(`初始化示例失败：${error.message}`, "error");
+      return false;
+    }
+  }
+  return true;
 }

@@ -1,15 +1,13 @@
-export function seedDefaults(state) {
-  if (!state.accounts.length) {
-    state.accounts = [
+export function seedDefaults() {
+  return {
+    accounts: [
       accountSeed("现金", "cash", 0, 0),
       accountSeed("支付宝余额", "wallet", 0, 1),
       accountSeed("余利宝", "wallet", 0, 2),
       accountSeed("余额宝", "wallet", 0, 3),
       accountSeed("信用卡", "credit", 0, 4),
-    ];
-  }
-  if (!state.categories.length) {
-    state.categories = [
+    ],
+    categories: [
       categorySeed("工资", "income", 0),
       categorySeed("生活费", "expense", 1),
       categorySeed("房贷", "expense", 2),
@@ -17,8 +15,8 @@ export function seedDefaults(state) {
       categorySeed("购物", "expense", 4),
       categorySeed("余额调整", "adjustment", 5),
       categorySeed("账户转账", "transfer", 6),
-    ];
-  }
+    ],
+  };
 }
 
 function accountSeed(name, kind, openingBalance, sortOrder) {

@@ -1,11 +1,10 @@
-import { els } from "./elements.js?v=20260528-session-1";
-import { appState, saveLocal } from "./state.js?v=20260528-session-1";
-import { renderSyncStatus } from "./ui.js?v=20260528-session-1";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260528-session-1";
-import { loadMonthPageData, persist, removeCloud } from "./supabase.js?v=20260528-session-1";
+import { els } from "./elements.js?v=20260528-cloud-1";
+import { appState } from "./state.js?v=20260528-cloud-1";
+import { renderSyncStatus, setActionMessage } from "./ui.js?v=20260528-cloud-1";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260528-cloud-1";
+import { isCloudReady, loadMonthPageData, persist, removeCloud } from "./supabase.js?v=20260528-cloud-1";
 
 export function render() {
-  saveLocal();
   renderSyncStatus();
   renderSelectOptions();
   renderDashboard();
@@ -65,6 +64,7 @@ function renderTransactions() {
 
   els.transactionRows.querySelectorAll("[data-delete]").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (!requireCloudReady("请先登录后再删除流水。")) return;
       const id = button.dataset.delete;
       appState.data.transactions = appState.data.transactions.filter((item) => item.id !== id);
       await removeCloud("transactions", id);
@@ -75,6 +75,7 @@ function renderTransactions() {
 
   els.transactionRows.querySelectorAll("[data-toggle-status]").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (!requireCloudReady("请先登录后再修改状态。")) return;
       const id = button.dataset.toggleStatus;
       const tx = appState.data.transactions.find((item) => item.id === id);
       if (!tx) return;
@@ -105,6 +106,7 @@ function renderAccounts() {
 
   els.accountRows.querySelectorAll("[data-delete-account]").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (!requireCloudReady("请先登录后再删除账户。")) return;
       const id = button.dataset.deleteAccount;
       appState.data.accounts = appState.data.accounts.filter((item) => item.id !== id);
       await removeCloud("accounts", id);
@@ -132,6 +134,7 @@ function renderCategories() {
 
   els.categoryRows.querySelectorAll("[data-delete-category]").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (!requireCloudReady("请先登录后再删除分类。")) return;
       const id = button.dataset.deleteCategory;
       appState.data.categories = appState.data.categories.filter((item) => item.id !== id);
       await removeCloud("categories", id);
@@ -178,6 +181,12 @@ function labelType(type) {
     transfer: "转账",
     adjustment: "调整",
   }[type] || type;
+}
+
+function requireCloudReady(message) {
+  if (isCloudReady()) return true;
+  setActionMessage(message, "error");
+  return false;
 }
 
 function labelAccountKind(kind) {

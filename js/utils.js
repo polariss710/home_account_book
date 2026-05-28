@@ -1,4 +1,4 @@
-import { PUBLIC_APP_URL } from "./config.js?v=20260528-session-1";
+import { PUBLIC_APP_URL } from "./config.js?v=20260528-cloud-1";
 
 export function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
@@ -50,16 +50,16 @@ export function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-export function mergeById(localRows, cloudRows) {
+export function mergeById(currentRows, incomingRows) {
   const map = new Map();
-  [...cloudRows, ...localRows].forEach((row) => {
+  [...incomingRows, ...currentRows].forEach((row) => {
     map.set(row.id, row);
   });
   return [...map.values()].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
 }
 
-export function mergeMonths(localMonths, cloudMonths) {
-  return { ...Object.fromEntries(cloudMonths.map((item) => [item.month_key, item])), ...localMonths };
+export function mergeMonths(currentMonths, incomingMonths) {
+  return { ...Object.fromEntries(incomingMonths.map((item) => [item.month_key, item])), ...currentMonths };
 }
 
 export function getRedirectUrl() {
