@@ -1,8 +1,8 @@
-import { PUBLIC_APP_URL, CONFIG_KEY, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260528-db-rpc-1";
-import { els } from "./elements.js?v=20260528-db-rpc-1";
-import { appState } from "./state.js?v=20260528-db-rpc-1";
-import { todayString } from "./utils.js?v=20260528-db-rpc-1";
-import { isCloudReady } from "./supabase.js?v=20260528-db-rpc-1";
+import { PUBLIC_APP_URL, CONFIG_KEY, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL, LOCAL_MODE_KEY } from "./config.js?v=20260528-config-1";
+import { els } from "./elements.js?v=20260528-config-1";
+import { appState } from "./state.js?v=20260528-config-1";
+import { todayString } from "./utils.js?v=20260528-config-1";
+import { isCloudReady } from "./supabase.js?v=20260528-config-1";
 
 export function setInitialDates() {
   els.monthPicker.value = appState.activeMonth;
@@ -60,17 +60,18 @@ export function warnIfFileMode() {
 }
 
 export function getConfig() {
+  if (localStorage.getItem(LOCAL_MODE_KEY) === "true") return null;
   try {
-    return (
-      JSON.parse(localStorage.getItem(CONFIG_KEY) || "null") || {
-        url: DEFAULT_SUPABASE_URL,
-        anonKey: DEFAULT_SUPABASE_ANON_KEY,
-      }
-    );
+    const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || "null") || {};
+    return normalizeConfig(saved);
   } catch {
-    return {
-      url: DEFAULT_SUPABASE_URL,
-      anonKey: DEFAULT_SUPABASE_ANON_KEY,
-    };
+    return normalizeConfig({});
   }
+}
+
+function normalizeConfig(config) {
+  return {
+    url: config.url?.trim() || DEFAULT_SUPABASE_URL,
+    anonKey: config.anonKey?.trim() || DEFAULT_SUPABASE_ANON_KEY,
+  };
 }

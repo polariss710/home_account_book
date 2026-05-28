@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260528-db-rpc-1";
-import { appState, saveLocal } from "./state.js?v=20260528-db-rpc-1";
-import { renderSyncStatus } from "./ui.js?v=20260528-db-rpc-1";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260528-db-rpc-1";
-import { loadMonthPageData, persist, removeCloud } from "./supabase.js?v=20260528-db-rpc-1";
+import { els } from "./elements.js?v=20260528-config-1";
+import { appState, saveLocal } from "./state.js?v=20260528-config-1";
+import { renderSyncStatus } from "./ui.js?v=20260528-config-1";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260528-config-1";
+import { loadMonthPageData, persist, removeCloud } from "./supabase.js?v=20260528-config-1";
 
 export function render() {
   saveLocal();
