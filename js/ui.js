@@ -1,8 +1,8 @@
-import { DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260528-cloud-2";
-import { els } from "./elements.js?v=20260528-cloud-2";
-import { appState } from "./state.js?v=20260528-cloud-2";
-import { todayString } from "./utils.js?v=20260528-cloud-2";
-import { isCloudReady } from "./supabase.js?v=20260528-cloud-2";
+import { DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260528-cloud-3";
+import { els } from "./elements.js?v=20260528-cloud-3";
+import { appState } from "./state.js?v=20260528-cloud-3";
+import { todayString } from "./utils.js?v=20260528-cloud-3";
+import { isCloudReady } from "./supabase.js?v=20260528-cloud-3";
 
 export function setInitialDates() {
   els.monthPicker.value = appState.activeMonth;
@@ -19,6 +19,7 @@ export function switchView(viewId) {
 }
 
 export function renderSyncStatus() {
+  renderAuthGate();
   const month = appState.data.months[appState.activeMonth];
   const lockText = month?.status === "locked" ? "已净结" : "未净结";
   const modeText = isCloudReady()
@@ -32,6 +33,12 @@ export function renderSyncStatus() {
     els.authState.className = `badge ${appState.currentUser ? "paid" : "unpaid"}`;
     els.authState.textContent = appState.currentUser ? "已登录" : "未登录";
   }
+}
+
+function renderAuthGate() {
+  const loggedIn = isCloudReady();
+  els.authGate.hidden = loggedIn;
+  els.appShell.hidden = !loggedIn;
 }
 
 export function setActionMessage(message, type = "") {

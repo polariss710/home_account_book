@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260528-cloud-2";
-import { appState } from "./state.js?v=20260528-cloud-2";
-import { seedDefaults } from "./seed.js?v=20260528-cloud-2";
-import { render } from "./render.js?v=20260528-cloud-2";
-import { setActionMessage, switchView } from "./ui.js?v=20260528-cloud-2";
+import { els } from "./elements.js?v=20260528-cloud-3";
+import { appState } from "./state.js?v=20260528-cloud-3";
+import { seedDefaults } from "./seed.js?v=20260528-cloud-3";
+import { render } from "./render.js?v=20260528-cloud-3";
+import { setActionMessage, switchView } from "./ui.js?v=20260528-cloud-3";
 import {
   isCloudReady,
   loadCloudData,
@@ -12,8 +12,8 @@ import {
   persistMonth,
   sendMagicLink,
   signOut,
-} from "./supabase.js?v=20260528-cloud-2";
-import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260528-cloud-2";
+} from "./supabase.js?v=20260528-cloud-3";
+import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260528-cloud-3";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {

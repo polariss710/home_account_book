@@ -1,6 +1,8 @@
 export const els = {};
 
 const elementIds = [
+  "authGate",
+  "appShell",
   "syncStatus",
   "monthPicker",
   "settleMonthBtn",
