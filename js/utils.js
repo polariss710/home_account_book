@@ -1,5 +1,3 @@
-import { PUBLIC_APP_URL } from "./config.js?v=20260528-cloud-1";
-
 export function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
@@ -63,6 +61,5 @@ export function mergeMonths(currentMonths, incomingMonths) {
 }
 
 export function getRedirectUrl() {
-  if (window.location.protocol === "file:") return PUBLIC_APP_URL;
   return `${window.location.origin}${window.location.pathname}`;
 }

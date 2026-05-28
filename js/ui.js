@@ -1,17 +1,12 @@
-import { PUBLIC_APP_URL, CONFIG_KEY, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260528-cloud-1";
-import { els } from "./elements.js?v=20260528-cloud-1";
-import { appState } from "./state.js?v=20260528-cloud-1";
-import { todayString } from "./utils.js?v=20260528-cloud-1";
-import { isCloudReady } from "./supabase.js?v=20260528-cloud-1";
+import { DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260528-cloud-2";
+import { els } from "./elements.js?v=20260528-cloud-2";
+import { appState } from "./state.js?v=20260528-cloud-2";
+import { todayString } from "./utils.js?v=20260528-cloud-2";
+import { isCloudReady } from "./supabase.js?v=20260528-cloud-2";
 
 export function setInitialDates() {
   els.monthPicker.value = appState.activeMonth;
   els.transactionForm.elements.date.value = todayString();
-  const config = getConfig();
-  if (config) {
-    els.supabaseForm.elements.url.value = config.url || "";
-    els.supabaseForm.elements.anonKey.value = config.anonKey || "";
-  }
 }
 
 export function switchView(viewId) {
@@ -54,23 +49,9 @@ export function processAuthHash() {
   }
 }
 
-export function warnIfFileMode() {
-  if (window.location.protocol !== "file:") return;
-  setActionMessage(`当前是本地文件模式，登录请使用线上地址：${PUBLIC_APP_URL}`, "error");
-}
-
 export function getConfig() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || "null") || {};
-    return normalizeConfig(saved);
-  } catch {
-    return normalizeConfig({});
-  }
-}
-
-function normalizeConfig(config) {
   return {
-    url: config.url?.trim() || DEFAULT_SUPABASE_URL,
-    anonKey: config.anonKey?.trim() || DEFAULT_SUPABASE_ANON_KEY,
+    url: DEFAULT_SUPABASE_URL,
+    anonKey: DEFAULT_SUPABASE_ANON_KEY,
   };
 }

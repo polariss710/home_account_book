@@ -20,7 +20,6 @@ const elementIds = [
   "passwordSignUpBtn",
   "signOutBtn",
   "actionMessage",
-  "supabaseForm",
   "monthIncome",
   "monthExpense",
   "monthUnpaid",

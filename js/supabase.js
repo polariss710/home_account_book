@@ -1,6 +1,6 @@
-import { appState } from "./state.js?v=20260528-cloud-1";
-import { mergeById, mergeMonths, getRedirectUrl } from "./utils.js?v=20260528-cloud-1";
-import { getConfig, setActionMessage } from "./ui.js?v=20260528-cloud-1";
+import { appState } from "./state.js?v=20260528-cloud-2";
+import { mergeById, mergeMonths, getRedirectUrl } from "./utils.js?v=20260528-cloud-2";
+import { getConfig, setActionMessage } from "./ui.js?v=20260528-cloud-2";
 
 let onCloudChange = () => {};
 
@@ -14,9 +14,6 @@ export async function initSupabaseClient() {
     appState.supabaseClient = null;
     appState.currentUser = null;
     return;
-  }
-  if (!window.supabase) {
-    await loadSupabaseSdk();
   }
   if (!window.supabase) {
     appState.supabaseClient = null;
@@ -166,32 +163,6 @@ async function selectCloud(table) {
     return null;
   }
   return data || [];
-}
-
-async function loadSupabaseSdk() {
-  const sources = [
-    "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2",
-    "https://unpkg.com/@supabase/supabase-js@2",
-  ];
-  for (const src of sources) {
-    try {
-      await loadScript(src);
-      if (window.supabase) return;
-    } catch {
-      // Try the next CDN.
-    }
-  }
-}
-
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
 }
 
 function withUser(record) {

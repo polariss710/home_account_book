@@ -1,10 +1,9 @@
-import { els } from "./elements.js?v=20260528-cloud-1";
-import { appState } from "./state.js?v=20260528-cloud-1";
-import { seedDefaults } from "./seed.js?v=20260528-cloud-1";
-import { render } from "./render.js?v=20260528-cloud-1";
-import { renderSyncStatus, setActionMessage, switchView } from "./ui.js?v=20260528-cloud-1";
+import { els } from "./elements.js?v=20260528-cloud-2";
+import { appState } from "./state.js?v=20260528-cloud-2";
+import { seedDefaults } from "./seed.js?v=20260528-cloud-2";
+import { render } from "./render.js?v=20260528-cloud-2";
+import { setActionMessage, switchView } from "./ui.js?v=20260528-cloud-2";
 import {
-  initSupabaseClient,
   isCloudReady,
   loadCloudData,
   loadMonthPageData,
@@ -13,10 +12,8 @@ import {
   persistMonth,
   sendMagicLink,
   signOut,
-  refreshSession,
-} from "./supabase.js?v=20260528-cloud-1";
-import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260528-cloud-1";
-import { CONFIG_KEY } from "./config.js?v=20260528-cloud-1";
+} from "./supabase.js?v=20260528-cloud-2";
+import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260528-cloud-2";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
@@ -97,16 +94,6 @@ export function bindEvents() {
     await persist("categories", record);
     await loadMonthPageData();
     event.currentTarget.reset();
-    render();
-  });
-
-  els.supabaseForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const data = formData(event.currentTarget);
-    localStorage.setItem(CONFIG_KEY, JSON.stringify({ url: data.url.trim(), anonKey: data.anonKey.trim() }));
-    await initSupabaseClient();
-    await refreshSession();
-    await loadCloudData();
     render();
   });
 
