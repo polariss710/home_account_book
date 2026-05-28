@@ -1,8 +1,8 @@
-import { PUBLIC_APP_URL, CONFIG_KEY, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js";
-import { els } from "./elements.js";
-import { appState } from "./state.js";
-import { todayString } from "./utils.js";
-import { isCloudReady } from "./supabase.js";
+import { PUBLIC_APP_URL, CONFIG_KEY, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260528-db-rpc-1";
+import { els } from "./elements.js?v=20260528-db-rpc-1";
+import { appState } from "./state.js?v=20260528-db-rpc-1";
+import { todayString } from "./utils.js?v=20260528-db-rpc-1";
+import { isCloudReady } from "./supabase.js?v=20260528-db-rpc-1";
 
 export function setInitialDates() {
   els.monthPicker.value = appState.activeMonth;

@@ -1,4 +1,4 @@
-import { PUBLIC_APP_URL } from "./config.js";
+import { PUBLIC_APP_URL } from "./config.js?v=20260528-db-rpc-1";
 
 export function formData(form) {
   return Object.fromEntries(new FormData(form).entries());

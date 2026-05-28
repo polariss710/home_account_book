@@ -1,8 +1,8 @@
-import { els } from "./elements.js";
-import { appState } from "./state.js";
-import { seedDefaults } from "./seed.js";
-import { render } from "./render.js";
-import { renderSyncStatus, setActionMessage, switchView } from "./ui.js";
+import { els } from "./elements.js?v=20260528-db-rpc-1";
+import { appState } from "./state.js?v=20260528-db-rpc-1";
+import { seedDefaults } from "./seed.js?v=20260528-db-rpc-1";
+import { render } from "./render.js?v=20260528-db-rpc-1";
+import { renderSyncStatus, setActionMessage, switchView } from "./ui.js?v=20260528-db-rpc-1";
 import {
   initSupabaseClient,
   isCloudReady,
@@ -15,9 +15,9 @@ import {
   signOut,
   syncAllToCloud,
   refreshSession,
-} from "./supabase.js";
-import { emptyToNull, formData, todayString, toNumber } from "./utils.js";
-import { CONFIG_KEY } from "./config.js";
+} from "./supabase.js?v=20260528-db-rpc-1";
+import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260528-db-rpc-1";
+import { CONFIG_KEY } from "./config.js?v=20260528-db-rpc-1";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {

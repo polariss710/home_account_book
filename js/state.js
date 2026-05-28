@@ -1,5 +1,5 @@
-import { STORE_KEY } from "./config.js";
-import { monthKey } from "./utils.js";
+import { STORE_KEY } from "./config.js?v=20260528-db-rpc-1";
+import { monthKey } from "./utils.js?v=20260528-db-rpc-1";
 
 const defaultData = {
   accounts: [],
