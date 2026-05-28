@@ -36,18 +36,6 @@ export function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-export function mergeById(currentRows, incomingRows) {
-  const map = new Map();
-  [...incomingRows, ...currentRows].forEach((row) => {
-    map.set(row.id, row);
-  });
-  return [...map.values()].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
-}
-
-export function mergeMonths(currentMonths, incomingMonths) {
-  return { ...Object.fromEntries(incomingMonths.map((item) => [item.month_key, item])), ...currentMonths };
-}
-
 export function getRedirectUrl() {
   return `${window.location.origin}${window.location.pathname}`;
 }

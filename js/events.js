@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260528-cloud-5";
-import { appState } from "./state.js?v=20260528-cloud-5";
-import { seedDefaults } from "./seed.js?v=20260528-cloud-5";
-import { render } from "./render.js?v=20260528-cloud-5";
-import { setActionMessage, switchView } from "./ui.js?v=20260528-cloud-5";
+import { els } from "./elements.js?v=20260528-cloud-6";
+import { appState } from "./state.js?v=20260528-cloud-6";
+import { seedDefaults } from "./seed.js?v=20260528-cloud-6";
+import { render } from "./render.js?v=20260528-cloud-6";
+import { setActionMessage, switchView } from "./ui.js?v=20260528-cloud-6";
 import {
   isCloudReady,
   loadCloudData,
@@ -12,8 +12,8 @@ import {
   persistMonth,
   sendMagicLink,
   signOut,
-} from "./supabase.js?v=20260528-cloud-5";
-import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260528-cloud-5";
+} from "./supabase.js?v=20260528-cloud-6";
+import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260528-cloud-6";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
@@ -51,9 +51,9 @@ export function bindEvents() {
       description: data.description.trim(),
       created_at: new Date().toISOString(),
     };
-    appState.data.transactions.push(record);
-    await persist("transactions", record);
-    await loadMonthPageData();
+    const ok = await persist("transactions", record);
+    if (!ok) return;
+    await loadCloudData();
     event.currentTarget.reset();
     event.currentTarget.elements.date.value = todayString();
     render();
@@ -72,9 +72,9 @@ export function bindEvents() {
       sort_order: appState.data.accounts.length,
       created_at: new Date().toISOString(),
     };
-    appState.data.accounts.push(record);
-    await persist("accounts", record);
-    await loadMonthPageData();
+    const ok = await persist("accounts", record);
+    if (!ok) return;
+    await loadCloudData();
     event.currentTarget.reset();
     render();
   });
@@ -90,9 +90,9 @@ export function bindEvents() {
       sort_order: appState.data.categories.length,
       created_at: new Date().toISOString(),
     };
-    appState.data.categories.push(record);
-    await persist("categories", record);
-    await loadMonthPageData();
+    const ok = await persist("categories", record);
+    if (!ok) return;
+    await loadCloudData();
     event.currentTarget.reset();
     render();
   });
@@ -122,7 +122,6 @@ export function bindEvents() {
     const ok = await upsertSeedData(seeded);
     if (!ok) return;
     await loadCloudData();
-    await loadMonthPageData();
     setActionMessage("示例数据已写入 Supabase。", "success");
     render();
   });
@@ -141,9 +140,9 @@ export function bindEvents() {
     if (!requireCloudReady("请先登录后再标记净结。")) return;
     const current = appState.data.months[appState.activeMonth] || { month_key: appState.activeMonth, status: "open" };
     current.status = current.status === "locked" ? "open" : "locked";
-    appState.data.months[appState.activeMonth] = current;
-    await persistMonth(current);
-    await loadMonthPageData();
+    const ok = await persistMonth(current);
+    if (!ok) return;
+    await loadCloudData();
     render();
   });
 }

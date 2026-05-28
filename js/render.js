@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260528-cloud-5";
-import { appState } from "./state.js?v=20260528-cloud-5";
-import { renderSyncStatus, setActionMessage } from "./ui.js?v=20260528-cloud-5";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260528-cloud-5";
-import { isCloudReady, loadMonthPageData, persist, removeCloud } from "./supabase.js?v=20260528-cloud-5";
+import { els } from "./elements.js?v=20260528-cloud-6";
+import { appState } from "./state.js?v=20260528-cloud-6";
+import { renderSyncStatus, setActionMessage } from "./ui.js?v=20260528-cloud-6";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260528-cloud-6";
+import { isCloudReady, loadCloudData, persist, removeCloud } from "./supabase.js?v=20260528-cloud-6";
 
 export function render() {
   renderSyncStatus();
@@ -66,9 +66,9 @@ function renderTransactions() {
     button.addEventListener("click", async () => {
       if (!requireCloudReady("请先登录后再删除流水。")) return;
       const id = button.dataset.delete;
-      appState.data.transactions = appState.data.transactions.filter((item) => item.id !== id);
-      await removeCloud("transactions", id);
-      await loadMonthPageData();
+      const ok = await removeCloud("transactions", id);
+      if (!ok) return;
+      await loadCloudData();
       render();
     });
   });
@@ -79,9 +79,10 @@ function renderTransactions() {
       const id = button.dataset.toggleStatus;
       const tx = appState.data.transactions.find((item) => item.id === id);
       if (!tx) return;
-      tx.status = tx.status === "paid" ? "unpaid" : "paid";
-      await persist("transactions", tx);
-      await loadMonthPageData();
+      const updated = { ...tx, status: tx.status === "paid" ? "unpaid" : "paid" };
+      const ok = await persist("transactions", updated);
+      if (!ok) return;
+      await loadCloudData();
       render();
     });
   });
@@ -108,8 +109,9 @@ function renderAccounts() {
     button.addEventListener("click", async () => {
       if (!requireCloudReady("请先登录后再删除账户。")) return;
       const id = button.dataset.deleteAccount;
-      appState.data.accounts = appState.data.accounts.filter((item) => item.id !== id);
-      await removeCloud("accounts", id);
+      const ok = await removeCloud("accounts", id);
+      if (!ok) return;
+      await loadCloudData();
       render();
     });
   });
@@ -136,8 +138,9 @@ function renderCategories() {
     button.addEventListener("click", async () => {
       if (!requireCloudReady("请先登录后再删除分类。")) return;
       const id = button.dataset.deleteCategory;
-      appState.data.categories = appState.data.categories.filter((item) => item.id !== id);
-      await removeCloud("categories", id);
+      const ok = await removeCloud("categories", id);
+      if (!ok) return;
+      await loadCloudData();
       render();
     });
   });

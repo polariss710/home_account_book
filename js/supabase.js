@@ -1,6 +1,6 @@
-import { appState } from "./state.js?v=20260528-cloud-5";
-import { mergeById, mergeMonths, getRedirectUrl } from "./utils.js?v=20260528-cloud-5";
-import { getConfig, setActionMessage } from "./ui.js?v=20260528-cloud-5";
+import { appState } from "./state.js?v=20260528-cloud-6";
+import { getRedirectUrl } from "./utils.js?v=20260528-cloud-6";
+import { getConfig, setActionMessage } from "./ui.js?v=20260528-cloud-6";
 
 let onCloudChange = () => {};
 let cloudLoadPromise = null;
@@ -127,10 +127,10 @@ export async function loadCloudData() {
     selectCloud("home_months"),
   ]);
   if (accounts && categories && transactions && months) {
-    appState.data.accounts = mergeById(appState.data.accounts, accounts);
-    appState.data.categories = mergeById(appState.data.categories, categories);
-    appState.data.transactions = mergeById(appState.data.transactions, transactions);
-    appState.data.months = mergeMonths(appState.data.months, months);
+    appState.data.accounts = accounts;
+    appState.data.categories = categories;
+    appState.data.transactions = transactions;
+    appState.data.months = Object.fromEntries(months.map((month) => [month.month_key, month]));
   }
   await loadMonthPageData();
 }
@@ -152,24 +152,36 @@ export async function loadMonthPageData() {
 }
 
 export async function persist(kind, record) {
-  if (!isCloudReady()) return;
+  if (!isCloudReady()) return false;
   const table = `home_${kind}`;
   const { error } = await appState.supabaseClient.from(table).upsert(withUser(record));
-  if (error) alert(`Supabase 保存失败：${error.message}`);
+  if (error) {
+    alert(`Supabase 保存失败：${error.message}`);
+    return false;
+  }
+  return true;
 }
 
 export async function persistMonth(record) {
-  if (!isCloudReady()) return;
+  if (!isCloudReady()) return false;
   const { error } = await appState.supabaseClient
     .from("home_months")
     .upsert(withUser(record), { onConflict: "user_id,month_key" });
-  if (error) alert(`Supabase 保存失败：${error.message}`);
+  if (error) {
+    alert(`Supabase 保存失败：${error.message}`);
+    return false;
+  }
+  return true;
 }
 
 export async function removeCloud(kind, id) {
-  if (!isCloudReady()) return;
+  if (!isCloudReady()) return false;
   const { error } = await appState.supabaseClient.from(`home_${kind}`).delete().eq("id", id).eq("user_id", appState.currentUser.id);
-  if (error) alert(`Supabase 删除失败：${error.message}`);
+  if (error) {
+    alert(`Supabase 删除失败：${error.message}`);
+    return false;
+  }
+  return true;
 }
 
 async function selectCloud(table) {
