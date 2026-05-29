@@ -1,10 +1,11 @@
-import { els } from "./elements.js?v=20260529-jpy-1";
-import { appState } from "./state.js?v=20260529-jpy-1";
-import { loadAppData, deleteJpyTransaction, isCloudReady, saveJpyTransaction } from "./supabase.js?v=20260529-jpy-1";
-import { setActionMessage } from "./ui.js?v=20260529-jpy-1";
-import { emptyRow, escapeHtml, formData, money, toNumber } from "./utils.js?v=20260529-jpy-1";
+import { els } from "./elements.js?v=20260530-jpy-2";
+import { appState } from "./state.js?v=20260530-jpy-2";
+import { loadAppData, deleteJpyTransaction, isCloudReady, saveJpyTransaction } from "./supabase.js?v=20260530-jpy-2";
+import { setActionMessage } from "./ui.js?v=20260530-jpy-2";
+import { emptyRow, escapeHtml, formData, money, toNumber } from "./utils.js?v=20260530-jpy-2";
 
 export function bindJpyEvents() {
+  els.jpyTransactionForm.elements.transaction_type.addEventListener("change", updateTransferAccountControl);
   els.jpyTransactionForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!isCloudReady()) {
@@ -45,6 +46,7 @@ export function renderJpyPage() {
   renderJpyAccountOptions();
   renderJpyTransactions();
   setJpyTransactionDate();
+  updateTransferAccountControl();
 }
 
 function renderJpyBalances() {
@@ -71,6 +73,14 @@ function renderJpyAccountOptions() {
   const options = accounts.map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`).join("");
   els.jpyAccountSelect.innerHTML = options || `<option value="">请先新增账户</option>`;
   els.jpyTransferAccountSelect.innerHTML = `<option value="">不使用</option>${options}`;
+  updateTransferAccountControl();
+}
+
+function updateTransferAccountControl() {
+  const isTransfer = els.jpyTransactionForm.elements.transaction_type.value === "transfer";
+  els.jpyTransferAccountSelect.disabled = !isTransfer;
+  els.jpyTransferAccountSelect.required = isTransfer;
+  if (!isTransfer) els.jpyTransferAccountSelect.value = "";
 }
 
 function renderJpyTransactions() {

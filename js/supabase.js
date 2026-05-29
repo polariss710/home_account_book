@@ -1,6 +1,6 @@
-import { appState } from "./state.js?v=20260529-jpy-1";
-import { getRedirectUrl } from "./utils.js?v=20260529-jpy-1";
-import { getConfig, setActionMessage } from "./ui.js?v=20260529-jpy-1";
+import { appState } from "./state.js?v=20260530-jpy-2";
+import { getRedirectUrl } from "./utils.js?v=20260530-jpy-2";
+import { getConfig, setActionMessage } from "./ui.js?v=20260530-jpy-2";
 
 let onCloudChange = () => {};
 let pageLoadPromise = null;

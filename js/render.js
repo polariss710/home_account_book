@@ -1,9 +1,9 @@
-import { els } from "./elements.js?v=20260529-jpy-1";
-import { renderJpyPage } from "./jpy.js?v=20260529-jpy-1";
-import { appState, findFixedTemplate, getFixedTemplateTermStatus } from "./state.js?v=20260529-jpy-1";
-import { renderShell, setActionMessage } from "./ui.js?v=20260529-jpy-1";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-jpy-1";
-import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-jpy-1";
+import { els } from "./elements.js?v=20260530-jpy-2";
+import { renderJpyPage } from "./jpy.js?v=20260530-jpy-2";
+import { appState, findFixedTemplate, getFixedTemplateTermStatus } from "./state.js?v=20260530-jpy-2";
+import { renderShell, setActionMessage } from "./ui.js?v=20260530-jpy-2";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260530-jpy-2";
+import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260530-jpy-2";
 
 export function render() {
   renderShell();
