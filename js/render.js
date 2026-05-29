@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260529-fixed-9";
-import { appState, findFixedTemplate } from "./state.js?v=20260529-fixed-9";
-import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-9";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-9";
-import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-fixed-9";
+import { els } from "./elements.js?v=20260529-fixed-10";
+import { appState, findFixedTemplate } from "./state.js?v=20260529-fixed-10";
+import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-10";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-10";
+import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-fixed-10";
 
 export function render() {
   renderShell();

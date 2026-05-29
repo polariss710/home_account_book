@@ -139,11 +139,12 @@ with eligible_templates as (
     )
 ),
 existing_items as (
-  select count(*) as existing_count
+  select i.template_id
   from eligible_templates t
   join home_fixed_month_items i
     on i.user_id = auth.uid()
    and i.month_key = p_month_key
+   and i.currency = p_currency
    and i.template_id = t.id
 ),
 inserted_items as (
@@ -179,13 +180,34 @@ inserted_items as (
     t.total_terms,
     ''
   from eligible_templates t
+  where not exists (
+    select 1
+    from existing_items i
+    where i.template_id = t.id
+  )
   on conflict do nothing
-  returning id
+  returning id, template_id
 )
 select jsonb_build_object(
   'eligible_count', (select count(*) from eligible_templates),
-  'existing_count', (select existing_count from existing_items),
-  'inserted_count', (select count(*) from inserted_items)
+  'existing_count', (select count(*) from existing_items),
+  'inserted_count', (select count(*) from inserted_items),
+  'all_generated', (
+    (select count(*) from eligible_templates) > 0
+    and (select count(*) from eligible_templates) = (select count(*) from existing_items)
+  ),
+  'eligible_templates', coalesce((
+    select jsonb_agg(jsonb_build_object('id', id, 'name', name) order by sort_order, created_at, name)
+    from eligible_templates
+  ), '[]'::jsonb),
+  'existing_template_ids', coalesce((
+    select jsonb_agg(template_id)
+    from existing_items
+  ), '[]'::jsonb),
+  'inserted_template_ids', coalesce((
+    select jsonb_agg(template_id)
+    from inserted_items
+  ), '[]'::jsonb)
 );
 $$;
 

@@ -1,7 +1,7 @@
-import { els } from "./elements.js?v=20260529-fixed-9";
-import { appState, findFixedTemplate } from "./state.js?v=20260529-fixed-9";
-import { render } from "./render.js?v=20260529-fixed-9";
-import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-9";
+import { els } from "./elements.js?v=20260529-fixed-10";
+import { appState, findFixedTemplate } from "./state.js?v=20260529-fixed-10";
+import { render } from "./render.js?v=20260529-fixed-10";
+import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-10";
 import {
   generateFixedMonth,
   isCloudReady,
@@ -12,8 +12,8 @@ import {
   updateTemplate,
   sendMagicLink,
   signOut,
-} from "./supabase.js?v=20260529-fixed-9";
-import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-9";
+} from "./supabase.js?v=20260529-fixed-10";
+import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-10";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
@@ -38,15 +38,14 @@ export function bindEvents() {
     await loadFixedMonthPage();
     const insertedCount = Number(result.inserted_count || 0);
     const eligibleCount = Number(result.eligible_count || 0);
-    const existingCount = Number(result.existing_count || 0);
     if (insertedCount > 0) {
       setActionMessage(`本月固定项已生成 ${insertedCount} 条。`, "success");
     } else if (eligibleCount === 0) {
       setActionMessage("当前没有可生成的固定模板，请先新增模板。", "error");
-    } else if (existingCount >= eligibleCount) {
+    } else if (result.all_generated) {
       setActionMessage("当前还在使用的固定项已经生成完毕，无需重复生成。", "success");
     } else {
-      setActionMessage("没有新增固定项，请检查模板是否已生成或已到期。", "error");
+      setActionMessage("没有新增固定项，请刷新后重试；若仍出现，请检查恢复生成的模板状态。", "error");
     }
     render();
   });

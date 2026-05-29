@@ -1,6 +1,6 @@
-import { appState } from "./state.js?v=20260529-fixed-9";
-import { getRedirectUrl } from "./utils.js?v=20260529-fixed-9";
-import { getConfig, setActionMessage } from "./ui.js?v=20260529-fixed-9";
+import { appState } from "./state.js?v=20260529-fixed-10";
+import { getRedirectUrl } from "./utils.js?v=20260529-fixed-10";
+import { getConfig, setActionMessage } from "./ui.js?v=20260529-fixed-10";
 
 let onCloudChange = () => {};
 let pageLoadPromise = null;
@@ -169,9 +169,19 @@ async function upsert(table, record) {
 
 async function updateById(table, id, patch) {
   if (!isCloudReady()) return false;
-  const { error } = await appState.supabaseClient.from(table).update(patch).eq("id", id).eq("user_id", appState.currentUser.id);
+  const { data, error } = await appState.supabaseClient
+    .from(table)
+    .update(patch)
+    .eq("id", id)
+    .eq("user_id", appState.currentUser.id)
+    .select("id")
+    .maybeSingle();
   if (error) {
     setActionMessage(`Supabase 更新失败：${error.message}`, "error");
+    return false;
+  }
+  if (!data) {
+    setActionMessage("Supabase 更新失败：没有找到可更新的数据。", "error");
     return false;
   }
   return true;
