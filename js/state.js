@@ -1,17 +1,8 @@
-import { monthKey } from "./utils.js?v=20260529-form-1";
-
-const defaultData = {
-  accounts: [],
-  categories: [],
-  transactions: [],
-  months: {},
-  monthPage: null,
-};
+import { monthKey } from "./utils.js?v=20260529-fixed-1";
 
 export const appState = {
-  data: structuredClone(defaultData),
   activeMonth: monthKey(new Date()),
-  transactionFilter: "all",
+  page: null,
   supabaseClient: null,
   currentUser: null,
 };

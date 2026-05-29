@@ -52,9 +52,8 @@
 
         <nav class="nav" aria-label="主导航">
           <button class="nav-button is-active" data-view="dashboard">总览</button>
-          <button class="nav-button" data-view="transactions">流水</button>
-          <button class="nav-button" data-view="accounts">账户</button>
-          <button class="nav-button" data-view="categories">分类</button>
+          <button class="nav-button" data-view="fixed">日元固定收支</button>
+          <button class="nav-button" data-view="accounts">日元账户</button>
           <button class="nav-button" data-view="settings">设置</button>
         </nav>
       </aside>
@@ -66,177 +65,154 @@
             <input id="monthPicker" type="month" />
           </div>
           <div class="topbar-actions">
-            <button id="settleMonthBtn" class="ghost-button" type="button">切换净结</button>
-            <button id="exportBtn" class="ghost-button" type="button">导出 JSON</button>
-            <button id="seedBtn" class="primary-button" type="button">初始化示例</button>
+            <button id="generateMonthBtn" class="primary-button" type="button">生成本月固定项</button>
+            <button id="refreshBtn" class="ghost-button" type="button">刷新</button>
           </div>
         </header>
 
         <section id="dashboard" class="view is-active">
           <div class="metric-grid">
             <article class="metric">
-              <span>本月收入</span>
-              <strong id="monthIncome">0</strong>
+              <span>固定收入</span>
+              <strong id="fixedIncomeTotal">0</strong>
             </article>
             <article class="metric">
-              <span>本月支出</span>
-              <strong id="monthExpense">0</strong>
+              <span>固定支出</span>
+              <strong id="fixedExpenseTotal">0</strong>
             </article>
             <article class="metric">
-              <span>未付金额</span>
-              <strong id="monthUnpaid">0</strong>
+              <span>盈余 / 赤字</span>
+              <strong id="fixedBalanceTotal">0</strong>
             </article>
             <article class="metric">
-              <span>月末余额</span>
-              <strong id="monthBalance">0</strong>
+              <span>未付固定支出</span>
+              <strong id="fixedUnpaidTotal">0</strong>
             </article>
           </div>
 
-          <div class="content-grid">
-            <section class="panel">
-              <div class="panel-heading">
-                <h2>账户余额</h2>
-              </div>
-              <div id="accountBalances" class="balance-list"></div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-heading">
-                <h2>本月待处理</h2>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>日期</th>
-                      <th>内容</th>
-                      <th>分类</th>
-                      <th>金额</th>
-                      <th>状态</th>
-                    </tr>
-                  </thead>
-                  <tbody id="pendingRows"></tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-        </section>
-
-        <section id="transactions" class="view">
           <section class="panel">
             <div class="panel-heading">
-              <h2>新增流水</h2>
+              <h2>支付渠道小计</h2>
             </div>
-            <form id="transactionForm" class="form-grid">
+            <div id="paymentGroupSummary" class="settings-list"></div>
+          </section>
+        </section>
+
+        <section id="fixed" class="view">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>新增固定模板</h2>
+            </div>
+            <form id="templateForm" class="form-grid">
               <label>
-                日期
-                <input name="date" type="date" required />
+                名称
+                <input name="name" type="text" placeholder="工资 / 房贷 / 信用卡" required />
               </label>
               <label>
-                类型
-                <select name="type" required>
-                  <option value="income">收入</option>
+                收支
+                <select name="direction" required>
                   <option value="expense">支出</option>
-                  <option value="transfer">转账</option>
-                  <option value="adjustment">调整</option>
+                  <option value="income">收入</option>
                 </select>
               </label>
               <label>
-                金额
-                <input name="amount" type="number" inputmode="decimal" step="0.01" required />
-              </label>
-              <label>
-                分类
-                <select name="category_id"></select>
-              </label>
-              <label>
-                来源账户
-                <select name="source_account_id"></select>
-              </label>
-              <label>
-                去向账户
-                <select name="target_account_id"></select>
-              </label>
-              <label>
-                状态
-                <select name="status" required>
-                  <option value="paid">已付</option>
-                  <option value="unpaid">未付</option>
+                固定类型
+                <select name="fixed_type" required>
+                  <option value="long_term">长期固定</option>
+                  <option value="short_term">短期固定</option>
                 </select>
               </label>
               <label>
-                说明
-                <input name="description" type="text" maxlength="80" />
+                默认金额
+                <input name="default_amount" type="number" inputmode="decimal" step="1" value="0" required />
               </label>
-              <button class="primary-button form-submit" type="submit">保存流水</button>
+              <label>
+                支付渠道
+                <input name="payment_group" type="text" placeholder="乐天卡 / 邮局卡 / 现金支付" />
+              </label>
+              <label>
+                支付日
+                <input name="due_day" type="number" min="1" max="31" placeholder="27" />
+              </label>
+              <label>
+                开始月份
+                <input name="start_month" type="month" />
+              </label>
+              <label>
+                总期数
+                <input name="total_terms" type="number" min="1" placeholder="短期固定可填" />
+              </label>
+              <button class="primary-button form-submit" type="submit">保存模板</button>
             </form>
           </section>
 
           <section class="panel">
             <div class="panel-heading">
-              <h2>本月流水</h2>
-              <div class="segmented" role="group" aria-label="流水筛选">
-                <button class="segment is-active" data-filter="all" type="button">全部</button>
-                <button class="segment" data-filter="paid" type="button">已付</button>
-                <button class="segment" data-filter="unpaid" type="button">未付</button>
-              </div>
+              <h2>本月固定收入</h2>
             </div>
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>日期</th>
-                    <th>类型</th>
-                    <th>说明</th>
-                    <th>分类</th>
-                    <th>账户</th>
+                    <th>项目</th>
                     <th>金额</th>
                     <th>状态</th>
+                    <th>期数</th>
+                    <th>备注</th>
                     <th></th>
                   </tr>
                 </thead>
-                <tbody id="transactionRows"></tbody>
+                <tbody id="incomeItemRows"></tbody>
               </table>
             </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>本月固定支出</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>支付渠道</th>
+                    <th>项目</th>
+                    <th>金额</th>
+                    <th>期限</th>
+                    <th>状态</th>
+                    <th>期数</th>
+                    <th>备注</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="expenseItemRows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>固定模板</h2>
+            </div>
+            <div id="templateRows" class="settings-list"></div>
           </section>
         </section>
 
         <section id="accounts" class="view">
           <section class="panel">
             <div class="panel-heading">
-              <h2>账户</h2>
+              <h2>日元账户</h2>
             </div>
             <form id="accountForm" class="inline-form">
-              <input name="name" type="text" placeholder="账户名称" required />
-              <select name="kind" required>
+              <input name="name" type="text" placeholder="现金 / 银行卡" required />
+              <select name="account_type" required>
                 <option value="cash">现金</option>
-                <option value="wallet">钱包</option>
-                <option value="bank">银行</option>
-                <option value="credit">信用卡</option>
+                <option value="bank">银行卡</option>
               </select>
-              <input name="opening_balance" type="number" step="0.01" placeholder="期初余额" required />
+              <input name="opening_balance" type="number" step="1" placeholder="期初余额" required />
               <button class="primary-button" type="submit">添加</button>
             </form>
             <div id="accountRows" class="settings-list"></div>
-          </section>
-        </section>
-
-        <section id="categories" class="view">
-          <section class="panel">
-            <div class="panel-heading">
-              <h2>分类</h2>
-            </div>
-            <form id="categoryForm" class="inline-form">
-              <input name="name" type="text" placeholder="分类名称" required />
-              <select name="kind" required>
-                <option value="income">收入</option>
-                <option value="expense">支出</option>
-                <option value="transfer">转账</option>
-                <option value="adjustment">调整</option>
-              </select>
-              <button class="primary-button" type="submit">添加</button>
-            </form>
-            <div id="categoryRows" class="settings-list"></div>
           </section>
         </section>
 
@@ -252,11 +228,10 @@
               </div>
             </div>
           </section>
-
         </section>
       </main>
     </div>
 
-    <script type="module" src="app.js?v=20260529-form-1"></script>
+    <script type="module" src="app.js?v=20260529-fixed-1"></script>
   </body>
 </html>

@@ -1,9 +1,9 @@
-import { appState } from "./state.js?v=20260529-form-1";
-import { getRedirectUrl } from "./utils.js?v=20260529-form-1";
-import { getConfig, setActionMessage } from "./ui.js?v=20260529-form-1";
+import { appState } from "./state.js?v=20260529-fixed-1";
+import { getRedirectUrl } from "./utils.js?v=20260529-fixed-1";
+import { getConfig, setActionMessage } from "./ui.js?v=20260529-fixed-1";
 
 let onCloudChange = () => {};
-let cloudLoadPromise = null;
+let pageLoadPromise = null;
 
 export function setCloudChangeHandler(handler) {
   onCloudChange = handler;
@@ -11,32 +11,20 @@ export function setCloudChangeHandler(handler) {
 
 export async function initSupabaseClient() {
   const config = getConfig();
-  if (!config?.url || !config?.anonKey) {
-    appState.supabaseClient = null;
-    appState.currentUser = null;
-    return;
-  }
   if (!window.supabase) {
-    appState.supabaseClient = null;
-    appState.currentUser = null;
     setActionMessage("Supabase SDK 加载失败，请刷新页面或检查网络。", "error");
     return;
   }
   appState.supabaseClient = window.supabase.createClient(config.url, config.anonKey);
-  appState.supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+  appState.supabaseClient.auth.onAuthStateChange((_event, session) => {
     appState.currentUser = session?.user || null;
     onCloudChange();
-    if (appState.currentUser) {
-      queueCloudDataLoad();
-    }
+    if (isCloudReady()) queuePageLoad();
   });
 }
 
 export async function refreshSession() {
-  if (!appState.supabaseClient) {
-    appState.currentUser = null;
-    return;
-  }
+  if (!appState.supabaseClient) return;
   const { data, error } = await appState.supabaseClient.auth.getSession();
   if (error) {
     appState.currentUser = null;
@@ -50,19 +38,16 @@ export function isCloudReady() {
 }
 
 export async function sendMagicLink(email) {
-  if (!appState.supabaseClient) {
-    alert("请先配置 Supabase。");
-    return;
-  }
+  if (!appState.supabaseClient) return;
   const { error } = await appState.supabaseClient.auth.signInWithOtp({
     email,
     options: { emailRedirectTo: getRedirectUrl() },
   });
   if (error) {
-    alert(`登录链接发送失败：${error.message}`);
+    setActionMessage(`登录链接发送失败：${error.message}`, "error");
     return;
   }
-  alert("登录链接已发送，请打开邮箱完成登录。");
+  setActionMessage("登录链接已发送，请打开邮箱完成登录。", "success");
 }
 
 export async function signOut() {
@@ -72,10 +57,6 @@ export async function signOut() {
 }
 
 export async function passwordAuth(mode, email, password) {
-  if (!appState.supabaseClient) {
-    setActionMessage("请先配置 Supabase。", "error");
-    return;
-  }
   if (!email || !password) {
     setActionMessage("请输入 Email 和密码。", "error");
     return;
@@ -97,100 +78,101 @@ export async function passwordAuth(mode, email, password) {
   if (appState.currentUser) {
     setActionMessage(`${mode === "signUp" ? "注册" : "登录"}成功。`, "success");
     onCloudChange();
-    queueCloudDataLoad();
+    queuePageLoad();
     return;
   }
   setActionMessage("注册成功，请按邮箱确认后再登录。", "success");
 }
 
-export function queueCloudDataLoad() {
+export function queuePageLoad() {
   if (!isCloudReady()) return Promise.resolve();
-  if (!cloudLoadPromise) {
-    cloudLoadPromise = loadCloudData()
+  if (!pageLoadPromise) {
+    pageLoadPromise = loadFixedMonthPage()
       .catch((error) => {
         setActionMessage(`数据读取失败：${error.message}`, "error");
       })
       .finally(() => {
-        cloudLoadPromise = null;
+        pageLoadPromise = null;
         onCloudChange();
       });
   }
-  return cloudLoadPromise;
+  return pageLoadPromise;
 }
 
-export async function loadCloudData() {
+export async function loadFixedMonthPage() {
   if (!isCloudReady()) return;
-  const [accounts, categories, transactions, months] = await Promise.all([
-    selectCloud("home_accounts"),
-    selectCloud("home_categories"),
-    selectCloud("home_transactions"),
-    selectCloud("home_months"),
-  ]);
-  if (accounts && categories && transactions && months) {
-    appState.data.accounts = accounts;
-    appState.data.categories = categories;
-    appState.data.transactions = transactions;
-    appState.data.months = Object.fromEntries(months.map((month) => [month.month_key, month]));
-  }
-  await loadMonthPageData();
-}
-
-export async function loadMonthPageData() {
-  if (!isCloudReady()) {
-    appState.data.monthPage = null;
-    return;
-  }
-  const { data, error } = await appState.supabaseClient.rpc("home_get_month_page", {
+  const { data, error } = await appState.supabaseClient.rpc("home_get_fixed_month_page", {
     p_month_key: appState.activeMonth,
+    p_currency: "JPY",
   });
   if (error) {
-    setActionMessage(`月度数据读取失败：${error.message}`, "error");
-    appState.data.monthPage = null;
+    setActionMessage(`固定收支读取失败：${error.message}`, "error");
+    appState.page = null;
     return;
   }
-  appState.data.monthPage = data;
+  appState.page = data;
 }
 
-export async function persist(kind, record) {
-  if (!isCloudReady()) return false;
-  const table = `home_${kind}`;
-  const { error } = await appState.supabaseClient.from(table).upsert(withUser(record));
+export async function generateFixedMonth() {
+  const { error } = await appState.supabaseClient.rpc("home_generate_fixed_month", {
+    p_month_key: appState.activeMonth,
+    p_currency: "JPY",
+  });
   if (error) {
-    alert(`Supabase 保存失败：${error.message}`);
+    setActionMessage(`生成本月固定项失败：${error.message}`, "error");
     return false;
   }
   return true;
 }
 
-export async function persistMonth(record) {
+export async function saveAccount(record) {
+  return upsert("home_accounts", withUser({ ...record, currency: "JPY" }));
+}
+
+export async function saveTemplate(record) {
+  return upsert("home_fixed_templates", withUser({ ...record, currency: "JPY" }));
+}
+
+export async function saveMonthItem(record) {
+  return upsert("home_fixed_month_items", withUser(record));
+}
+
+export async function deactivateTemplate(id) {
+  return updateById("home_fixed_templates", id, { is_active: false });
+}
+
+export async function deleteMonthItem(id) {
+  return deleteById("home_fixed_month_items", id);
+}
+
+async function upsert(table, record) {
   if (!isCloudReady()) return false;
-  const { error } = await appState.supabaseClient
-    .from("home_months")
-    .upsert(withUser(record), { onConflict: "user_id,month_key" });
+  const { error } = await appState.supabaseClient.from(table).upsert(record);
   if (error) {
-    alert(`Supabase 保存失败：${error.message}`);
+    setActionMessage(`Supabase 保存失败：${error.message}`, "error");
     return false;
   }
   return true;
 }
 
-export async function removeCloud(kind, id) {
+async function updateById(table, id, patch) {
   if (!isCloudReady()) return false;
-  const { error } = await appState.supabaseClient.from(`home_${kind}`).delete().eq("id", id).eq("user_id", appState.currentUser.id);
+  const { error } = await appState.supabaseClient.from(table).update(patch).eq("id", id).eq("user_id", appState.currentUser.id);
   if (error) {
-    alert(`Supabase 删除失败：${error.message}`);
+    setActionMessage(`Supabase 更新失败：${error.message}`, "error");
     return false;
   }
   return true;
 }
 
-async function selectCloud(table) {
-  const { data, error } = await appState.supabaseClient.from(table).select("*").order("created_at", { ascending: true });
+async function deleteById(table, id) {
+  if (!isCloudReady()) return false;
+  const { error } = await appState.supabaseClient.from(table).delete().eq("id", id).eq("user_id", appState.currentUser.id);
   if (error) {
-    alert(`Supabase 读取失败：${error.message}`);
-    return null;
+    setActionMessage(`Supabase 删除失败：${error.message}`, "error");
+    return false;
   }
-  return data || [];
+  return true;
 }
 
 function withUser(record) {

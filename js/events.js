@@ -1,62 +1,67 @@
-import { els } from "./elements.js?v=20260529-form-1";
-import { appState } from "./state.js?v=20260529-form-1";
-import { seedDefaults } from "./seed.js?v=20260529-form-1";
-import { render } from "./render.js?v=20260529-form-1";
-import { setActionMessage, switchView } from "./ui.js?v=20260529-form-1";
+import { els } from "./elements.js?v=20260529-fixed-1";
+import { appState } from "./state.js?v=20260529-fixed-1";
+import { render } from "./render.js?v=20260529-fixed-1";
+import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-1";
 import {
+  generateFixedMonth,
   isCloudReady,
-  loadCloudData,
-  loadMonthPageData,
+  loadFixedMonthPage,
   passwordAuth,
-  persist,
-  persistMonth,
+  saveAccount,
+  saveTemplate,
   sendMagicLink,
   signOut,
-} from "./supabase.js?v=20260529-form-1";
-import { emptyToNull, formData, todayString, toNumber } from "./utils.js?v=20260529-form-1";
+} from "./supabase.js?v=20260529-fixed-1";
+import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-1";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view));
   });
 
-  document.querySelectorAll(".segment").forEach((button) => {
-    button.addEventListener("click", () => {
-      appState.transactionFilter = button.dataset.filter;
-      document.querySelectorAll(".segment").forEach((item) => item.classList.remove("is-active"));
-      button.classList.add("is-active");
-      render();
-    });
-  });
-
   els.monthPicker.addEventListener("change", async () => {
     appState.activeMonth = els.monthPicker.value;
-    await loadMonthPageData();
+    await loadFixedMonthPage();
     render();
   });
 
-  els.transactionForm.addEventListener("submit", async (event) => {
+  els.refreshBtn.addEventListener("click", async () => {
+    await loadFixedMonthPage();
+    render();
+  });
+
+  els.generateMonthBtn.addEventListener("click", async () => {
+    if (!requireCloudReady("请先登录后再生成本月固定项。")) return;
+    const ok = await generateFixedMonth();
+    if (!ok) return;
+    await loadFixedMonthPage();
+    setActionMessage("本月固定项已生成。", "success");
+    render();
+  });
+
+  els.templateForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!requireCloudReady("请先登录后再新增流水。")) return;
+    if (!requireCloudReady("请先登录后再新增模板。")) return;
     const form = event.currentTarget;
     const data = formData(form);
     const record = {
       id: crypto.randomUUID(),
-      date: data.date,
-      type: data.type,
-      amount: toNumber(data.amount),
-      category_id: emptyToNull(data.category_id),
-      source_account_id: emptyToNull(data.source_account_id),
-      target_account_id: emptyToNull(data.target_account_id),
-      status: data.status,
-      description: data.description.trim(),
+      direction: data.direction,
+      name: data.name.trim(),
+      fixed_type: data.fixed_type,
+      default_amount: toNumber(data.default_amount),
+      payment_group: data.payment_group.trim() || null,
+      due_day: data.due_day ? Number(data.due_day) : null,
+      start_month: data.fixed_type === "short_term" ? data.start_month || appState.activeMonth : emptyToNull(data.start_month),
+      total_terms: data.total_terms ? Number(data.total_terms) : null,
+      is_active: true,
+      sort_order: (appState.page?.templates || []).length,
       created_at: new Date().toISOString(),
     };
-    const ok = await persist("transactions", record);
+    const ok = await saveTemplate(record);
     if (!ok) return;
-    await loadCloudData();
+    await loadFixedMonthPage();
     form.reset();
-    form.elements.date.value = todayString();
     render();
   });
 
@@ -68,34 +73,15 @@ export function bindEvents() {
     const record = {
       id: crypto.randomUUID(),
       name: data.name.trim(),
-      kind: data.kind,
+      account_type: data.account_type,
       opening_balance: toNumber(data.opening_balance),
-      currency: "JPY",
-      sort_order: appState.data.accounts.length,
+      is_active: true,
+      sort_order: (appState.page?.accounts || []).length,
       created_at: new Date().toISOString(),
     };
-    const ok = await persist("accounts", record);
+    const ok = await saveAccount(record);
     if (!ok) return;
-    await loadCloudData();
-    form.reset();
-    render();
-  });
-
-  els.categoryForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!requireCloudReady("请先登录后再新增分类。")) return;
-    const form = event.currentTarget;
-    const data = formData(form);
-    const record = {
-      id: crypto.randomUUID(),
-      name: data.name.trim(),
-      kind: data.kind,
-      sort_order: appState.data.categories.length,
-      created_at: new Date().toISOString(),
-    };
-    const ok = await persist("categories", record);
-    if (!ok) return;
-    await loadCloudData();
+    await loadFixedMonthPage();
     form.reset();
     render();
   });
@@ -106,11 +92,6 @@ export function bindEvents() {
     await sendMagicLink(data.email.trim());
   });
 
-  els.signOutBtn.addEventListener("click", async () => {
-    await signOut();
-    render();
-  });
-
   els.passwordSignInBtn.addEventListener("click", async () => {
     await runPasswordAuth("signIn");
   });
@@ -119,33 +100,8 @@ export function bindEvents() {
     await runPasswordAuth("signUp");
   });
 
-  els.seedBtn.addEventListener("click", async () => {
-    if (!requireCloudReady("请先登录后再初始化示例。")) return;
-    const seeded = seedDefaults();
-    const ok = await upsertSeedData(seeded);
-    if (!ok) return;
-    await loadCloudData();
-    setActionMessage("示例数据已写入 Supabase。", "success");
-    render();
-  });
-
-  els.exportBtn.addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify(appState.data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `home-book-${appState.activeMonth}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  });
-
-  els.settleMonthBtn.addEventListener("click", async () => {
-    if (!requireCloudReady("请先登录后再标记净结。")) return;
-    const current = appState.data.months[appState.activeMonth] || { month_key: appState.activeMonth, status: "open" };
-    current.status = current.status === "locked" ? "open" : "locked";
-    const ok = await persistMonth(current);
-    if (!ok) return;
-    await loadCloudData();
+  els.signOutBtn.addEventListener("click", async () => {
+    await signOut();
     render();
   });
 }
@@ -161,21 +117,4 @@ function requireCloudReady(message) {
   if (isCloudReady()) return true;
   setActionMessage(message, "error");
   return false;
-}
-
-async function upsertSeedData(seeded) {
-  const withUser = (row) => ({ ...row, user_id: appState.currentUser.id });
-  const operations = [
-    ["home_accounts", seeded.accounts.map(withUser)],
-    ["home_categories", seeded.categories.map(withUser)],
-  ];
-  for (const [table, rows] of operations) {
-    if (!rows.length) continue;
-    const { error } = await appState.supabaseClient.from(table).upsert(rows);
-    if (error) {
-      setActionMessage(`初始化示例失败：${error.message}`, "error");
-      return false;
-    }
-  }
-  return true;
 }

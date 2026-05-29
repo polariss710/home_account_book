@@ -1,11 +1,9 @@
-import { DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260529-form-1";
-import { els } from "./elements.js?v=20260529-form-1";
-import { appState } from "./state.js?v=20260529-form-1";
-import { todayString } from "./utils.js?v=20260529-form-1";
+import { DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260529-fixed-1";
+import { els } from "./elements.js?v=20260529-fixed-1";
+import { appState } from "./state.js?v=20260529-fixed-1";
 
 export function setInitialDates() {
   els.monthPicker.value = appState.activeMonth;
-  els.transactionForm.elements.date.value = todayString();
 }
 
 export function switchView(viewId) {
@@ -17,31 +15,15 @@ export function switchView(viewId) {
   });
 }
 
-export function renderSyncStatus() {
-  renderAuthGate();
-  const month = appState.data.months[appState.activeMonth];
-  const lockText = month?.status === "locked" ? "已净结" : "未净结";
-  const modeText = isLoggedIn()
-    ? `已登录 · ${appState.currentUser.email}`
-    : appState.supabaseClient
-      ? "Supabase 未登录"
-      : "Supabase 未配置";
-  els.syncStatus.textContent = `${modeText} · ${lockText}`;
-  els.settleMonthBtn.textContent = month?.status === "locked" ? "取消净结" : "标记净结";
-  if (els.authState) {
-    els.authState.className = `badge ${appState.currentUser ? "paid" : "unpaid"}`;
-    els.authState.textContent = appState.currentUser ? "已登录" : "未登录";
-  }
-}
-
-function renderAuthGate() {
-  const loggedIn = isLoggedIn();
+export function renderShell() {
+  const loggedIn = Boolean(appState.supabaseClient && appState.currentUser);
   els.authGate.hidden = loggedIn;
   els.appShell.hidden = !loggedIn;
-}
-
-function isLoggedIn() {
-  return Boolean(appState.supabaseClient && appState.currentUser);
+  els.syncStatus.textContent = loggedIn ? `已登录 · ${appState.currentUser.email}` : "Supabase 未登录";
+  if (els.authState) {
+    els.authState.className = `badge ${loggedIn ? "paid" : "unpaid"}`;
+    els.authState.textContent = loggedIn ? "已登录" : "未登录";
+  }
 }
 
 export function setActionMessage(message, type = "") {

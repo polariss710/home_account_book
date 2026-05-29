@@ -1,202 +1,182 @@
-import { els } from "./elements.js?v=20260529-form-1";
-import { appState } from "./state.js?v=20260529-form-1";
-import { renderSyncStatus, setActionMessage } from "./ui.js?v=20260529-form-1";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-form-1";
-import { isCloudReady, loadCloudData, persist, removeCloud } from "./supabase.js?v=20260529-form-1";
+import { els } from "./elements.js?v=20260529-fixed-1";
+import { appState } from "./state.js?v=20260529-fixed-1";
+import { renderShell } from "./ui.js?v=20260529-fixed-1";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-1";
+import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate } from "./supabase.js?v=20260529-fixed-1";
 
 export function render() {
-  renderSyncStatus();
-  renderSelectOptions();
+  renderShell();
   renderDashboard();
-  renderTransactions();
+  renderMonthItems();
+  renderTemplates();
   renderAccounts();
-  renderCategories();
-}
-
-function renderSelectOptions() {
-  const accountOptions = `<option value="">-</option>${appState.data.accounts
-    .map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`)
-    .join("")}`;
-  const categoryOptions = `<option value="">-</option>${appState.data.categories
-    .map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`)
-    .join("")}`;
-
-  els.transactionForm.elements.source_account_id.innerHTML = accountOptions;
-  els.transactionForm.elements.target_account_id.innerHTML = accountOptions;
-  els.transactionForm.elements.category_id.innerHTML = categoryOptions;
 }
 
 function renderDashboard() {
-  const page = appState.data.monthPage;
-  const metrics = page?.metrics || {};
+  const metrics = appState.page?.metrics || {};
+  els.fixedIncomeTotal.textContent = money(metrics.income || 0);
+  els.fixedExpenseTotal.textContent = money(metrics.expense || 0);
+  els.fixedBalanceTotal.textContent = money(metrics.balance || 0);
+  els.fixedUnpaidTotal.textContent = money(metrics.unpaid_expense || 0);
+  els.fixedBalanceTotal.classList.toggle("negative", Number(metrics.balance || 0) < 0);
 
-  els.monthIncome.textContent = money(metrics.income || 0);
-  els.monthExpense.textContent = money(metrics.expense || 0);
-  els.monthUnpaid.textContent = money(metrics.unpaid || 0);
-  els.monthBalance.textContent = money(metrics.balance || 0);
-
-  els.accountBalances.innerHTML = page?.balances?.length
-    ? page.balances
+  const groups = appState.page?.expense_groups || [];
+  els.paymentGroupSummary.innerHTML = groups.length
+    ? groups
         .map(
-          (account) => `
-            <div class="balance-item">
+          (group) => `
+            <div class="settings-item">
               <div>
-                <strong>${escapeHtml(account.name)}</strong>
-                <span>${labelAccountKind(account.kind)}</span>
+                <strong>${escapeHtml(group.payment_group || "未分组")}</strong>
+                <span>已付 ${money(group.paid || 0)} / 未付 ${money(group.unpaid || 0)}</span>
               </div>
-              <strong>${money(account.balance || 0)}</strong>
+              <strong>${money(group.total || 0)}</strong>
             </div>
           `,
         )
         .join("")
-    : `<div class="empty-state">暂无账户</div>`;
-
-  els.pendingRows.innerHTML = page?.pending?.length ? page.pending.map(pendingRow).join("") : emptyRow(5);
+    : `<div class="empty-state">暂无支付渠道数据</div>`;
 }
 
-function renderTransactions() {
-  const page = appState.data.monthPage;
-  let txs = page?.transactions || [];
-  if (appState.transactionFilter !== "all") {
-    txs = txs.filter((item) => item.status === appState.transactionFilter);
-  }
-  els.transactionRows.innerHTML = txs.length ? txs.map(transactionRow).join("") : emptyRow(8);
+function renderMonthItems() {
+  const incomeItems = appState.page?.income_items || [];
+  const expenseItems = appState.page?.expense_items || [];
+  els.incomeItemRows.innerHTML = incomeItems.length ? incomeItems.map(incomeItemRow).join("") : emptyRow(6);
+  els.expenseItemRows.innerHTML = expenseItems.length ? expenseItems.map(expenseItemRow).join("") : emptyRow(8);
+  bindMonthItemControls();
+}
 
-  els.transactionRows.querySelectorAll("[data-delete]").forEach((button) => {
+function incomeItemRow(item) {
+  return `
+    <tr>
+      <td>${escapeHtml(item.name)}</td>
+      <td><input class="table-input amount-input" data-item-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" /></td>
+      <td>${statusSelect(item)}</td>
+      <td>${termLabel(item)}</td>
+      <td><input class="table-input" data-item-note="${item.id}" value="${escapeHtml(item.note || "")}" /></td>
+      <td><button class="danger-button compact-button" data-delete-item="${item.id}" type="button">删除</button></td>
+    </tr>
+  `;
+}
+
+function expenseItemRow(item) {
+  return `
+    <tr>
+      <td>${escapeHtml(item.payment_group || "未分组")}</td>
+      <td>${escapeHtml(item.name)}</td>
+      <td><input class="table-input amount-input" data-item-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" /></td>
+      <td>${escapeHtml(item.due_date || "-")}</td>
+      <td>${statusSelect(item)}</td>
+      <td>${termLabel(item)}</td>
+      <td><input class="table-input" data-item-note="${item.id}" value="${escapeHtml(item.note || "")}" /></td>
+      <td><button class="danger-button compact-button" data-delete-item="${item.id}" type="button">删除</button></td>
+    </tr>
+  `;
+}
+
+function statusSelect(item) {
+  return `
+    <select class="table-input" data-item-status="${item.id}">
+      <option value="unpaid"${item.status === "unpaid" ? " selected" : ""}>未付</option>
+      <option value="paid"${item.status === "paid" ? " selected" : ""}>已付</option>
+      <option value="settled"${item.status === "settled" ? " selected" : ""}>已结清</option>
+    </select>
+  `;
+}
+
+function termLabel(item) {
+  if (!item.term_no || !item.total_terms) return "-";
+  return `${item.term_no}/${item.total_terms}`;
+}
+
+function bindMonthItemControls() {
+  document.querySelectorAll("[data-item-amount]").forEach((input) => {
+    input.addEventListener("change", () => saveItemPatch(input.dataset.itemAmount, { amount: Number(input.value || 0) }));
+  });
+  document.querySelectorAll("[data-item-status]").forEach((select) => {
+    select.addEventListener("change", () => saveItemPatch(select.dataset.itemStatus, { status: select.value }));
+  });
+  document.querySelectorAll("[data-item-note]").forEach((input) => {
+    input.addEventListener("change", () => saveItemPatch(input.dataset.itemNote, { note: input.value.trim() }));
+  });
+  document.querySelectorAll("[data-delete-item]").forEach((button) => {
     button.addEventListener("click", async () => {
-      if (!requireCloudReady("请先登录后再删除流水。")) return;
-      const id = button.dataset.delete;
-      const ok = await removeCloud("transactions", id);
+      const ok = await deleteMonthItem(button.dataset.deleteItem);
       if (!ok) return;
-      await loadCloudData();
+      await loadFixedMonthPage();
       render();
     });
   });
+}
 
-  els.transactionRows.querySelectorAll("[data-toggle-status]").forEach((button) => {
+async function saveItemPatch(id, patch) {
+  const item = findMonthItem(id);
+  if (!item) return;
+  const ok = await saveMonthItem({ ...item, ...patch });
+  if (!ok) return;
+  await loadFixedMonthPage();
+  render();
+}
+
+function findMonthItem(id) {
+  const items = [...(appState.page?.income_items || []), ...(appState.page?.expense_items || [])];
+  return items.find((item) => item.id === id);
+}
+
+function renderTemplates() {
+  const templates = appState.page?.templates || [];
+  els.templateRows.innerHTML = templates.length
+    ? templates
+        .map(
+          (item) => `
+            <div class="settings-item">
+              <div>
+                <strong>${escapeHtml(item.name)}</strong>
+                <span>${labelDirection(item.direction)} · ${labelFixedType(item.fixed_type)} · ${escapeHtml(item.payment_group || "未分组")} · ${money(item.default_amount || 0)}</span>
+              </div>
+              <button class="danger-button" data-disable-template="${item.id}" type="button">停用</button>
+            </div>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state">暂无固定模板</div>`;
+
+  els.templateRows.querySelectorAll("[data-disable-template]").forEach((button) => {
     button.addEventListener("click", async () => {
-      if (!requireCloudReady("请先登录后再修改状态。")) return;
-      const id = button.dataset.toggleStatus;
-      const tx = appState.data.transactions.find((item) => item.id === id);
-      if (!tx) return;
-      const updated = { ...tx, status: tx.status === "paid" ? "unpaid" : "paid" };
-      const ok = await persist("transactions", updated);
+      const ok = await deactivateTemplate(button.dataset.disableTemplate);
       if (!ok) return;
-      await loadCloudData();
+      await loadFixedMonthPage();
       render();
     });
   });
 }
 
 function renderAccounts() {
-  els.accountRows.innerHTML = appState.data.accounts.length
-    ? appState.data.accounts
+  const accounts = appState.page?.accounts || [];
+  els.accountRows.innerHTML = accounts.length
+    ? accounts
         .map(
           (item) => `
-          <div class="settings-item">
-            <div>
-              <strong>${escapeHtml(item.name)}</strong>
-              <span>${labelAccountKind(item.kind)} · 期初 ${money(item.opening_balance)}</span>
+            <div class="settings-item">
+              <div>
+                <strong>${escapeHtml(item.name)}</strong>
+                <span>${labelAccountType(item.account_type)} · 期初 ${money(item.opening_balance || 0)}</span>
+              </div>
             </div>
-            <button class="danger-button" type="button" data-delete-account="${item.id}">删除</button>
-          </div>
-        `,
+          `,
         )
         .join("")
-    : `<div class="empty-state">暂无账户</div>`;
-
-  els.accountRows.querySelectorAll("[data-delete-account]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      if (!requireCloudReady("请先登录后再删除账户。")) return;
-      const id = button.dataset.deleteAccount;
-      const ok = await removeCloud("accounts", id);
-      if (!ok) return;
-      await loadCloudData();
-      render();
-    });
-  });
+    : `<div class="empty-state">暂无日元账户</div>`;
 }
 
-function renderCategories() {
-  els.categoryRows.innerHTML = appState.data.categories.length
-    ? appState.data.categories
-        .map(
-          (item) => `
-          <div class="settings-item">
-            <div>
-              <strong>${escapeHtml(item.name)}</strong>
-              <span>${labelType(item.kind)}</span>
-            </div>
-            <button class="danger-button" type="button" data-delete-category="${item.id}">删除</button>
-          </div>
-        `,
-        )
-        .join("")
-    : `<div class="empty-state">暂无分类</div>`;
-
-  els.categoryRows.querySelectorAll("[data-delete-category]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      if (!requireCloudReady("请先登录后再删除分类。")) return;
-      const id = button.dataset.deleteCategory;
-      const ok = await removeCloud("categories", id);
-      if (!ok) return;
-      await loadCloudData();
-      render();
-    });
-  });
+function labelDirection(direction) {
+  return direction === "income" ? "收入" : "支出";
 }
 
-function pendingRow(item) {
-  return `
-    <tr>
-      <td>${item.date}</td>
-      <td>${escapeHtml(item.description || "-")}</td>
-      <td>${escapeHtml(item.category_name || "-")}</td>
-      <td class="amount">${money(item.amount)}</td>
-      <td>${statusBadge(item.status)}</td>
-    </tr>
-  `;
+function labelFixedType(type) {
+  return type === "short_term" ? "短期固定" : "长期固定";
 }
 
-function transactionRow(item) {
-  return `
-    <tr>
-      <td>${item.date}</td>
-      <td>${labelType(item.type)}</td>
-      <td>${escapeHtml(item.description || "-")}</td>
-      <td>${escapeHtml(item.category_name || "-")}</td>
-      <td>${escapeHtml(item.account_label || "-")}</td>
-      <td class="amount">${money(item.amount)}</td>
-      <td><button class="plain-button" type="button" data-toggle-status="${item.id}">${statusBadge(item.status)}</button></td>
-      <td><button class="danger-button" type="button" data-delete="${item.id}">删除</button></td>
-    </tr>
-  `;
-}
-
-function statusBadge(status) {
-  return `<span class="badge ${status}">${status === "paid" ? "已付" : "未付"}</span>`;
-}
-
-function labelType(type) {
-  return {
-    income: "收入",
-    expense: "支出",
-    transfer: "转账",
-    adjustment: "调整",
-  }[type] || type;
-}
-
-function requireCloudReady(message) {
-  if (isCloudReady()) return true;
-  setActionMessage(message, "error");
-  return false;
-}
-
-function labelAccountKind(kind) {
-  return {
-    cash: "现金",
-    wallet: "钱包",
-    bank: "银行",
-    credit: "信用卡",
-  }[kind] || kind;
+function labelAccountType(type) {
+  return type === "bank" ? "银行卡" : "现金";
 }
