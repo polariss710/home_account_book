@@ -1,6 +1,6 @@
-import { APP_VERSION, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260529-fixed-3";
-import { els } from "./elements.js?v=20260529-fixed-3";
-import { appState } from "./state.js?v=20260529-fixed-3";
+import { APP_VERSION, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260529-fixed-4";
+import { els } from "./elements.js?v=20260529-fixed-4";
+import { appState } from "./state.js?v=20260529-fixed-4";
 
 export function setInitialDates() {
   els.monthPicker.value = appState.activeMonth;

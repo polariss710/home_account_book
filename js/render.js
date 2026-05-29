@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260529-fixed-3";
-import { appState } from "./state.js?v=20260529-fixed-3";
-import { renderShell } from "./ui.js?v=20260529-fixed-3";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-3";
-import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate } from "./supabase.js?v=20260529-fixed-3";
+import { els } from "./elements.js?v=20260529-fixed-4";
+import { appState } from "./state.js?v=20260529-fixed-4";
+import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-4";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-4";
+import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate } from "./supabase.js?v=20260529-fixed-4";
 
 export function render() {
   renderShell();
@@ -134,21 +134,68 @@ function renderTemplates() {
                 <strong>${escapeHtml(item.name)}</strong>
                 <span>${labelDirection(item.direction)} · ${labelFixedType(item.fixed_type)} · ${escapeHtml(item.payment_group || "未分组")} · ${money(item.default_amount || 0)}</span>
               </div>
-              <button class="danger-button" data-disable-template="${item.id}" type="button">停用</button>
+              <div class="button-row">
+                <button class="ghost-button compact-button" data-edit-template="${item.id}" type="button">编辑</button>
+                <button class="ghost-button compact-button" data-copy-template="${item.id}" type="button">复制</button>
+                <button class="danger-button compact-button" data-disable-template="${item.id}" type="button">停止生成</button>
+              </div>
             </div>
           `,
         )
         .join("")
     : `<div class="empty-state">暂无固定模板</div>`;
 
+  els.templateRows.querySelectorAll("[data-edit-template]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const template = findTemplate(button.dataset.editTemplate);
+      if (!template) return;
+      setTemplateForm(template, "edit");
+    });
+  });
+
+  els.templateRows.querySelectorAll("[data-copy-template]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const template = findTemplate(button.dataset.copyTemplate);
+      if (!template) return;
+      setTemplateForm({ ...template, name: `${template.name} 复制` }, "copy");
+    });
+  });
+
   els.templateRows.querySelectorAll("[data-disable-template]").forEach((button) => {
     button.addEventListener("click", async () => {
+      const template = findTemplate(button.dataset.disableTemplate);
+      if (!template) return;
+      const confirmed = window.confirm(`停止生成「${template.name}」？历史月份记录会保留，之后月份不再自动生成。`);
+      if (!confirmed) return;
       const ok = await deactivateTemplate(button.dataset.disableTemplate);
       if (!ok) return;
       await loadFixedMonthPage();
+      setActionMessage("模板已停止生成，历史记录已保留。", "success");
       render();
     });
   });
+}
+
+function setTemplateForm(template, mode) {
+  const form = els.templateForm;
+  appState.editingTemplateId = mode === "edit" ? template.id : null;
+  form.elements.name.value = template.name || "";
+  form.elements.direction.value = template.direction || "expense";
+  form.elements.fixed_type.value = template.fixed_type || "long_term";
+  form.elements.default_amount.value = Number(template.default_amount || 0);
+  form.elements.payment_group.value = template.payment_group || "";
+  form.elements.due_day.value = template.due_day || "";
+  form.elements.start_month.value = template.start_month || "";
+  form.elements.total_terms.value = template.total_terms || "";
+  els.templateFormTitle.textContent = mode === "edit" ? "编辑固定模板" : "复制固定模板";
+  els.templateSubmitBtn.textContent = mode === "edit" ? "保存修改" : "保存为新模板";
+  els.templateCancelBtn.hidden = false;
+  form.elements.name.focus();
+  setActionMessage(mode === "edit" ? "正在编辑固定模板。" : "已复制到表单，保存后会成为新模板。", "success");
+}
+
+function findTemplate(id) {
+  return (appState.page?.templates || []).find((item) => item.id === id) || null;
 }
 
 function renderAccounts() {

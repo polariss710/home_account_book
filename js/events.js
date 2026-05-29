@@ -1,7 +1,7 @@
-import { els } from "./elements.js?v=20260529-fixed-3";
-import { appState } from "./state.js?v=20260529-fixed-3";
-import { render } from "./render.js?v=20260529-fixed-3";
-import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-3";
+import { els } from "./elements.js?v=20260529-fixed-4";
+import { appState } from "./state.js?v=20260529-fixed-4";
+import { render } from "./render.js?v=20260529-fixed-4";
+import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-4";
 import {
   generateFixedMonth,
   isCloudReady,
@@ -11,8 +11,8 @@ import {
   saveTemplate,
   sendMagicLink,
   signOut,
-} from "./supabase.js?v=20260529-fixed-3";
-import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-3";
+} from "./supabase.js?v=20260529-fixed-4";
+import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-4";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
@@ -55,8 +55,9 @@ export function bindEvents() {
     if (!requireCloudReady("请先登录后再新增模板。")) return;
     const form = event.currentTarget;
     const data = formData(form);
+    const existingTemplate = findTemplate(appState.editingTemplateId);
     const record = {
-      id: crypto.randomUUID(),
+      id: appState.editingTemplateId || crypto.randomUUID(),
       direction: data.direction,
       name: data.name.trim(),
       fixed_type: data.fixed_type,
@@ -66,14 +67,18 @@ export function bindEvents() {
       start_month: data.fixed_type === "short_term" ? data.start_month || appState.activeMonth : emptyToNull(data.start_month),
       total_terms: data.total_terms ? Number(data.total_terms) : null,
       is_active: true,
-      sort_order: (appState.page?.templates || []).length,
-      created_at: new Date().toISOString(),
+      sort_order: existingTemplate?.sort_order ?? (appState.page?.templates || []).length,
+      created_at: existingTemplate?.created_at || new Date().toISOString(),
     };
     const ok = await saveTemplate(record);
     if (!ok) return;
     await loadFixedMonthPage();
-    form.reset();
+    resetTemplateForm();
     render();
+  });
+
+  els.templateCancelBtn.addEventListener("click", () => {
+    resetTemplateForm();
   });
 
   els.accountForm.addEventListener("submit", async (event) => {
@@ -128,4 +133,17 @@ function requireCloudReady(message) {
   if (isCloudReady()) return true;
   setActionMessage(message, "error");
   return false;
+}
+
+function findTemplate(id) {
+  if (!id) return null;
+  return (appState.page?.templates || []).find((item) => item.id === id) || null;
+}
+
+export function resetTemplateForm() {
+  appState.editingTemplateId = null;
+  els.templateForm.reset();
+  els.templateFormTitle.textContent = "新增固定模板";
+  els.templateSubmitBtn.textContent = "保存模板";
+  els.templateCancelBtn.hidden = true;
 }
