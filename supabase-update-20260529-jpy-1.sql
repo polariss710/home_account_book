@@ -89,11 +89,28 @@ movements as (
 ),
 account_balances as (
   select
-    a.*,
+    a.id,
+    a.user_id,
+    a.currency,
+    a.name,
+    a.account_type,
+    a.opening_balance,
+    a.is_active,
+    a.sort_order,
+    a.created_at,
     coalesce(sum(m.amount), 0) as current_balance
   from accounts a
   left join movements m on m.account_id = a.id
-  group by a.id
+  group by
+    a.id,
+    a.user_id,
+    a.currency,
+    a.name,
+    a.account_type,
+    a.opening_balance,
+    a.is_active,
+    a.sort_order,
+    a.created_at
 ),
 month_transactions as (
   select
