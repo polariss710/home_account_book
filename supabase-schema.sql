@@ -1,12 +1,14 @@
 create extension if not exists "pgcrypto";
 
 drop function if exists home_get_month_page(text);
+drop function if exists home_get_jpy_account_page(text);
 drop function if exists home_get_fixed_month_page(text, text);
 drop function if exists home_generate_fixed_month(text, text);
 
 drop table if exists home_transactions cascade;
 drop table if exists home_categories cascade;
 drop table if exists home_months cascade;
+drop table if exists home_jpy_transactions cascade;
 drop table if exists home_fixed_month_items cascade;
 drop table if exists home_fixed_templates cascade;
 drop table if exists home_accounts cascade;
@@ -61,6 +63,24 @@ create table home_fixed_month_items (
   created_at timestamptz not null default now()
 );
 
+create table home_jpy_transactions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  currency text not null default 'JPY' check (currency = 'JPY'),
+  transaction_type text not null check (transaction_type in ('income', 'expense', 'transfer', 'fx_in', 'fx_out', 'fixed_in', 'fixed_out')),
+  account_id uuid not null references home_accounts(id) on delete cascade,
+  transfer_account_id uuid references home_accounts(id) on delete cascade,
+  transacted_at date not null,
+  amount numeric(14, 2) not null check (amount > 0),
+  description text not null default '',
+  note text not null default '',
+  created_at timestamptz not null default now(),
+  check (
+    (transaction_type = 'transfer' and transfer_account_id is not null and transfer_account_id <> account_id)
+    or (transaction_type <> 'transfer' and transfer_account_id is null)
+  )
+);
+
 create unique index home_fixed_month_items_template_month_unique
   on home_fixed_month_items(user_id, month_key, template_id)
   where template_id is not null;
@@ -68,15 +88,18 @@ create unique index home_fixed_month_items_template_month_unique
 create index home_accounts_user_currency_idx on home_accounts(user_id, currency);
 create index home_fixed_templates_user_currency_idx on home_fixed_templates(user_id, currency);
 create index home_fixed_month_items_user_month_idx on home_fixed_month_items(user_id, month_key, currency);
+create index home_jpy_transactions_user_date_idx on home_jpy_transactions(user_id, transacted_at);
 
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on home_accounts to authenticated;
 grant select, insert, update, delete on home_fixed_templates to authenticated;
 grant select, insert, update, delete on home_fixed_month_items to authenticated;
+grant select, insert, update, delete on home_jpy_transactions to authenticated;
 
 alter table home_accounts enable row level security;
 alter table home_fixed_templates enable row level security;
 alter table home_fixed_month_items enable row level security;
+alter table home_jpy_transactions enable row level security;
 
 create policy home_accounts_user_all
   on home_accounts
@@ -94,6 +117,13 @@ create policy home_fixed_templates_user_all
 
 create policy home_fixed_month_items_user_all
   on home_fixed_month_items
+  for all
+  to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+create policy home_jpy_transactions_user_all
+  on home_jpy_transactions
   for all
   to authenticated
   using (user_id = auth.uid())
@@ -286,5 +316,87 @@ select jsonb_build_object(
 );
 $$;
 
+create or replace function home_get_jpy_account_page(p_month_key text)
+returns jsonb
+language sql
+stable
+security invoker
+as $$
+with month_range as (
+  select
+    to_date(p_month_key || '-01', 'YYYY-MM-DD') as month_start,
+    (to_date(p_month_key || '-01', 'YYYY-MM-DD') + interval '1 month')::date as next_month
+),
+accounts as (
+  select *
+  from home_accounts
+  where user_id = auth.uid()
+    and currency = 'JPY'
+    and account_type in ('cash', 'bank')
+    and is_active
+),
+movements as (
+  select
+    a.id as account_id,
+    a.opening_balance as amount
+  from accounts a
+  union all
+  select
+    t.account_id,
+    case
+      when t.transaction_type in ('income', 'fx_in', 'fixed_in') then t.amount
+      when t.transaction_type in ('expense', 'fx_out', 'fixed_out', 'transfer') then -t.amount
+      else 0
+    end as amount
+  from home_jpy_transactions t, month_range r
+  where t.user_id = auth.uid()
+    and t.currency = 'JPY'
+    and t.transacted_at < r.next_month
+  union all
+  select
+    t.transfer_account_id as account_id,
+    t.amount
+  from home_jpy_transactions t, month_range r
+  where t.user_id = auth.uid()
+    and t.currency = 'JPY'
+    and t.transaction_type = 'transfer'
+    and t.transfer_account_id is not null
+    and t.transacted_at < r.next_month
+),
+account_balances as (
+  select
+    a.*,
+    coalesce(sum(m.amount), 0) as current_balance
+  from accounts a
+  left join movements m on m.account_id = a.id
+  group by a.id
+),
+month_transactions as (
+  select
+    t.*,
+    a.name as account_name,
+    ta.name as transfer_account_name
+  from home_jpy_transactions t
+  join home_accounts a on a.id = t.account_id
+  left join home_accounts ta on ta.id = t.transfer_account_id
+  cross join month_range r
+  where t.user_id = auth.uid()
+    and t.currency = 'JPY'
+    and t.transacted_at >= r.month_start
+    and t.transacted_at < r.next_month
+)
+select jsonb_build_object(
+  'accounts', coalesce((
+    select jsonb_agg(to_jsonb(account_balances) order by sort_order, created_at, name)
+    from account_balances
+  ), '[]'::jsonb),
+  'transactions', coalesce((
+    select jsonb_agg(to_jsonb(month_transactions) order by transacted_at desc, created_at desc)
+    from month_transactions
+  ), '[]'::jsonb)
+);
+$$;
+
 grant execute on function home_generate_fixed_month(text, text) to authenticated;
 grant execute on function home_get_fixed_month_page(text, text) to authenticated;
+grant execute on function home_get_jpy_account_page(text) to authenticated;

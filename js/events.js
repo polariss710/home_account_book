@@ -1,10 +1,11 @@
-import { els } from "./elements.js?v=20260529-fixed-12";
-import { appState, findFixedTemplate, getFixedTemplateTermStatus } from "./state.js?v=20260529-fixed-12";
-import { render } from "./render.js?v=20260529-fixed-12";
-import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-12";
+import { els } from "./elements.js?v=20260529-jpy-1";
+import { appState, findFixedTemplate, getFixedTemplateTermStatus } from "./state.js?v=20260529-jpy-1";
+import { render } from "./render.js?v=20260529-jpy-1";
+import { setActionMessage, switchView } from "./ui.js?v=20260529-jpy-1";
 import {
   generateFixedMonth,
   isCloudReady,
+  loadAppData,
   loadFixedMonthPage,
   passwordAuth,
   saveAccount,
@@ -12,8 +13,8 @@ import {
   updateTemplate,
   sendMagicLink,
   signOut,
-} from "./supabase.js?v=20260529-fixed-12";
-import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-12";
+} from "./supabase.js?v=20260529-jpy-1";
+import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-jpy-1";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
@@ -22,12 +23,12 @@ export function bindEvents() {
 
   els.monthPicker.addEventListener("change", async () => {
     appState.activeMonth = els.monthPicker.value;
-    await loadFixedMonthPage();
+    await loadAppData();
     render();
   });
 
   els.refreshBtn.addEventListener("click", async () => {
-    await loadFixedMonthPage();
+    await loadAppData();
     render();
   });
 
@@ -94,7 +95,7 @@ export function bindEvents() {
     };
     const ok = await saveAccount(record);
     if (!ok) return;
-    await loadFixedMonthPage();
+    await loadAppData();
     form.reset();
     render();
   });

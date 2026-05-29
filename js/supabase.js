@@ -1,6 +1,6 @@
-import { appState } from "./state.js?v=20260529-fixed-12";
-import { getRedirectUrl } from "./utils.js?v=20260529-fixed-12";
-import { getConfig, setActionMessage } from "./ui.js?v=20260529-fixed-12";
+import { appState } from "./state.js?v=20260529-jpy-1";
+import { getRedirectUrl } from "./utils.js?v=20260529-jpy-1";
+import { getConfig, setActionMessage } from "./ui.js?v=20260529-jpy-1";
 
 let onCloudChange = () => {};
 let pageLoadPromise = null;
@@ -87,7 +87,7 @@ export async function passwordAuth(mode, email, password) {
 export function queuePageLoad() {
   if (!isCloudReady()) return Promise.resolve();
   if (!pageLoadPromise) {
-    pageLoadPromise = loadFixedMonthPage()
+    pageLoadPromise = loadAppData()
       .catch((error) => {
         setActionMessage(`数据读取失败：${error.message}`, "error");
       })
@@ -97,6 +97,10 @@ export function queuePageLoad() {
       });
   }
   return pageLoadPromise;
+}
+
+export async function loadAppData() {
+  await Promise.all([loadFixedMonthPage(), loadJpyAccountPage()]);
 }
 
 export async function loadFixedMonthPage() {
@@ -111,6 +115,19 @@ export async function loadFixedMonthPage() {
     return;
   }
   appState.page = data;
+}
+
+export async function loadJpyAccountPage() {
+  if (!isCloudReady()) return;
+  const { data, error } = await appState.supabaseClient.rpc("home_get_jpy_account_page", {
+    p_month_key: appState.activeMonth,
+  });
+  if (error) {
+    setActionMessage(`日元账户读取失败：${error.message}`, "error");
+    appState.jpyPage = null;
+    return;
+  }
+  appState.jpyPage = data;
 }
 
 export async function generateFixedMonth() {
@@ -145,6 +162,22 @@ export async function saveMonthItem(record) {
   return upsert("home_fixed_month_items", withUser(record));
 }
 
+export async function saveJpyTransaction(record) {
+  const allowedRecord = {
+    id: record.id,
+    transaction_type: record.transaction_type,
+    account_id: record.account_id,
+    transfer_account_id: record.transfer_account_id,
+    currency: "JPY",
+    transacted_at: record.transacted_at,
+    amount: record.amount,
+    description: record.description,
+    note: record.note,
+    created_at: record.created_at,
+  };
+  return upsert("home_jpy_transactions", withUser(allowedRecord));
+}
+
 export async function deactivateTemplate(id) {
   return updateById("home_fixed_templates", id, { is_active: false });
 }
@@ -155,6 +188,10 @@ export async function reactivateTemplate(id) {
 
 export async function deleteMonthItem(id) {
   return deleteById("home_fixed_month_items", id);
+}
+
+export async function deleteJpyTransaction(id) {
+  return deleteById("home_jpy_transactions", id);
 }
 
 async function upsert(table, record) {

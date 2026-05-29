@@ -214,6 +214,13 @@
         <section id="accounts" class="view">
           <section class="panel">
             <div class="panel-heading">
+              <h2>日元余额</h2>
+            </div>
+            <div id="jpyBalanceRows" class="settings-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
               <h2>日元账户</h2>
             </div>
             <form id="accountForm" class="inline-form">
@@ -226,6 +233,64 @@
               <button class="primary-button" type="submit">添加</button>
             </form>
             <div id="accountRows" class="settings-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>日元零散流水</h2>
+            </div>
+            <form id="jpyTransactionForm" class="form-grid">
+              <label>
+                日期
+                <input name="transacted_at" type="date" required />
+              </label>
+              <label>
+                类型
+                <select name="transaction_type" required>
+                  <option value="expense">零散支出</option>
+                  <option value="income">零散收入</option>
+                  <option value="transfer">账户间转账</option>
+                </select>
+              </label>
+              <label>
+                账户
+                <select id="jpyAccountSelect" name="account_id" required></select>
+              </label>
+              <label>
+                转入账户
+                <select id="jpyTransferAccountSelect" name="transfer_account_id"></select>
+              </label>
+              <label>
+                金额
+                <input name="amount" type="number" inputmode="decimal" step="1" required />
+              </label>
+              <label>
+                内容
+                <input name="description" type="text" placeholder="购物 / 临时收入 / 转账" required />
+              </label>
+              <label>
+                备注
+                <input name="note" type="text" />
+              </label>
+              <button class="primary-button form-submit" type="submit">保存流水</button>
+            </form>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>类型</th>
+                    <th>账户</th>
+                    <th>转入账户</th>
+                    <th>金额</th>
+                    <th>内容</th>
+                    <th>备注</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="jpyTransactionRows"></tbody>
+              </table>
+            </div>
           </section>
         </section>
 
@@ -245,6 +310,6 @@
       </main>
     </div>
 
-    <script type="module" src="app.js?v=20260529-fixed-12"></script>
+    <script type="module" src="app.js?v=20260529-jpy-1"></script>
   </body>
 </html>

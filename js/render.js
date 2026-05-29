@@ -1,8 +1,9 @@
-import { els } from "./elements.js?v=20260529-fixed-12";
-import { appState, findFixedTemplate, getFixedTemplateTermStatus } from "./state.js?v=20260529-fixed-12";
-import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-12";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-12";
-import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-fixed-12";
+import { els } from "./elements.js?v=20260529-jpy-1";
+import { renderJpyPage } from "./jpy.js?v=20260529-jpy-1";
+import { appState, findFixedTemplate, getFixedTemplateTermStatus } from "./state.js?v=20260529-jpy-1";
+import { renderShell, setActionMessage } from "./ui.js?v=20260529-jpy-1";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-jpy-1";
+import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-jpy-1";
 
 export function render() {
   renderShell();
@@ -10,6 +11,7 @@ export function render() {
   renderMonthItems();
   renderTemplates();
   renderAccounts();
+  renderJpyPage();
 }
 
 function renderDashboard() {
@@ -229,7 +231,7 @@ function setTemplateForm(template, mode) {
 }
 
 function renderAccounts() {
-  const accounts = appState.page?.accounts || [];
+  const accounts = appState.jpyPage?.accounts || appState.page?.accounts || [];
   els.accountRows.innerHTML = accounts.length
     ? accounts
         .map(

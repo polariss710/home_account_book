@@ -1,12 +1,14 @@
-import { bindElements } from "./js/elements.js?v=20260529-fixed-12";
-import { bindEvents } from "./js/events.js?v=20260529-fixed-12";
-import { render } from "./js/render.js?v=20260529-fixed-12";
-import { initSupabaseClient, loadFixedMonthPage, refreshSession, setCloudChangeHandler } from "./js/supabase.js?v=20260529-fixed-12";
-import { processAuthHash, setActionMessage, setInitialDates } from "./js/ui.js?v=20260529-fixed-12";
+import { bindElements } from "./js/elements.js?v=20260529-jpy-1";
+import { bindEvents } from "./js/events.js?v=20260529-jpy-1";
+import { bindJpyEvents } from "./js/jpy.js?v=20260529-jpy-1";
+import { render } from "./js/render.js?v=20260529-jpy-1";
+import { initSupabaseClient, loadAppData, refreshSession, setCloudChangeHandler } from "./js/supabase.js?v=20260529-jpy-1";
+import { processAuthHash, setActionMessage, setInitialDates } from "./js/ui.js?v=20260529-jpy-1";
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindElements();
   bindEvents();
+  bindJpyEvents();
   setCloudChangeHandler(render);
   setInitialDates();
   render();
@@ -14,7 +16,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     await initSupabaseClient();
     await refreshSession();
     processAuthHash();
-    await loadFixedMonthPage();
+    await loadAppData();
   } catch (error) {
     setActionMessage(`启动失败：${error.message}`, "error");
   }
