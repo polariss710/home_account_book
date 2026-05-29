@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260529-fixed-10";
-import { appState, findFixedTemplate } from "./state.js?v=20260529-fixed-10";
-import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-10";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-10";
-import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-fixed-10";
+import { els } from "./elements.js?v=20260529-fixed-11";
+import { appState, findFixedTemplate } from "./state.js?v=20260529-fixed-11";
+import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-11";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-11";
+import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-fixed-11";
 
 export function render() {
   renderShell();
@@ -186,6 +186,7 @@ function renderTemplates() {
 
 function templateRow(item, status) {
   const statusLabel = status === "stopped" ? "停止生成" : "使用中";
+  const periodLabel = templatePeriodLabel(item);
   const statusAction =
     status === "stopped"
       ? `<button class="primary-button compact-button" data-reactivate-template="${item.id}" type="button">恢复生成</button>`
@@ -194,7 +195,7 @@ function templateRow(item, status) {
     <div class="settings-item">
       <div>
         <strong>${escapeHtml(item.name)}</strong>
-        <span>${statusLabel} · ${labelDirection(item.direction)} · ${labelFixedType(item.fixed_type)} · ${escapeHtml(item.payment_group || "未分组")} · ${money(item.default_amount || 0)}</span>
+        <span>${statusLabel} · ${labelDirection(item.direction)} · ${labelFixedType(item.fixed_type)} · ${periodLabel} · ${escapeHtml(item.payment_group || "未分组")} · ${money(item.default_amount || 0)}</span>
       </div>
       <div class="button-row">
         <button class="ghost-button compact-button" data-edit-template="${item.id}" type="button">编辑</button>
@@ -203,6 +204,20 @@ function templateRow(item, status) {
       </div>
     </div>
   `;
+}
+
+function templatePeriodLabel(item) {
+  if (item.fixed_type !== "short_term" || !item.start_month || !item.total_terms) return "持续生成";
+  const termNo = monthDistance(item.start_month, appState.activeMonth) + 1;
+  if (termNo < 1) return `未开始 · ${item.start_month} 起`;
+  if (termNo > Number(item.total_terms)) return `已到期 · ${termNo}/${item.total_terms}`;
+  return `本期 ${termNo}/${item.total_terms}`;
+}
+
+function monthDistance(fromMonth, toMonth) {
+  const [fromYear, fromMonthNumber] = fromMonth.split("-").map(Number);
+  const [toYear, toMonthNumber] = toMonth.split("-").map(Number);
+  return (toYear - fromYear) * 12 + (toMonthNumber - fromMonthNumber);
 }
 
 function setTemplateForm(template, mode) {
