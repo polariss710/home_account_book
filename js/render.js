@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260529-fixed-11";
-import { appState, findFixedTemplate } from "./state.js?v=20260529-fixed-11";
-import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-11";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-11";
-import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-fixed-11";
+import { els } from "./elements.js?v=20260529-fixed-12";
+import { appState, findFixedTemplate, getFixedTemplateTermStatus } from "./state.js?v=20260529-fixed-12";
+import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-12";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-12";
+import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-fixed-12";
 
 export function render() {
   renderShell();
@@ -207,17 +207,7 @@ function templateRow(item, status) {
 }
 
 function templatePeriodLabel(item) {
-  if (item.fixed_type !== "short_term" || !item.start_month || !item.total_terms) return "持续生成";
-  const termNo = monthDistance(item.start_month, appState.activeMonth) + 1;
-  if (termNo < 1) return `未开始 · ${item.start_month} 起`;
-  if (termNo > Number(item.total_terms)) return `已到期 · ${termNo}/${item.total_terms}`;
-  return `本期 ${termNo}/${item.total_terms}`;
-}
-
-function monthDistance(fromMonth, toMonth) {
-  const [fromYear, fromMonthNumber] = fromMonth.split("-").map(Number);
-  const [toYear, toMonthNumber] = toMonth.split("-").map(Number);
-  return (toYear - fromYear) * 12 + (toMonthNumber - fromMonthNumber);
+  return getFixedTemplateTermStatus(item, appState.activeMonth).label;
 }
 
 function setTemplateForm(template, mode) {

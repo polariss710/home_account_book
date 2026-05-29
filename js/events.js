@@ -1,7 +1,7 @@
-import { els } from "./elements.js?v=20260529-fixed-11";
-import { appState, findFixedTemplate } from "./state.js?v=20260529-fixed-11";
-import { render } from "./render.js?v=20260529-fixed-11";
-import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-11";
+import { els } from "./elements.js?v=20260529-fixed-12";
+import { appState, findFixedTemplate, getFixedTemplateTermStatus } from "./state.js?v=20260529-fixed-12";
+import { render } from "./render.js?v=20260529-fixed-12";
+import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-12";
 import {
   generateFixedMonth,
   isCloudReady,
@@ -12,8 +12,8 @@ import {
   updateTemplate,
   sendMagicLink,
   signOut,
-} from "./supabase.js?v=20260529-fixed-11";
-import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-11";
+} from "./supabase.js?v=20260529-fixed-12";
+import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-12";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
@@ -38,15 +38,7 @@ export function bindEvents() {
     await loadFixedMonthPage();
     const insertedCount = Number(result.inserted_count || 0);
     const eligibleCount = Number(result.eligible_count || 0);
-    if (insertedCount > 0) {
-      setActionMessage(`本月固定项已生成 ${insertedCount} 条。`, "success");
-    } else if (eligibleCount === 0) {
-      setActionMessage("当前没有可生成的固定模板，请先新增模板。", "error");
-    } else if (result.all_generated) {
-      setActionMessage("当前还在使用的固定项已经生成完毕，无需重复生成。", "success");
-    } else {
-      setActionMessage("没有新增固定项，请刷新后重试；若仍出现，请检查恢复生成的模板状态。", "error");
-    }
+    setActionMessage(generationMessage(result), insertedCount > 0 || result.all_generated ? "success" : "error");
     render();
   });
 
@@ -138,6 +130,23 @@ function requireCloudReady(message) {
   if (isCloudReady()) return true;
   setActionMessage(message, "error");
   return false;
+}
+
+function generationMessage(result) {
+  const insertedCount = Number(result.inserted_count || 0);
+  const eligibleCount = Number(result.eligible_count || 0);
+  const expiredCount = (appState.page?.templates || []).filter(
+    (template) => getFixedTemplateTermStatus(template, appState.activeMonth).kind === "expired",
+  ).length;
+  const expiredHint = expiredCount > 0 ? ` 另有 ${expiredCount} 个短期模板已到期，不会生成本月固定项，可检查后停止生成。` : "";
+  if (insertedCount > 0) return `本月固定项已生成 ${insertedCount} 条。${expiredHint}`;
+  if (eligibleCount === 0) {
+    return expiredCount > 0
+      ? `当前没有可生成的固定模板。有 ${expiredCount} 个短期模板已到期，不会生成本月固定项，可检查后停止生成。`
+      : "当前没有可生成的固定模板，请先新增模板。";
+  }
+  if (result.all_generated) return `当前还在使用的固定项已经生成完毕，无需重复生成。${expiredHint}`;
+  return `没有新增固定项，请刷新后重试；若仍出现，请检查恢复生成的模板状态。${expiredHint}`;
 }
 
 function resetTemplateForm() {

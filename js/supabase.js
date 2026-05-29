@@ -1,6 +1,6 @@
-import { appState } from "./state.js?v=20260529-fixed-11";
-import { getRedirectUrl } from "./utils.js?v=20260529-fixed-11";
-import { getConfig, setActionMessage } from "./ui.js?v=20260529-fixed-11";
+import { appState } from "./state.js?v=20260529-fixed-12";
+import { getRedirectUrl } from "./utils.js?v=20260529-fixed-12";
+import { getConfig, setActionMessage } from "./ui.js?v=20260529-fixed-12";
 
 let onCloudChange = () => {};
 let pageLoadPromise = null;
