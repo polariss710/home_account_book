@@ -1,7 +1,7 @@
-import { els } from "./elements.js?v=20260529-fixed-7";
-import { appState } from "./state.js?v=20260529-fixed-7";
-import { render } from "./render.js?v=20260529-fixed-7";
-import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-7";
+import { els } from "./elements.js?v=20260529-fixed-8";
+import { appState, findFixedTemplate } from "./state.js?v=20260529-fixed-8";
+import { render } from "./render.js?v=20260529-fixed-8";
+import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-8";
 import {
   generateFixedMonth,
   isCloudReady,
@@ -11,8 +11,8 @@ import {
   saveTemplate,
   sendMagicLink,
   signOut,
-} from "./supabase.js?v=20260529-fixed-7";
-import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-7";
+} from "./supabase.js?v=20260529-fixed-8";
+import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-8";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
@@ -55,7 +55,7 @@ export function bindEvents() {
     if (!requireCloudReady("请先登录后再新增模板。")) return;
     const form = event.currentTarget;
     const data = formData(form);
-    const existingTemplate = findTemplate(appState.editingTemplateId);
+    const existingTemplate = findFixedTemplate(appState.editingTemplateId);
     const record = {
       id: appState.editingTemplateId || crypto.randomUUID(),
       direction: data.direction,
@@ -135,12 +135,7 @@ function requireCloudReady(message) {
   return false;
 }
 
-function findTemplate(id) {
-  if (!id) return null;
-  return (appState.page?.templates || []).find((item) => item.id === id) || null;
-}
-
-export function resetTemplateForm() {
+function resetTemplateForm() {
   appState.editingTemplateId = null;
   els.templateForm.reset();
   els.templateFormTitle.textContent = "新增固定模板";

@@ -1,4 +1,4 @@
-import { monthKey } from "./utils.js?v=20260529-fixed-7";
+import { monthKey } from "./utils.js?v=20260529-fixed-8";
 
 export const appState = {
   activeMonth: monthKey(new Date()),
@@ -8,3 +8,9 @@ export const appState = {
   supabaseClient: null,
   currentUser: null,
 };
+
+export function findFixedTemplate(id) {
+  if (!id) return null;
+  const templates = [...(appState.page?.templates || []), ...(appState.page?.stopped_templates || [])];
+  return templates.find((item) => item.id === id) || null;
+}

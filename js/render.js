@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260529-fixed-7";
-import { appState } from "./state.js?v=20260529-fixed-7";
-import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-7";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-7";
-import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-fixed-7";
+import { els } from "./elements.js?v=20260529-fixed-8";
+import { appState, findFixedTemplate } from "./state.js?v=20260529-fixed-8";
+import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-8";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-8";
+import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-fixed-8";
 
 export function render() {
   renderShell();
@@ -143,7 +143,7 @@ function renderTemplates() {
 
   document.querySelectorAll("[data-edit-template]").forEach((button) => {
     button.addEventListener("click", () => {
-      const template = findTemplate(button.dataset.editTemplate);
+      const template = findFixedTemplate(button.dataset.editTemplate);
       if (!template) return;
       setTemplateForm(template, "edit");
     });
@@ -151,7 +151,7 @@ function renderTemplates() {
 
   document.querySelectorAll("[data-copy-template]").forEach((button) => {
     button.addEventListener("click", () => {
-      const template = findTemplate(button.dataset.copyTemplate);
+      const template = findFixedTemplate(button.dataset.copyTemplate);
       if (!template) return;
       setTemplateForm({ ...template, name: `${template.name} 复制` }, "copy");
     });
@@ -159,7 +159,7 @@ function renderTemplates() {
 
   document.querySelectorAll("[data-disable-template]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const template = findTemplate(button.dataset.disableTemplate);
+      const template = findFixedTemplate(button.dataset.disableTemplate);
       if (!template) return;
       const confirmed = window.confirm(`停止生成「${template.name}」？历史月份记录会保留，之后月份不再自动生成。`);
       if (!confirmed) return;
@@ -173,7 +173,7 @@ function renderTemplates() {
 
   document.querySelectorAll("[data-reactivate-template]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const template = findTemplate(button.dataset.reactivateTemplate);
+      const template = findFixedTemplate(button.dataset.reactivateTemplate);
       if (!template) return;
       const ok = await reactivateTemplate(template.id);
       if (!ok) return;
@@ -221,11 +221,6 @@ function setTemplateForm(template, mode) {
   els.templateCancelBtn.hidden = false;
   form.elements.name.focus();
   setActionMessage(mode === "edit" ? "正在编辑固定模板。" : "已复制到表单，保存后会成为新模板。", "success");
-}
-
-function findTemplate(id) {
-  const templates = [...(appState.page?.templates || []), ...(appState.page?.stopped_templates || [])];
-  return templates.find((item) => item.id === id) || null;
 }
 
 function renderAccounts() {
