@@ -1,11 +1,12 @@
-import { els } from "./elements.js?v=20260530-jpy-2";
-import { appState } from "./state.js?v=20260530-jpy-2";
-import { loadAppData, deleteJpyTransaction, isCloudReady, saveJpyTransaction } from "./supabase.js?v=20260530-jpy-2";
-import { setActionMessage } from "./ui.js?v=20260530-jpy-2";
-import { emptyRow, escapeHtml, formData, money, toNumber } from "./utils.js?v=20260530-jpy-2";
+import { els } from "./elements.js?v=20260530-jpy-3";
+import { appState } from "./state.js?v=20260530-jpy-3";
+import { loadAppData, deleteJpyTransaction, isCloudReady, saveJpyTransaction } from "./supabase.js?v=20260530-jpy-3";
+import { setActionMessage } from "./ui.js?v=20260530-jpy-3";
+import { emptyRow, escapeHtml, formData, money, toNumber } from "./utils.js?v=20260530-jpy-3";
 
 export function bindJpyEvents() {
   els.jpyTransactionForm.elements.transaction_type.addEventListener("change", updateTransferAccountControl);
+  els.jpyTransactionCancelBtn.addEventListener("click", resetJpyTransactionForm);
   els.jpyTransactionForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!isCloudReady()) {
@@ -20,8 +21,9 @@ export function bindJpyEvents() {
       setActionMessage("账户间转账需要选择不同的转入账户。", "error");
       return;
     }
+    const existingTransaction = findJpyTransaction(appState.editingJpyTransactionId);
     const record = {
-      id: crypto.randomUUID(),
+      id: appState.editingJpyTransactionId || crypto.randomUUID(),
       transaction_type: transactionType,
       account_id: data.account_id,
       transfer_account_id: transferAccountId,
@@ -29,13 +31,12 @@ export function bindJpyEvents() {
       amount: toNumber(data.amount),
       description: data.description.trim(),
       note: data.note.trim(),
-      created_at: new Date().toISOString(),
+      created_at: existingTransaction?.created_at || new Date().toISOString(),
     };
     const ok = await saveJpyTransaction(record);
     if (!ok) return;
     await loadAppData();
-    form.reset();
-    setJpyTransactionDate();
+    resetJpyTransactionForm();
     setActionMessage("日元流水已保存。", "success");
     renderJpyPage();
   });
@@ -99,7 +100,13 @@ function transactionRow(item) {
       <td><input class="table-input amount-input" data-jpy-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" /></td>
       <td><input class="table-input" data-jpy-description="${item.id}" value="${escapeHtml(item.description || "")}" /></td>
       <td><input class="table-input" data-jpy-note="${item.id}" value="${escapeHtml(item.note || "")}" /></td>
-      <td><button class="danger-button compact-button" data-delete-jpy="${item.id}" type="button">删除</button></td>
+      <td>
+        <div class="button-row">
+          <button class="ghost-button compact-button" data-edit-jpy="${item.id}" type="button">编辑</button>
+          <button class="ghost-button compact-button" data-copy-jpy="${item.id}" type="button">复制</button>
+          <button class="danger-button compact-button" data-delete-jpy="${item.id}" type="button">删除</button>
+        </div>
+      </td>
     </tr>
   `;
 }
@@ -122,6 +129,20 @@ function bindTransactionControls() {
       renderJpyPage();
     });
   });
+  document.querySelectorAll("[data-edit-jpy]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const transaction = findJpyTransaction(button.dataset.editJpy);
+      if (!transaction) return;
+      setJpyTransactionForm(transaction, "edit");
+    });
+  });
+  document.querySelectorAll("[data-copy-jpy]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const transaction = findJpyTransaction(button.dataset.copyJpy);
+      if (!transaction) return;
+      setJpyTransactionForm({ ...transaction, description: `${transaction.description} 复制` }, "copy");
+    });
+  });
 }
 
 async function saveTransactionPatch(id, patch) {
@@ -131,6 +152,38 @@ async function saveTransactionPatch(id, patch) {
   if (!ok) return;
   await loadAppData();
   renderJpyPage();
+}
+
+function setJpyTransactionForm(transaction, mode) {
+  const form = els.jpyTransactionForm;
+  appState.editingJpyTransactionId = mode === "edit" ? transaction.id : null;
+  form.elements.transacted_at.value = transaction.transacted_at || `${appState.activeMonth}-01`;
+  form.elements.transaction_type.value = transaction.transaction_type || "expense";
+  form.elements.account_id.value = transaction.account_id || "";
+  form.elements.transfer_account_id.value = transaction.transfer_account_id || "";
+  form.elements.amount.value = transaction.amount ?? "";
+  form.elements.description.value = transaction.description || "";
+  form.elements.note.value = transaction.note || "";
+  els.jpyTransactionFormTitle.textContent = mode === "edit" ? "编辑日元零散流水" : "复制日元零散流水";
+  els.jpyTransactionSubmitBtn.textContent = mode === "edit" ? "保存修改" : "保存为新流水";
+  els.jpyTransactionCancelBtn.hidden = false;
+  updateTransferAccountControl();
+  form.elements.amount.focus();
+}
+
+function resetJpyTransactionForm() {
+  appState.editingJpyTransactionId = null;
+  els.jpyTransactionForm.reset();
+  els.jpyTransactionFormTitle.textContent = "日元零散流水登录";
+  els.jpyTransactionSubmitBtn.textContent = "保存流水";
+  els.jpyTransactionCancelBtn.hidden = true;
+  setJpyTransactionDate();
+  updateTransferAccountControl();
+}
+
+function findJpyTransaction(id) {
+  if (!id) return null;
+  return (appState.jpyPage?.transactions || []).find((item) => item.id === id) || null;
 }
 
 function setJpyTransactionDate() {

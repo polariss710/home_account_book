@@ -1,9 +1,10 @@
-import { monthKey } from "./utils.js?v=20260530-jpy-2";
+import { monthKey } from "./utils.js?v=20260530-jpy-3";
 
 export const appState = {
   activeMonth: monthKey(new Date()),
   page: null,
   jpyPage: null,
+  editingJpyTransactionId: null,
   editingTemplateId: null,
   stoppedTemplatesExpanded: false,
   supabaseClient: null,

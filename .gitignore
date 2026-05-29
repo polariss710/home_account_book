@@ -4,3 +4,4 @@ docs:excel-template:/
 *.xlsx
 *.xlsm
 *.xlsb
+*.sql
