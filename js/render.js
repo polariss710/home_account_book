@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260529-fixed-8";
-import { appState, findFixedTemplate } from "./state.js?v=20260529-fixed-8";
-import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-8";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-8";
-import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-fixed-8";
+import { els } from "./elements.js?v=20260529-fixed-9";
+import { appState, findFixedTemplate } from "./state.js?v=20260529-fixed-9";
+import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-9";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-9";
+import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-fixed-9";
 
 export function render() {
   renderShell();
@@ -211,7 +211,7 @@ function setTemplateForm(template, mode) {
   form.elements.name.value = template.name || "";
   form.elements.direction.value = template.direction || "expense";
   form.elements.fixed_type.value = template.fixed_type || "long_term";
-  form.elements.default_amount.value = Number(template.default_amount || 0);
+  form.elements.default_amount.value = template.default_amount ?? "";
   form.elements.payment_group.value = template.payment_group || "";
   form.elements.due_day.value = template.due_day || "";
   form.elements.start_month.value = template.start_month || "";

@@ -1,18 +1,19 @@
-import { els } from "./elements.js?v=20260529-fixed-8";
-import { appState, findFixedTemplate } from "./state.js?v=20260529-fixed-8";
-import { render } from "./render.js?v=20260529-fixed-8";
-import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-8";
+import { els } from "./elements.js?v=20260529-fixed-9";
+import { appState, findFixedTemplate } from "./state.js?v=20260529-fixed-9";
+import { render } from "./render.js?v=20260529-fixed-9";
+import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-9";
 import {
   generateFixedMonth,
   isCloudReady,
   loadFixedMonthPage,
   passwordAuth,
   saveAccount,
-  saveTemplate,
+  createTemplate,
+  updateTemplate,
   sendMagicLink,
   signOut,
-} from "./supabase.js?v=20260529-fixed-8";
-import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-8";
+} from "./supabase.js?v=20260529-fixed-9";
+import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-9";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
@@ -52,12 +53,12 @@ export function bindEvents() {
 
   els.templateForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!requireCloudReady("请先登录后再新增模板。")) return;
+    if (!requireCloudReady("请先登录后再保存模板。")) return;
     const form = event.currentTarget;
     const data = formData(form);
     const existingTemplate = findFixedTemplate(appState.editingTemplateId);
+    const templateId = appState.editingTemplateId;
     const record = {
-      id: appState.editingTemplateId || crypto.randomUUID(),
       direction: data.direction,
       name: data.name.trim(),
       fixed_type: data.fixed_type,
@@ -66,11 +67,16 @@ export function bindEvents() {
       due_day: data.due_day ? Number(data.due_day) : null,
       start_month: data.fixed_type === "short_term" ? data.start_month || appState.activeMonth : emptyToNull(data.start_month),
       total_terms: data.total_terms ? Number(data.total_terms) : null,
-      is_active: true,
       sort_order: existingTemplate?.sort_order ?? (appState.page?.templates || []).length,
-      created_at: existingTemplate?.created_at || new Date().toISOString(),
     };
-    const ok = await saveTemplate(record);
+    const ok = templateId
+      ? await updateTemplate(templateId, record)
+      : await createTemplate({
+          ...record,
+          id: crypto.randomUUID(),
+          is_active: true,
+          created_at: new Date().toISOString(),
+        });
     if (!ok) return;
     await loadFixedMonthPage();
     resetTemplateForm();

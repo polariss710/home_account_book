@@ -1,6 +1,6 @@
-import { appState } from "./state.js?v=20260529-fixed-8";
-import { getRedirectUrl } from "./utils.js?v=20260529-fixed-8";
-import { getConfig, setActionMessage } from "./ui.js?v=20260529-fixed-8";
+import { appState } from "./state.js?v=20260529-fixed-9";
+import { getRedirectUrl } from "./utils.js?v=20260529-fixed-9";
+import { getConfig, setActionMessage } from "./ui.js?v=20260529-fixed-9";
 
 let onCloudChange = () => {};
 let pageLoadPromise = null;
@@ -133,8 +133,12 @@ export async function saveAccount(record) {
   return upsert("home_accounts", withUser({ ...record, currency: "JPY" }));
 }
 
-export async function saveTemplate(record) {
+export async function createTemplate(record) {
   return upsert("home_fixed_templates", withUser({ ...record, currency: "JPY" }));
+}
+
+export async function updateTemplate(id, patch) {
+  return updateById("home_fixed_templates", id, patch);
 }
 
 export async function saveMonthItem(record) {
