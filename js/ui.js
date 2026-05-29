@@ -1,6 +1,6 @@
-import { APP_VERSION, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260530-jpy-3";
-import { els } from "./elements.js?v=20260530-jpy-3";
-import { appState } from "./state.js?v=20260530-jpy-3";
+import { APP_VERSION, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260530-responsive-1";
+import { els } from "./elements.js?v=20260530-responsive-1";
+import { appState } from "./state.js?v=20260530-responsive-1";
 
 export function setInitialDates() {
   els.monthPicker.value = appState.activeMonth;
@@ -13,6 +13,7 @@ export function switchView(viewId) {
   document.querySelectorAll(".view").forEach((view) => {
     view.classList.toggle("is-active", view.id === viewId);
   });
+  els.generateMonthBtn.hidden = viewId !== "fixed";
 }
 
 export function renderShell() {

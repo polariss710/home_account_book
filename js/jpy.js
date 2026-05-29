@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260530-jpy-3";
-import { appState } from "./state.js?v=20260530-jpy-3";
-import { loadAppData, deleteJpyTransaction, isCloudReady, saveJpyTransaction } from "./supabase.js?v=20260530-jpy-3";
-import { setActionMessage } from "./ui.js?v=20260530-jpy-3";
-import { emptyRow, escapeHtml, formData, money, toNumber } from "./utils.js?v=20260530-jpy-3";
+import { els } from "./elements.js?v=20260530-responsive-1";
+import { appState } from "./state.js?v=20260530-responsive-1";
+import { loadAppData, deleteJpyTransaction, isCloudReady, saveJpyTransaction } from "./supabase.js?v=20260530-responsive-1";
+import { setActionMessage } from "./ui.js?v=20260530-responsive-1";
+import { emptyRow, escapeHtml, formData, money, toNumber } from "./utils.js?v=20260530-responsive-1";
 
 export function bindJpyEvents() {
   els.jpyTransactionForm.elements.transaction_type.addEventListener("change", updateTransferAccountControl);

@@ -1,4 +1,4 @@
-import { monthKey } from "./utils.js?v=20260530-jpy-3";
+import { monthKey } from "./utils.js?v=20260530-responsive-1";
 
 export const appState = {
   activeMonth: monthKey(new Date()),
