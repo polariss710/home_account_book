@@ -501,8 +501,42 @@ th {
   font-size: 18px;
 }
 
-.jpy-balance-item {
-  max-width: 720px;
+.jpy-balance-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.jpy-balance-card {
+  display: grid;
+  gap: 22px;
+  min-height: 112px;
+  padding: 18px;
+  background: #fbfcfa;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.jpy-balance-card-main {
+  display: grid;
+  gap: 6px;
+}
+
+.jpy-balance-card-main strong {
+  font-size: 18px;
+}
+
+.jpy-balance-card-main span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.jpy-balance-card .balance-current {
+  align-self: end;
+  justify-items: start;
+}
+
+.jpy-balance-card .balance-current strong {
+  font-size: 28px;
+  line-height: 1.1;
 }
 
 .empty-state {
@@ -674,6 +708,19 @@ th {
 
   .balance-current {
     justify-items: start;
+  }
+
+  .jpy-balance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .jpy-balance-card {
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .jpy-balance-card .balance-current strong {
+    font-size: 26px;
   }
 
   .settings-item .button-row {
