@@ -1,9 +1,9 @@
-import { bindElements } from "./js/elements.js?v=20260530-responsive-4";
-import { bindEvents } from "./js/events.js?v=20260530-responsive-4";
-import { bindJpyEvents } from "./js/jpy.js?v=20260530-responsive-4";
-import { render } from "./js/render.js?v=20260530-responsive-4";
-import { initSupabaseClient, loadAppData, refreshSession, setCloudChangeHandler } from "./js/supabase.js?v=20260530-responsive-4";
-import { processAuthHash, setActionMessage, setInitialDates } from "./js/ui.js?v=20260530-responsive-4";
+import { bindElements } from "./js/elements.js?v=20260530-responsive-5";
+import { bindEvents } from "./js/events.js?v=20260530-responsive-5";
+import { bindJpyEvents } from "./js/jpy.js?v=20260530-responsive-5";
+import { render } from "./js/render.js?v=20260530-responsive-5";
+import { initSupabaseClient, loadAppData, refreshSession, setCloudChangeHandler } from "./js/supabase.js?v=20260530-responsive-5";
+import { processAuthHash, setActionMessage, setInitialDates } from "./js/ui.js?v=20260530-responsive-5";
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindElements();

@@ -1,6 +1,6 @@
-import { appState } from "./state.js?v=20260530-responsive-4";
-import { getRedirectUrl } from "./utils.js?v=20260530-responsive-4";
-import { getConfig, setActionMessage } from "./ui.js?v=20260530-responsive-4";
+import { appState } from "./state.js?v=20260530-responsive-5";
+import { getRedirectUrl } from "./utils.js?v=20260530-responsive-5";
+import { getConfig, setActionMessage } from "./ui.js?v=20260530-responsive-5";
 
 let onCloudChange = () => {};
 let pageLoadPromise = null;
