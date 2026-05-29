@@ -100,70 +100,93 @@ create policy home_fixed_month_items_user_all
   with check (user_id = auth.uid());
 
 create or replace function home_generate_fixed_month(p_month_key text, p_currency text default 'JPY')
-returns void
+returns jsonb
 language sql
 security invoker
 as $$
-insert into home_fixed_month_items (
-  user_id,
-  template_id,
-  month_key,
-  currency,
-  direction,
-  name,
-  amount,
-  status,
-  account_id,
-  payment_group,
-  due_date,
-  term_no,
-  total_terms,
-  note
-)
-select
-  t.user_id,
-  t.id,
-  p_month_key,
-  t.currency,
-  t.direction,
-  t.name,
-  t.default_amount,
-  'unpaid',
-  t.default_account_id,
-  t.payment_group,
-  case
-    when t.due_day is null then null
-    else (
-      to_date(p_month_key || '-01', 'YYYY-MM-DD')
-      + (least(t.due_day, extract(day from (to_date(p_month_key || '-01', 'YYYY-MM-DD') + interval '1 month - 1 day'))::integer) - 1) * interval '1 day'
-    )::date
-  end,
-  case
-    when t.fixed_type = 'short_term' and t.start_month is not null then
-      ((extract(year from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer)
-      - (extract(year from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer)
-      + 1)
-    else null
-  end,
-  t.total_terms,
-  ''
-from home_fixed_templates t
-where t.user_id = auth.uid()
-  and t.currency = p_currency
-  and t.is_active
-  and (t.start_month is null or t.start_month <= p_month_key)
-  and (t.end_month is null or t.end_month >= p_month_key)
-  and (
-    t.fixed_type = 'long_term'
-    or t.total_terms is null
-    or t.start_month is null
-    or (
-      ((extract(year from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer)
-      - (extract(year from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer)
-      + 1) between 1 and t.total_terms
+with eligible_templates as (
+  select
+    t.*,
+    case
+      when t.due_day is null then null
+      else (
+        to_date(p_month_key || '-01', 'YYYY-MM-DD')
+        + (least(t.due_day, extract(day from (to_date(p_month_key || '-01', 'YYYY-MM-DD') + interval '1 month - 1 day'))::integer) - 1) * interval '1 day'
+      )::date
+    end as generated_due_date,
+    case
+      when t.fixed_type = 'short_term' and t.start_month is not null then
+        ((extract(year from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer)
+        - (extract(year from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer)
+        + 1)
+      else null
+    end as generated_term_no
+  from home_fixed_templates t
+  where t.user_id = auth.uid()
+    and t.currency = p_currency
+    and t.is_active
+    and (t.start_month is null or t.start_month <= p_month_key)
+    and (t.end_month is null or t.end_month >= p_month_key)
+    and (
+      t.fixed_type = 'long_term'
+      or t.total_terms is null
+      or t.start_month is null
+      or (
+        ((extract(year from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer)
+        - (extract(year from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer)
+        + 1) between 1 and t.total_terms
+      )
     )
+),
+existing_items as (
+  select count(*) as existing_count
+  from eligible_templates t
+  join home_fixed_month_items i
+    on i.user_id = auth.uid()
+   and i.month_key = p_month_key
+   and i.template_id = t.id
+),
+inserted_items as (
+  insert into home_fixed_month_items (
+    user_id,
+    template_id,
+    month_key,
+    currency,
+    direction,
+    name,
+    amount,
+    status,
+    account_id,
+    payment_group,
+    due_date,
+    term_no,
+    total_terms,
+    note
   )
-on conflict do nothing;
+  select
+    t.user_id,
+    t.id,
+    p_month_key,
+    t.currency,
+    t.direction,
+    t.name,
+    t.default_amount,
+    'unpaid',
+    t.default_account_id,
+    t.payment_group,
+    t.generated_due_date,
+    t.generated_term_no,
+    t.total_terms,
+    ''
+  from eligible_templates t
+  on conflict do nothing
+  returning id
+)
+select jsonb_build_object(
+  'eligible_count', (select count(*) from eligible_templates),
+  'existing_count', (select existing_count from existing_items),
+  'inserted_count', (select count(*) from inserted_items)
+);
 $$;
 
 create or replace function home_get_fixed_month_page(p_month_key text, p_currency text default 'JPY')

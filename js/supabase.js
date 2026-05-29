@@ -1,6 +1,6 @@
-import { appState } from "./state.js?v=20260529-fixed-1";
-import { getRedirectUrl } from "./utils.js?v=20260529-fixed-1";
-import { getConfig, setActionMessage } from "./ui.js?v=20260529-fixed-1";
+import { appState } from "./state.js?v=20260529-fixed-2";
+import { getRedirectUrl } from "./utils.js?v=20260529-fixed-2";
+import { getConfig, setActionMessage } from "./ui.js?v=20260529-fixed-2";
 
 let onCloudChange = () => {};
 let pageLoadPromise = null;
@@ -114,15 +114,19 @@ export async function loadFixedMonthPage() {
 }
 
 export async function generateFixedMonth() {
-  const { error } = await appState.supabaseClient.rpc("home_generate_fixed_month", {
+  const { data, error } = await appState.supabaseClient.rpc("home_generate_fixed_month", {
     p_month_key: appState.activeMonth,
     p_currency: "JPY",
   });
   if (error) {
     setActionMessage(`生成本月固定项失败：${error.message}`, "error");
-    return false;
+    return null;
   }
-  return true;
+  if (!data) {
+    setActionMessage("生成结果为空，请先执行最新的 supabase-schema.sql。", "error");
+    return null;
+  }
+  return data;
 }
 
 export async function saveAccount(record) {

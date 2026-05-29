@@ -1,7 +1,7 @@
-import { els } from "./elements.js?v=20260529-fixed-1";
-import { appState } from "./state.js?v=20260529-fixed-1";
-import { render } from "./render.js?v=20260529-fixed-1";
-import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-1";
+import { els } from "./elements.js?v=20260529-fixed-2";
+import { appState } from "./state.js?v=20260529-fixed-2";
+import { render } from "./render.js?v=20260529-fixed-2";
+import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-2";
 import {
   generateFixedMonth,
   isCloudReady,
@@ -11,8 +11,8 @@ import {
   saveTemplate,
   sendMagicLink,
   signOut,
-} from "./supabase.js?v=20260529-fixed-1";
-import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-1";
+} from "./supabase.js?v=20260529-fixed-2";
+import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-2";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
@@ -32,10 +32,21 @@ export function bindEvents() {
 
   els.generateMonthBtn.addEventListener("click", async () => {
     if (!requireCloudReady("请先登录后再生成本月固定项。")) return;
-    const ok = await generateFixedMonth();
-    if (!ok) return;
+    const result = await generateFixedMonth();
+    if (!result) return;
     await loadFixedMonthPage();
-    setActionMessage("本月固定项已生成。", "success");
+    const insertedCount = Number(result.inserted_count || 0);
+    const eligibleCount = Number(result.eligible_count || 0);
+    const existingCount = Number(result.existing_count || 0);
+    if (insertedCount > 0) {
+      setActionMessage(`本月固定项已生成 ${insertedCount} 条。`, "success");
+    } else if (eligibleCount === 0) {
+      setActionMessage("当前没有可生成的固定模板，请先新增模板。", "error");
+    } else if (existingCount >= eligibleCount) {
+      setActionMessage("当前还在使用的固定项已经生成完毕，无需重复生成。", "success");
+    } else {
+      setActionMessage("没有新增固定项，请检查模板是否已生成或已到期。", "error");
+    }
     render();
   });
 
