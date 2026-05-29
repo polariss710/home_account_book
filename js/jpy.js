@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260530-responsive-5";
-import { appState } from "./state.js?v=20260530-responsive-5";
-import { loadAppData, deleteJpyTransaction, isCloudReady, saveJpyTransaction } from "./supabase.js?v=20260530-responsive-5";
-import { setActionMessage } from "./ui.js?v=20260530-responsive-5";
-import { emptyRow, escapeHtml, formData, money, toNumber } from "./utils.js?v=20260530-responsive-5";
+import { els } from "#elements";
+import { appState } from "#state";
+import { loadAppData, deleteJpyTransaction, isCloudReady, saveJpyTransaction } from "#supabase";
+import { setActionMessage } from "#ui";
+import { emptyRow, escapeHtml, formData, money, toNumber } from "#utils";
 
 export function bindJpyEvents() {
   els.jpyTransactionForm.elements.transaction_type.addEventListener("change", updateTransferAccountControl);
@@ -61,7 +61,7 @@ function renderJpyBalances() {
                 <strong>${escapeHtml(account.name)}</strong>
                 <span>${labelAccountType(account.account_type)} · 期初 ${money(account.opening_balance || 0)}</span>
               </div>
-              <div class="balance-current">
+              <div class="jpy-balance-current">
                 <span>当前余额</span>
                 <strong>${money(account.current_balance || 0)}</strong>
               </div>

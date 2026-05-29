@@ -7,8 +7,6 @@
   --muted: #6d7774;
   --line: #dbe2de;
   --accent: #2d6a5f;
-  --accent-2: #c4573d;
-  --warn: #b7791f;
   --paid: #1f7a4d;
   --unpaid: #a03a2f;
   --shadow: 0 16px 40px rgba(28, 37, 36, 0.08);
@@ -47,11 +45,6 @@ button {
   display: grid;
   place-items: center;
   padding: 22px;
-}
-
-.auth-gate[hidden],
-.app-shell[hidden] {
-  display: none;
 }
 
 .auth-panel {
@@ -165,8 +158,7 @@ button {
 }
 
 input,
-select,
-.table-input {
+select {
   width: 100%;
   height: 42px;
   min-height: 40px;
@@ -208,8 +200,7 @@ input[type="month"] {
 
 .primary-button,
 .ghost-button,
-.danger-button,
-.segment {
+.danger-button {
   height: 42px;
   min-height: 40px;
   border-radius: 8px;
@@ -232,12 +223,6 @@ input[type="month"] {
   background: #fff5f2;
   border-color: #f0c5b9;
   color: var(--unpaid);
-}
-
-.plain-button {
-  border: 0;
-  background: transparent;
-  padding: 0;
 }
 
 .view {
@@ -281,12 +266,6 @@ input[type="month"] {
 
 .metric strong.negative {
   color: var(--unpaid);
-}
-
-.content-grid {
-  display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
-  gap: 18px;
 }
 
 .panel {
@@ -367,25 +346,6 @@ input[type="month"] {
   color: var(--unpaid);
 }
 
-.segmented {
-  display: flex;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.segment {
-  border: 0;
-  border-radius: 0;
-  background: var(--surface);
-  color: var(--muted);
-}
-
-.segment.is-active {
-  background: var(--accent);
-  color: #fff;
-}
-
 .table-wrap {
   overflow: auto;
   -webkit-overflow-scrolling: touch;
@@ -412,11 +372,6 @@ th {
   font-weight: 800;
 }
 
-.amount {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
 .table-input {
   width: 100%;
   min-width: 110px;
@@ -427,6 +382,7 @@ th {
 }
 
 .compact-button {
+  height: 32px;
   min-height: 32px;
   padding: 0 10px;
 }
@@ -451,19 +407,12 @@ th {
   color: var(--unpaid);
 }
 
-.badge.locked {
-  background: #eef3ef;
-  color: var(--accent);
-}
-
-.balance-list,
 .settings-list {
   display: grid;
   gap: 10px;
   padding: 14px 18px 18px;
 }
 
-.balance-item,
 .settings-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -475,30 +424,22 @@ th {
   border-radius: 8px;
 }
 
-.balance-item span,
 .settings-item span {
   color: var(--muted);
   font-size: 12px;
 }
 
-.balance-item strong {
-  font-variant-numeric: tabular-nums;
-}
-
-.balance-current {
+.jpy-balance-current {
   display: grid;
   gap: 4px;
-  justify-items: end;
+  align-self: end;
+  justify-items: start;
   font-variant-numeric: tabular-nums;
 }
 
-.balance-current span {
+.jpy-balance-current span {
   color: var(--muted);
   font-size: 12px;
-}
-
-.balance-current strong {
-  font-size: 18px;
 }
 
 .jpy-balance-grid {
@@ -529,12 +470,7 @@ th {
   font-size: 12px;
 }
 
-.jpy-balance-card .balance-current {
-  align-self: end;
-  justify-items: start;
-}
-
-.jpy-balance-card .balance-current strong {
+.jpy-balance-current strong {
   font-size: 28px;
   line-height: 1.1;
 }
@@ -581,18 +517,10 @@ th {
     line-height: 1.2;
   }
 
-  .topbar,
-  .content-grid {
-    grid-template-columns: 1fr;
-    display: grid;
-  }
-
   .topbar {
+    display: grid;
+    grid-template-columns: 1fr;
     align-items: stretch;
-  }
-
-  .topbar input {
-    width: 100%;
   }
 
   .topbar-actions {
@@ -650,11 +578,6 @@ th {
     grid-template-columns: 1fr;
   }
 
-  .metric,
-  .panel {
-    border-radius: 8px;
-  }
-
   .metric {
     padding: 14px;
   }
@@ -671,8 +594,7 @@ th {
 
   .form-grid,
   .settings-form,
-  .settings-list,
-  .balance-list {
+  .settings-list {
     padding: 14px;
   }
 
@@ -688,26 +610,14 @@ th {
     width: 100%;
   }
 
-  .settings-item,
-  .balance-item {
+  .settings-item {
     grid-template-columns: 1fr;
     align-items: start;
   }
 
-  .settings-item > strong,
-  .balance-item > strong,
-  .balance-current {
+  .settings-item > strong {
     justify-self: start;
-  }
-
-  .settings-item > strong,
-  .balance-item > strong,
-  .balance-current strong {
     font-size: 18px;
-  }
-
-  .balance-current {
-    justify-items: start;
   }
 
   .jpy-balance-grid {
@@ -719,20 +629,11 @@ th {
     padding: 16px;
   }
 
-  .jpy-balance-card .balance-current strong {
+  .jpy-balance-current strong {
     font-size: 26px;
-  }
-
-  .settings-item .button-row {
-    width: 100%;
   }
 
   .table-wrap .button-row {
     flex-wrap: nowrap;
-  }
-
-  .table-wrap .compact-button,
-  .settings-item .compact-button {
-    width: auto;
   }
 }

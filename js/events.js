@@ -1,7 +1,7 @@
-import { els } from "./elements.js?v=20260530-responsive-5";
-import { appState, findFixedTemplate, getFixedTemplateTermStatus } from "./state.js?v=20260530-responsive-5";
-import { render } from "./render.js?v=20260530-responsive-5";
-import { setActionMessage, switchView } from "./ui.js?v=20260530-responsive-5";
+import { els } from "#elements";
+import { appState, findFixedTemplate, getFixedTemplateTermStatus } from "#state";
+import { render } from "#render";
+import { setActionMessage, switchView } from "#ui";
 import {
   generateFixedMonth,
   isCloudReady,
@@ -13,8 +13,8 @@ import {
   updateTemplate,
   sendMagicLink,
   signOut,
-} from "./supabase.js?v=20260530-responsive-5";
-import { emptyToNull, formData, toNumber } from "./utils.js?v=20260530-responsive-5";
+} from "#supabase";
+import { emptyToNull, formData, toNumber } from "#utils";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
@@ -38,7 +38,6 @@ export function bindEvents() {
     if (!result) return;
     await loadFixedMonthPage();
     const insertedCount = Number(result.inserted_count || 0);
-    const eligibleCount = Number(result.eligible_count || 0);
     setActionMessage(generationMessage(result), insertedCount > 0 || result.all_generated ? "success" : "error");
     render();
   });
