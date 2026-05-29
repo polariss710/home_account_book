@@ -4,6 +4,7 @@ const elementIds = [
   "authGate",
   "appShell",
   "syncStatus",
+  "appVersion",
   "monthPicker",
   "generateMonthBtn",
   "refreshBtn",

@@ -102,6 +102,11 @@ button {
   font-size: 13px;
 }
 
+.brand .app-version {
+  font-size: 12px;
+  color: #6f7b75;
+}
+
 .nav {
   display: grid;
   gap: 8px;

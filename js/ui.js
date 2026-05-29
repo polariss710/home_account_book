@@ -1,6 +1,6 @@
-import { DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260529-fixed-2";
-import { els } from "./elements.js?v=20260529-fixed-2";
-import { appState } from "./state.js?v=20260529-fixed-2";
+import { APP_VERSION, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260529-fixed-3";
+import { els } from "./elements.js?v=20260529-fixed-3";
+import { appState } from "./state.js?v=20260529-fixed-3";
 
 export function setInitialDates() {
   els.monthPicker.value = appState.activeMonth;
@@ -20,6 +20,7 @@ export function renderShell() {
   els.authGate.hidden = loggedIn;
   els.appShell.hidden = !loggedIn;
   els.syncStatus.textContent = loggedIn ? `已登录 · ${appState.currentUser.email}` : "Supabase 未登录";
+  els.appVersion.textContent = `版本 ${APP_VERSION}`;
   if (els.authState) {
     els.authState.className = `badge ${loggedIn ? "paid" : "unpaid"}`;
     els.authState.textContent = loggedIn ? "已登录" : "未登录";
