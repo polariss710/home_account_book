@@ -1,4 +1,4 @@
-import { monthKey } from "./utils.js?v=20260530-responsive-2";
+import { monthKey } from "./utils.js?v=20260530-responsive-3";
 
 export const appState = {
   activeMonth: monthKey(new Date()),

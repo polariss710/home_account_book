@@ -485,6 +485,26 @@ th {
   font-variant-numeric: tabular-nums;
 }
 
+.balance-current {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.balance-current span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.balance-current strong {
+  font-size: 18px;
+}
+
+.jpy-balance-item {
+  max-width: 720px;
+}
+
 .empty-state {
   color: var(--muted);
   text-align: center;
@@ -510,16 +530,21 @@ th {
   }
 
   .nav {
-    display: flex;
-    overflow-x: auto;
-    padding-bottom: 2px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #f4f7f5;
   }
 
   .nav-button {
-    flex: 0 0 auto;
-    min-width: 110px;
+    min-width: 0;
+    border-radius: 6px;
+    padding: 10px 6px;
     text-align: center;
-    white-space: nowrap;
+    line-height: 1.2;
   }
 
   .topbar,
@@ -622,9 +647,10 @@ th {
     grid-template-columns: 1fr;
   }
 
-  .primary-button,
-  .ghost-button,
-  .danger-button {
+  .topbar-actions > button,
+  .form-submit > button,
+  .inline-form > button,
+  .settings-form button {
     width: 100%;
   }
 
@@ -635,9 +661,19 @@ th {
   }
 
   .settings-item > strong,
-  .balance-item > strong {
+  .balance-item > strong,
+  .balance-current {
     justify-self: start;
+  }
+
+  .settings-item > strong,
+  .balance-item > strong,
+  .balance-current strong {
     font-size: 18px;
+  }
+
+  .balance-current {
+    justify-items: start;
   }
 
   .settings-item .button-row {
