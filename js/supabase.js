@@ -1,6 +1,6 @@
-import { appState } from "./state.js?v=20260529-fixed-4";
-import { getRedirectUrl } from "./utils.js?v=20260529-fixed-4";
-import { getConfig, setActionMessage } from "./ui.js?v=20260529-fixed-4";
+import { appState } from "./state.js?v=20260529-fixed-5";
+import { getRedirectUrl } from "./utils.js?v=20260529-fixed-5";
+import { getConfig, setActionMessage } from "./ui.js?v=20260529-fixed-5";
 
 let onCloudChange = () => {};
 let pageLoadPromise = null;
@@ -143,6 +143,10 @@ export async function saveMonthItem(record) {
 
 export async function deactivateTemplate(id) {
   return updateById("home_fixed_templates", id, { is_active: false });
+}
+
+export async function reactivateTemplate(id) {
+  return updateById("home_fixed_templates", id, { is_active: true });
 }
 
 export async function deleteMonthItem(id) {

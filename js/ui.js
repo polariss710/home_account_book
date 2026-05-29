@@ -1,6 +1,6 @@
-import { APP_VERSION, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260529-fixed-4";
-import { els } from "./elements.js?v=20260529-fixed-4";
-import { appState } from "./state.js?v=20260529-fixed-4";
+import { APP_VERSION, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "./config.js?v=20260529-fixed-5";
+import { els } from "./elements.js?v=20260529-fixed-5";
+import { appState } from "./state.js?v=20260529-fixed-5";
 
 export function setInitialDates() {
   els.monthPicker.value = appState.activeMonth;
@@ -28,9 +28,11 @@ export function renderShell() {
 }
 
 export function setActionMessage(message, type = "") {
-  if (!els.actionMessage) return;
-  els.actionMessage.textContent = message;
-  els.actionMessage.className = `form-message ${type}`;
+  [els.actionMessage, els.appMessage].forEach((messageEl) => {
+    if (!messageEl) return;
+    messageEl.textContent = message;
+    messageEl.className = `${messageEl.id === "appMessage" ? "app-message" : "form-message"} ${type}`;
+  });
 }
 
 export function processAuthHash() {

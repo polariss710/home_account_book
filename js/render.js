@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260529-fixed-4";
-import { appState } from "./state.js?v=20260529-fixed-4";
-import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-4";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-4";
-import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate } from "./supabase.js?v=20260529-fixed-4";
+import { els } from "./elements.js?v=20260529-fixed-5";
+import { appState } from "./state.js?v=20260529-fixed-5";
+import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-5";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-5";
+import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-fixed-5";
 
 export function render() {
   renderShell();
@@ -125,27 +125,15 @@ function findMonthItem(id) {
 
 function renderTemplates() {
   const templates = appState.page?.templates || [];
+  const stoppedTemplates = appState.page?.stopped_templates || [];
   els.templateRows.innerHTML = templates.length
-    ? templates
-        .map(
-          (item) => `
-            <div class="settings-item">
-              <div>
-                <strong>${escapeHtml(item.name)}</strong>
-                <span>${labelDirection(item.direction)} · ${labelFixedType(item.fixed_type)} · ${escapeHtml(item.payment_group || "未分组")} · ${money(item.default_amount || 0)}</span>
-              </div>
-              <div class="button-row">
-                <button class="ghost-button compact-button" data-edit-template="${item.id}" type="button">编辑</button>
-                <button class="ghost-button compact-button" data-copy-template="${item.id}" type="button">复制</button>
-                <button class="danger-button compact-button" data-disable-template="${item.id}" type="button">停止生成</button>
-              </div>
-            </div>
-          `,
-        )
-        .join("")
+    ? templates.map((item) => templateRow(item, "active")).join("")
     : `<div class="empty-state">暂无固定模板</div>`;
+  els.stoppedTemplateRows.innerHTML = stoppedTemplates.length
+    ? stoppedTemplates.map((item) => templateRow(item, "stopped")).join("")
+    : `<div class="empty-state">暂无停止生成的模板</div>`;
 
-  els.templateRows.querySelectorAll("[data-edit-template]").forEach((button) => {
+  document.querySelectorAll("[data-edit-template]").forEach((button) => {
     button.addEventListener("click", () => {
       const template = findTemplate(button.dataset.editTemplate);
       if (!template) return;
@@ -153,7 +141,7 @@ function renderTemplates() {
     });
   });
 
-  els.templateRows.querySelectorAll("[data-copy-template]").forEach((button) => {
+  document.querySelectorAll("[data-copy-template]").forEach((button) => {
     button.addEventListener("click", () => {
       const template = findTemplate(button.dataset.copyTemplate);
       if (!template) return;
@@ -161,7 +149,7 @@ function renderTemplates() {
     });
   });
 
-  els.templateRows.querySelectorAll("[data-disable-template]").forEach((button) => {
+  document.querySelectorAll("[data-disable-template]").forEach((button) => {
     button.addEventListener("click", async () => {
       const template = findTemplate(button.dataset.disableTemplate);
       if (!template) return;
@@ -174,6 +162,39 @@ function renderTemplates() {
       render();
     });
   });
+
+  document.querySelectorAll("[data-reactivate-template]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const template = findTemplate(button.dataset.reactivateTemplate);
+      if (!template) return;
+      const ok = await reactivateTemplate(template.id);
+      if (!ok) return;
+      await loadFixedMonthPage();
+      setActionMessage("模板已恢复生成，之后月份可继续使用。", "success");
+      render();
+    });
+  });
+}
+
+function templateRow(item, status) {
+  const statusLabel = status === "stopped" ? "停止生成" : "使用中";
+  const statusAction =
+    status === "stopped"
+      ? `<button class="primary-button compact-button" data-reactivate-template="${item.id}" type="button">恢复生成</button>`
+      : `<button class="danger-button compact-button" data-disable-template="${item.id}" type="button">停止生成</button>`;
+  return `
+    <div class="settings-item">
+      <div>
+        <strong>${escapeHtml(item.name)}</strong>
+        <span>${statusLabel} · ${labelDirection(item.direction)} · ${labelFixedType(item.fixed_type)} · ${escapeHtml(item.payment_group || "未分组")} · ${money(item.default_amount || 0)}</span>
+      </div>
+      <div class="button-row">
+        <button class="ghost-button compact-button" data-edit-template="${item.id}" type="button">编辑</button>
+        <button class="ghost-button compact-button" data-copy-template="${item.id}" type="button">复制</button>
+        ${statusAction}
+      </div>
+    </div>
+  `;
 }
 
 function setTemplateForm(template, mode) {
@@ -195,7 +216,8 @@ function setTemplateForm(template, mode) {
 }
 
 function findTemplate(id) {
-  return (appState.page?.templates || []).find((item) => item.id === id) || null;
+  const templates = [...(appState.page?.templates || []), ...(appState.page?.stopped_templates || [])];
+  return templates.find((item) => item.id === id) || null;
 }
 
 function renderAccounts() {

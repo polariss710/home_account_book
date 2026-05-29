@@ -314,6 +314,21 @@ select,
   color: var(--unpaid);
 }
 
+.app-message {
+  min-height: 20px;
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.app-message.success {
+  color: var(--paid);
+}
+
+.app-message.error {
+  color: var(--unpaid);
+}
+
 .segmented {
   display: flex;
   border: 1px solid var(--line);

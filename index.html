@@ -70,6 +70,7 @@
             <button id="refreshBtn" class="ghost-button" type="button">刷新</button>
           </div>
         </header>
+        <p id="appMessage" class="app-message" aria-live="polite"></p>
 
         <section id="dashboard" class="view is-active">
           <div class="metric-grid">
@@ -196,9 +197,16 @@
 
           <section class="panel">
             <div class="panel-heading">
-              <h2>固定模板</h2>
+              <h2>使用中的固定模板</h2>
             </div>
             <div id="templateRows" class="settings-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>停止生成的固定模板</h2>
+            </div>
+            <div id="stoppedTemplateRows" class="settings-list"></div>
           </section>
         </section>
 
@@ -236,6 +244,6 @@
       </main>
     </div>
 
-    <script type="module" src="app.js?v=20260529-fixed-4"></script>
+    <script type="module" src="app.js?v=20260529-fixed-5"></script>
   </body>
 </html>
