@@ -1,8 +1,8 @@
-import { els } from "./elements.js?v=20260529-fixed-5";
-import { appState } from "./state.js?v=20260529-fixed-5";
-import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-5";
-import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-5";
-import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-fixed-5";
+import { els } from "./elements.js?v=20260529-fixed-6";
+import { appState } from "./state.js?v=20260529-fixed-6";
+import { renderShell, setActionMessage } from "./ui.js?v=20260529-fixed-6";
+import { emptyRow, escapeHtml, money } from "./utils.js?v=20260529-fixed-6";
+import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "./supabase.js?v=20260529-fixed-6";
 
 export function render() {
   renderShell();
@@ -129,9 +129,17 @@ function renderTemplates() {
   els.templateRows.innerHTML = templates.length
     ? templates.map((item) => templateRow(item, "active")).join("")
     : `<div class="empty-state">暂无固定模板</div>`;
+  els.stoppedTemplateTitle.textContent = `停止生成的固定模板（${stoppedTemplates.length}）`;
+  els.stoppedTemplateRows.hidden = !appState.stoppedTemplatesExpanded;
+  els.toggleStoppedTemplatesBtn.textContent = appState.stoppedTemplatesExpanded ? "收起" : "展开";
   els.stoppedTemplateRows.innerHTML = stoppedTemplates.length
     ? stoppedTemplates.map((item) => templateRow(item, "stopped")).join("")
     : `<div class="empty-state">暂无停止生成的模板</div>`;
+
+  els.toggleStoppedTemplatesBtn.addEventListener("click", () => {
+    appState.stoppedTemplatesExpanded = !appState.stoppedTemplatesExpanded;
+    renderTemplates();
+  });
 
   document.querySelectorAll("[data-edit-template]").forEach((button) => {
     button.addEventListener("click", () => {

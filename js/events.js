@@ -1,7 +1,7 @@
-import { els } from "./elements.js?v=20260529-fixed-5";
-import { appState } from "./state.js?v=20260529-fixed-5";
-import { render } from "./render.js?v=20260529-fixed-5";
-import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-5";
+import { els } from "./elements.js?v=20260529-fixed-6";
+import { appState } from "./state.js?v=20260529-fixed-6";
+import { render } from "./render.js?v=20260529-fixed-6";
+import { setActionMessage, switchView } from "./ui.js?v=20260529-fixed-6";
 import {
   generateFixedMonth,
   isCloudReady,
@@ -11,8 +11,8 @@ import {
   saveTemplate,
   sendMagicLink,
   signOut,
-} from "./supabase.js?v=20260529-fixed-5";
-import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-5";
+} from "./supabase.js?v=20260529-fixed-6";
+import { emptyToNull, formData, toNumber } from "./utils.js?v=20260529-fixed-6";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {

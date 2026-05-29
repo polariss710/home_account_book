@@ -21,6 +21,8 @@ const elementIds = [
   "incomeItemRows",
   "expenseItemRows",
   "templateRows",
+  "stoppedTemplateTitle",
+  "toggleStoppedTemplatesBtn",
   "stoppedTemplateRows",
   "accountForm",
   "accountRows",
