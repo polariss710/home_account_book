@@ -36,6 +36,10 @@ button {
   cursor: pointer;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .auth-gate {
   min-height: 100vh;
   display: grid;
