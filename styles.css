@@ -167,18 +167,50 @@ button {
 input,
 select,
 .table-input {
+  width: 100%;
+  height: 42px;
   min-height: 40px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
   color: var(--text);
   padding: 0 11px;
+  line-height: 1.2;
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 34px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text) 50%),
+    linear-gradient(135deg, var(--text) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 12px) 50%;
+  background-size:
+    6px 6px,
+    6px 6px;
+  background-repeat: no-repeat;
+}
+
+select:disabled {
+  color: var(--muted);
+  background-color: #f8faf8;
+  opacity: 1;
+}
+
+input[type="date"],
+input[type="month"] {
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .primary-button,
 .ghost-button,
 .danger-button,
 .segment {
+  height: 42px;
   min-height: 40px;
   border-radius: 8px;
   padding: 0 14px;
