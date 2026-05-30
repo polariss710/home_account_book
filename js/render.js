@@ -1,4 +1,5 @@
 import { els } from "#elements";
+import { renderCnyPage } from "#cny";
 import { renderFixedTransferForm } from "#fixed-transfer";
 import { renderJpyPage } from "#jpy";
 import { appState, findFixedTemplate, findJpyAccount, getFixedTemplateTermStatus } from "#state";
@@ -27,6 +28,7 @@ export function render() {
   renderFixedTransferForm();
   renderPaymentChannels();
   renderJpyPage();
+  renderCnyPage();
 }
 
 function renderDashboard() {

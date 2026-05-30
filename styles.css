@@ -496,7 +496,7 @@ th {
   font-size: 12px;
 }
 
-.jpy-balance-current {
+.balance-current {
   display: grid;
   gap: 4px;
   align-self: end;
@@ -504,16 +504,16 @@ th {
   font-variant-numeric: tabular-nums;
 }
 
-.jpy-balance-current span {
+.balance-current span {
   color: var(--muted);
   font-size: 12px;
 }
 
-.jpy-balance-grid {
+.balance-grid {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
-.jpy-balance-card {
+.balance-card {
   display: grid;
   gap: 22px;
   min-height: 112px;
@@ -523,21 +523,21 @@ th {
   border-radius: 8px;
 }
 
-.jpy-balance-card-main {
+.balance-card-main {
   display: grid;
   gap: 6px;
 }
 
-.jpy-balance-card-main strong {
+.balance-card-main strong {
   font-size: 18px;
 }
 
-.jpy-balance-card-main span {
+.balance-card-main span {
   color: var(--muted);
   font-size: 12px;
 }
 
-.jpy-balance-current strong {
+.balance-current strong {
   font-size: 28px;
   line-height: 1.1;
 }
@@ -568,7 +568,7 @@ th {
 
   .nav {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
     gap: 6px;
     padding: 4px;
     border: 1px solid var(--line);
@@ -687,16 +687,16 @@ th {
     font-size: 18px;
   }
 
-  .jpy-balance-grid {
+  .balance-grid {
     grid-template-columns: 1fr;
   }
 
-  .jpy-balance-card {
+  .balance-card {
     min-height: 0;
     padding: 16px;
   }
 
-  .jpy-balance-current strong {
+  .balance-current strong {
     font-size: 26px;
   }
 

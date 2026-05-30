@@ -4,8 +4,11 @@ export const appState = {
   activeMonth: monthKey(new Date()),
   page: null,
   jpyPage: null,
+  cnyPage: null,
   editingJpyTransactionId: null,
+  editingCnyTransactionId: null,
   editingAccountId: null,
+  editingCnyAccountId: null,
   editingTemplateId: null,
   editingPaymentChannelId: null,
   stoppedTemplatesExpanded: false,
@@ -23,6 +26,11 @@ export function findJpyAccount(id) {
   if (!id) return null;
   const accounts = [...(appState.jpyPage?.accounts || []), ...(appState.page?.accounts || [])];
   return accounts.find((item) => item.id === id) || null;
+}
+
+export function findCnyAccount(id) {
+  if (!id) return null;
+  return (appState.cnyPage?.accounts || []).find((item) => item.id === id) || null;
 }
 
 export function getFixedTemplateTermStatus(template, monthKey) {

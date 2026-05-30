@@ -108,7 +108,7 @@ export function queuePageLoad() {
 }
 
 export async function loadAppData() {
-  await Promise.all([loadFixedMonthPage(), loadJpyAccountPage()]);
+  await Promise.all([loadFixedMonthPage(), loadJpyAccountPage(), loadCnyAccountPage()]);
 }
 
 export async function loadFixedMonthPage() {
@@ -136,6 +136,19 @@ export async function loadJpyAccountPage() {
     return;
   }
   appState.jpyPage = data;
+}
+
+export async function loadCnyAccountPage() {
+  if (!isCloudReady()) return;
+  const { data, error } = await appState.supabaseClient.rpc("home_get_cny_account_page", {
+    p_month_key: appState.activeMonth,
+  });
+  if (error) {
+    setActionMessage(`人民币账户读取失败：${error.message}`, "error");
+    appState.cnyPage = null;
+    return;
+  }
+  appState.cnyPage = data;
 }
 
 export async function generateFixedMonth() {
@@ -184,6 +197,10 @@ export async function createFixedTransfer(record) {
 
 export async function saveAccount(record) {
   return upsert("home_accounts", withUser({ ...record, currency: "JPY" }));
+}
+
+export async function saveCnyAccount(record) {
+  return upsert("home_accounts", withUser({ ...record, currency: "CNY" }));
 }
 
 export async function updateAccount(id, patch) {
@@ -252,6 +269,22 @@ export async function saveJpyTransaction(record) {
   return upsert("home_jpy_transactions", withUser(allowedRecord));
 }
 
+export async function saveCnyTransaction(record) {
+  const allowedRecord = {
+    id: record.id,
+    transaction_type: record.transaction_type,
+    account_id: record.account_id,
+    transfer_account_id: record.transfer_account_id,
+    currency: "CNY",
+    transacted_at: record.transacted_at,
+    amount: record.amount,
+    description: record.description,
+    note: record.note,
+    created_at: record.created_at,
+  };
+  return upsert("home_cny_transactions", withUser(allowedRecord));
+}
+
 export async function updateJpyTransaction(record) {
   const { data, error } = await appState.supabaseClient.rpc("home_update_jpy_transaction", {
     p_transaction_id: record.id,
@@ -267,6 +300,23 @@ export async function updateJpyTransaction(record) {
     return null;
   }
   return handleRpcResult(data, "日元流水更新失败。");
+}
+
+export async function updateCnyTransaction(record) {
+  const { data, error } = await appState.supabaseClient.rpc("home_update_cny_transaction", {
+    p_transaction_id: record.id,
+    p_account_id: record.account_id,
+    p_transfer_account_id: record.transfer_account_id,
+    p_transacted_at: record.transacted_at,
+    p_amount: record.amount,
+    p_description: record.description,
+    p_note: record.note,
+  });
+  if (error) {
+    setActionMessage(`人民币流水更新失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "人民币流水更新失败。");
 }
 
 export async function deactivateTemplate(id) {
@@ -301,6 +351,17 @@ export async function deleteJpyTransaction(id) {
     return null;
   }
   return handleRpcResult(data, "日元流水删除失败。");
+}
+
+export async function deleteCnyTransaction(id) {
+  const { data, error } = await appState.supabaseClient.rpc("home_delete_cny_transaction", {
+    p_transaction_id: id,
+  });
+  if (error) {
+    setActionMessage(`人民币流水删除失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "人民币流水删除失败。");
 }
 
 export async function deleteAccount(id) {

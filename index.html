@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232d6a5f'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='34' fill='white' font-family='Arial, sans-serif'%3E%E5%AE%B6%3C/text%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=20260530-settlement-4" />
+    <link rel="stylesheet" href="styles.css?v=20260530-cny-1" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
@@ -55,6 +55,7 @@
           <button class="nav-button is-active" data-view="dashboard">总览</button>
           <button class="nav-button" data-view="fixed">日元固定收支</button>
           <button class="nav-button" data-view="accounts">日元零散收支</button>
+          <button class="nav-button" data-view="cny">人民币收支</button>
           <button class="nav-button" data-view="settings">设置</button>
         </nav>
       </aside>
@@ -274,7 +275,7 @@
             <div class="panel-heading">
               <h2>日元余额</h2>
             </div>
-            <div id="jpyBalanceRows" class="settings-list jpy-balance-grid"></div>
+            <div id="jpyBalanceRows" class="settings-list balance-grid"></div>
           </section>
 
           <section class="panel">
@@ -362,6 +363,101 @@
           </section>
         </section>
 
+        <section id="cny" class="view">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>人民币余额</h2>
+            </div>
+            <div id="cnyBalanceRows" class="settings-list balance-grid"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2 id="cnyTransactionFormTitle">人民币流水登录</h2>
+            </div>
+            <form id="cnyTransactionForm" class="form-grid">
+              <label>
+                日期
+                <input name="transacted_at" type="date" required />
+              </label>
+              <label>
+                类型
+                <select name="transaction_type" required>
+                  <option value="expense">支出</option>
+                  <option value="income">收入</option>
+                  <option value="transfer">账户间转账</option>
+                </select>
+              </label>
+              <label>
+                账户
+                <select id="cnyAccountSelect" name="account_id" required></select>
+              </label>
+              <label>
+                转入账户
+                <select id="cnyTransferAccountSelect" name="transfer_account_id"></select>
+              </label>
+              <label>
+                金额
+                <input name="amount" type="number" inputmode="decimal" step="1" required />
+              </label>
+              <label>
+                内容
+                <input name="description" type="text" placeholder="工资 / 房贷 / 支付宝支出" required />
+              </label>
+              <label>
+                备注
+                <input name="note" type="text" />
+              </label>
+              <div class="button-row form-submit">
+                <button id="cnyTransactionSubmitBtn" class="primary-button" type="submit">保存流水</button>
+                <button id="cnyTransactionCancelBtn" class="ghost-button" type="button" hidden>取消编辑</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>本月人民币流水</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>类型</th>
+                    <th>账户</th>
+                    <th>转入账户</th>
+                    <th>金额</th>
+                    <th>内容</th>
+                    <th>备注</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="cnyTransactionRows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>人民币账户管理</h2>
+            </div>
+            <form id="cnyAccountForm" class="inline-form">
+              <input name="name" type="text" placeholder="余额宝 / 余利宝 / 银行卡" required />
+              <select name="account_type" required>
+                <option value="wallet">电子钱包</option>
+                <option value="bank">银行卡</option>
+                <option value="pass_through">过账账户</option>
+                <option value="investment">投资账户</option>
+              </select>
+              <input name="opening_balance" type="number" step="1" placeholder="期初余额" required />
+              <button id="cnyAccountSubmitBtn" class="primary-button" type="submit">添加</button>
+              <button id="cnyAccountCancelBtn" class="ghost-button" type="button" hidden>取消编辑</button>
+            </form>
+            <div id="cnyAccountRows" class="settings-list"></div>
+          </section>
+        </section>
+
         <section id="settings" class="view">
           <section class="panel">
             <div class="panel-heading">
@@ -394,17 +490,18 @@
     <script type="importmap">
       {
         "imports": {
-          "#app": "./app.js?v=20260530-settlement-4",
-          "#config": "./js/config.js?v=20260530-settlement-4",
-          "#elements": "./js/elements.js?v=20260530-settlement-4",
-          "#events": "./js/events.js?v=20260530-settlement-4",
-          "#fixed-transfer": "./js/fixed-transfer.js?v=20260530-settlement-4",
-          "#jpy": "./js/jpy.js?v=20260530-settlement-4",
-          "#render": "./js/render.js?v=20260530-settlement-4",
-          "#state": "./js/state.js?v=20260530-settlement-4",
-          "#supabase": "./js/supabase.js?v=20260530-settlement-4",
-          "#ui": "./js/ui.js?v=20260530-settlement-4",
-          "#utils": "./js/utils.js?v=20260530-settlement-4"
+          "#app": "./app.js?v=20260530-cny-1",
+          "#cny": "./js/cny.js?v=20260530-cny-1",
+          "#config": "./js/config.js?v=20260530-cny-1",
+          "#elements": "./js/elements.js?v=20260530-cny-1",
+          "#events": "./js/events.js?v=20260530-cny-1",
+          "#fixed-transfer": "./js/fixed-transfer.js?v=20260530-cny-1",
+          "#jpy": "./js/jpy.js?v=20260530-cny-1",
+          "#render": "./js/render.js?v=20260530-cny-1",
+          "#state": "./js/state.js?v=20260530-cny-1",
+          "#supabase": "./js/supabase.js?v=20260530-cny-1",
+          "#ui": "./js/ui.js?v=20260530-cny-1",
+          "#utils": "./js/utils.js?v=20260530-cny-1"
         }
       }
     </script>

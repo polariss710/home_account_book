@@ -1,4 +1,5 @@
 import { bindElements } from "#elements";
+import { bindCnyEvents } from "#cny";
 import { bindEvents } from "#events";
 import { bindFixedTransferEvents } from "#fixed-transfer";
 import { bindJpyEvents } from "#jpy";
@@ -11,6 +12,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindEvents();
   bindFixedTransferEvents(render);
   bindJpyEvents();
+  bindCnyEvents();
   setCloudChangeHandler(render);
   setInitialDates();
   render();

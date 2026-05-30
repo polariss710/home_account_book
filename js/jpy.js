@@ -59,12 +59,12 @@ function renderJpyBalances() {
     ? accounts
         .map(
           (account) => `
-            <div class="jpy-balance-card">
-              <div class="jpy-balance-card-main">
+            <div class="balance-card">
+              <div class="balance-card-main">
                 <strong>${escapeHtml(account.name)}</strong>
                 <span>${labelAccountType(account.account_type)} · 期初 ${money(account.opening_balance || 0)}</span>
               </div>
-              <div class="jpy-balance-current">
+              <div class="balance-current">
                 <span>当前余额</span>
                 <strong>${money(account.current_balance || 0)}</strong>
               </div>
