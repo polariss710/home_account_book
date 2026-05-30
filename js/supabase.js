@@ -221,6 +221,41 @@ export async function createFixedTransfer(record) {
   return handleRpcResult(data, "固定资金调拨失败。");
 }
 
+export async function createCnyToJpyFx(record) {
+  const { data, error } = await appState.supabaseClient.rpc("home_create_cny_to_jpy_fx", {
+    p_cny_account_id: record.account_id,
+    p_jpy_account_id: record.jpy_account_id,
+    p_transacted_at: record.transacted_at,
+    p_cny_amount: record.amount,
+    p_jpy_amount: record.jpy_amount,
+    p_description: record.description,
+    p_note: record.note,
+  });
+  if (error) {
+    setActionMessage(`购汇联动保存失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "购汇联动保存失败。");
+}
+
+export async function updateCnyToJpyFx(record) {
+  const { data, error } = await appState.supabaseClient.rpc("home_update_cny_to_jpy_fx", {
+    p_cny_transaction_id: record.id,
+    p_cny_account_id: record.account_id,
+    p_jpy_account_id: record.jpy_account_id,
+    p_transacted_at: record.transacted_at,
+    p_cny_amount: record.amount,
+    p_jpy_amount: record.jpy_amount,
+    p_description: record.description,
+    p_note: record.note,
+  });
+  if (error) {
+    setActionMessage(`购汇联动更新失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "购汇联动更新失败。");
+}
+
 export async function saveAccount(record) {
   return upsert("home_accounts", withUser({ ...record, currency: "JPY" }));
 }
@@ -431,6 +466,17 @@ export async function deleteCnyTransaction(id) {
     return null;
   }
   return handleRpcResult(data, "人民币流水删除失败。");
+}
+
+export async function deleteCnyToJpyFx(id) {
+  const { data, error } = await appState.supabaseClient.rpc("home_delete_cny_to_jpy_fx", {
+    p_cny_transaction_id: id,
+  });
+  if (error) {
+    setActionMessage(`购汇联动删除失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "购汇联动删除失败。");
 }
 
 export async function deleteCnyFixedItem(id) {

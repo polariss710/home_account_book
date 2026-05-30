@@ -98,20 +98,31 @@ function renderJpyTransactions() {
 
 function transactionRow(item) {
   const fixedTransfer = isFixedTransfer(item);
-  const amountCell = fixedTransfer
+  const fxLinked = Boolean(item.linked_cny_transaction_id);
+  const locked = fixedTransfer || fxLinked;
+  const amountCell = locked
     ? money(item.amount || 0)
     : `<input class="table-input amount-input" data-jpy-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" />`;
-  const descriptionCell = fixedTransfer
+  const descriptionCell = locked
     ? escapeHtml(item.description || "")
     : `<input class="table-input" data-jpy-description="${item.id}" value="${escapeHtml(item.description || "")}" />`;
-  const noteCell = fixedTransfer
+  const noteCell = locked
     ? escapeHtml(item.note || "")
     : `<input class="table-input" data-jpy-note="${item.id}" value="${escapeHtml(item.note || "")}" />`;
-  const editButtons = fixedTransfer
-    ? ""
+  const controls = fxLinked
+    ? `<span class="badge settled">购汇生成</span>`
     : `
-      <button class="ghost-button compact-button" data-edit-jpy="${item.id}" type="button">编辑</button>
-      <button class="ghost-button compact-button" data-copy-jpy="${item.id}" type="button">复制</button>
+      <div class="button-row">
+        ${
+          fixedTransfer
+            ? ""
+            : `
+              <button class="ghost-button compact-button" data-edit-jpy="${item.id}" type="button">编辑</button>
+              <button class="ghost-button compact-button" data-copy-jpy="${item.id}" type="button">复制</button>
+            `
+        }
+        <button class="danger-button compact-button" data-delete-jpy="${item.id}" type="button">删除</button>
+      </div>
     `;
   return `
     <tr>
@@ -122,12 +133,7 @@ function transactionRow(item) {
       <td>${amountCell}</td>
       <td>${descriptionCell}</td>
       <td>${noteCell}</td>
-      <td>
-        <div class="button-row">
-          ${editButtons}
-          <button class="danger-button compact-button" data-delete-jpy="${item.id}" type="button">删除</button>
-        </div>
-      </td>
+      <td>${controls}</td>
     </tr>
   `;
 }

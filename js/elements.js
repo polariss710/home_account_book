@@ -68,6 +68,8 @@ const elementIds = [
   "cnyTransactionCancelBtn",
   "cnyAccountSelect",
   "cnyTransferAccountSelect",
+  "cnyFxJpyAccountSelect",
+  "cnyFxJpyAmountInput",
   "cnyFilterForm",
   "cnyFilterAccountSelect",
   "cnyTransactionRows",
