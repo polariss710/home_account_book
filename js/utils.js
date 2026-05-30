@@ -15,6 +15,10 @@ export function money(value) {
   return new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 0 }).format(Math.round(toNumber(value)));
 }
 
+export function moneyCny(value) {
+  return new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(toNumber(value));
+}
+
 export function emptyRow(colspan) {
   return `<tr><td colspan="${colspan}" class="empty-state">暂无数据</td></tr>`;
 }

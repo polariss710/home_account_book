@@ -5,10 +5,18 @@ export const appState = {
   page: null,
   jpyPage: null,
   cnyPage: null,
+  cnyFixedPage: null,
   editingJpyTransactionId: null,
   editingCnyTransactionId: null,
   editingAccountId: null,
   editingCnyAccountId: null,
+  editingCnyTemplateId: null,
+  cnyFilters: {
+    dateFrom: "",
+    dateTo: "",
+    transactionType: "",
+    accountId: "",
+  },
   editingTemplateId: null,
   editingPaymentChannelId: null,
   stoppedTemplatesExpanded: false,
@@ -31,6 +39,12 @@ export function findJpyAccount(id) {
 export function findCnyAccount(id) {
   if (!id) return null;
   return (appState.cnyPage?.accounts || []).find((item) => item.id === id) || null;
+}
+
+export function findCnyTemplate(id) {
+  if (!id) return null;
+  const templates = [...(appState.cnyFixedPage?.templates || []), ...(appState.cnyFixedPage?.stopped_templates || [])];
+  return templates.find((item) => item.id === id) || null;
 }
 
 export function getFixedTemplateTermStatus(template, monthKey) {

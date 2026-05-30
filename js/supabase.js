@@ -108,7 +108,7 @@ export function queuePageLoad() {
 }
 
 export async function loadAppData() {
-  await Promise.all([loadFixedMonthPage(), loadJpyAccountPage(), loadCnyAccountPage()]);
+  await Promise.all([loadFixedMonthPage(), loadJpyAccountPage(), loadCnyAccountPage(), loadCnyFixedPage()]);
 }
 
 export async function loadFixedMonthPage() {
@@ -151,6 +151,20 @@ export async function loadCnyAccountPage() {
   appState.cnyPage = data;
 }
 
+export async function loadCnyFixedPage() {
+  if (!isCloudReady()) return;
+  const { data, error } = await appState.supabaseClient.rpc("home_get_fixed_month_page", {
+    p_month_key: appState.activeMonth,
+    p_currency: "CNY",
+  });
+  if (error) {
+    setActionMessage(`人民币固定收支读取失败：${error.message}`, "error");
+    appState.cnyFixedPage = null;
+    return;
+  }
+  appState.cnyFixedPage = data;
+}
+
 export async function generateFixedMonth() {
   const { data, error } = await appState.supabaseClient.rpc("home_generate_fixed_month", {
     p_month_key: appState.activeMonth,
@@ -174,6 +188,18 @@ export async function syncFixedMonthItems() {
   });
   if (error) {
     setActionMessage(`同步本月固定项失败：${error.message}`, "error");
+    return null;
+  }
+  return data;
+}
+
+export async function generateCnyFixedMonth() {
+  const { data, error } = await appState.supabaseClient.rpc("home_generate_fixed_month", {
+    p_month_key: appState.activeMonth,
+    p_currency: "CNY",
+  });
+  if (error) {
+    setActionMessage(`生成人民币固定项失败：${error.message}`, "error");
     return null;
   }
   return data;
@@ -209,6 +235,10 @@ export async function updateAccount(id, patch) {
 
 export async function createTemplate(record) {
   return upsert("home_fixed_templates", withUser({ ...record, currency: "JPY" }));
+}
+
+export async function createCnyTemplate(record) {
+  return upsert("home_fixed_templates", withUser({ ...record, currency: "CNY" }));
 }
 
 export async function updateTemplate(id, patch) {
