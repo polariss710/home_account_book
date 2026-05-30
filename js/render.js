@@ -16,11 +16,13 @@ export function render() {
 
 function renderDashboard() {
   const metrics = appState.page?.metrics || {};
-  els.fixedIncomeTotal.textContent = money(metrics.income || 0);
-  els.fixedExpenseTotal.textContent = money(metrics.expense || 0);
-  els.fixedBalanceTotal.textContent = money(metrics.balance || 0);
-  els.fixedUnpaidTotal.textContent = money(metrics.unpaid_expense || 0);
-  els.fixedBalanceTotal.classList.toggle("negative", Number(metrics.balance || 0) < 0);
+  renderMetric(els.plannedIncomeTotal, metrics.planned_income ?? metrics.income);
+  renderMetric(els.plannedExpenseTotal, metrics.planned_expense ?? metrics.expense);
+  renderMetric(els.plannedBalanceTotal, metrics.planned_balance ?? metrics.balance, true);
+  renderMetric(els.actualIncomeTotal, metrics.actual_income);
+  renderMetric(els.actualExpenseTotal, metrics.actual_expense);
+  renderMetric(els.actualBalanceTotal, metrics.actual_balance, true);
+  renderPendingSummary(metrics);
 
   const groups = appState.page?.expense_groups || [];
   els.paymentGroupSummary.innerHTML = groups.length
@@ -32,12 +34,38 @@ function renderDashboard() {
                 <strong>${escapeHtml(group.payment_group || "未分组")}</strong>
                 <span>已付 ${money(group.paid || 0)} / 未付 ${money(group.unpaid || 0)}</span>
               </div>
-              <strong>${money(group.total || 0)}</strong>
+              <strong>${money(group.unpaid ?? group.total ?? 0)}</strong>
             </div>
           `,
         )
         .join("")
     : `<div class="empty-state">暂无支付渠道数据</div>`;
+}
+
+function renderMetric(element, value, markNegative = false) {
+  const number = Number(value || 0);
+  element.textContent = money(number);
+  element.classList.toggle("negative", markNegative && number < 0);
+}
+
+function renderPendingSummary(metrics) {
+  const items = [
+    { label: "未收固定收入", value: metrics.unreceived_income },
+    { label: "未付固定支出", value: metrics.unpaid_expense },
+  ];
+  els.pendingSummary.innerHTML = items
+    .map(
+      (item) => `
+        <div class="settings-item">
+          <div>
+            <strong>${item.label}</strong>
+            <span>当前账期仍未完成的固定项目金额</span>
+          </div>
+          <strong>${money(item.value || 0)}</strong>
+        </div>
+      `,
+    )
+    .join("");
 }
 
 function renderMonthItems() {

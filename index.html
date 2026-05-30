@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232d6a5f'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='34' fill='white' font-family='Arial, sans-serif'%3E%E5%AE%B6%3C/text%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=20260530-clean-1" />
+    <link rel="stylesheet" href="styles.css?v=20260530-dashboard-1" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
@@ -75,26 +75,41 @@
         <section id="dashboard" class="view is-active">
           <div class="metric-grid">
             <article class="metric">
-              <span>固定收入</span>
-              <strong id="fixedIncomeTotal">0</strong>
+              <span>预计收入</span>
+              <strong id="plannedIncomeTotal">0</strong>
             </article>
             <article class="metric">
-              <span>固定支出</span>
-              <strong id="fixedExpenseTotal">0</strong>
+              <span>预计支出</span>
+              <strong id="plannedExpenseTotal">0</strong>
             </article>
             <article class="metric">
-              <span>盈余 / 赤字</span>
-              <strong id="fixedBalanceTotal">0</strong>
+              <span>预计盈余 / 赤字</span>
+              <strong id="plannedBalanceTotal">0</strong>
             </article>
             <article class="metric">
-              <span>未付固定支出</span>
-              <strong id="fixedUnpaidTotal">0</strong>
+              <span>已收收入</span>
+              <strong id="actualIncomeTotal">0</strong>
+            </article>
+            <article class="metric">
+              <span>已付支出</span>
+              <strong id="actualExpenseTotal">0</strong>
+            </article>
+            <article class="metric">
+              <span>实际盈余 / 赤字</span>
+              <strong id="actualBalanceTotal">0</strong>
             </article>
           </div>
 
           <section class="panel">
             <div class="panel-heading">
-              <h2>支付渠道小计</h2>
+              <h2>未完成项目</h2>
+            </div>
+            <div id="pendingSummary" class="settings-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>支付渠道未付小计</h2>
             </div>
             <div id="paymentGroupSummary" class="settings-list"></div>
           </section>
@@ -322,16 +337,16 @@
     <script type="importmap">
       {
         "imports": {
-          "#app": "./app.js?v=20260530-clean-1",
-          "#config": "./js/config.js?v=20260530-clean-1",
-          "#elements": "./js/elements.js?v=20260530-clean-1",
-          "#events": "./js/events.js?v=20260530-clean-1",
-          "#jpy": "./js/jpy.js?v=20260530-clean-1",
-          "#render": "./js/render.js?v=20260530-clean-1",
-          "#state": "./js/state.js?v=20260530-clean-1",
-          "#supabase": "./js/supabase.js?v=20260530-clean-1",
-          "#ui": "./js/ui.js?v=20260530-clean-1",
-          "#utils": "./js/utils.js?v=20260530-clean-1"
+          "#app": "./app.js?v=20260530-dashboard-1",
+          "#config": "./js/config.js?v=20260530-dashboard-1",
+          "#elements": "./js/elements.js?v=20260530-dashboard-1",
+          "#events": "./js/events.js?v=20260530-dashboard-1",
+          "#jpy": "./js/jpy.js?v=20260530-dashboard-1",
+          "#render": "./js/render.js?v=20260530-dashboard-1",
+          "#state": "./js/state.js?v=20260530-dashboard-1",
+          "#supabase": "./js/supabase.js?v=20260530-dashboard-1",
+          "#ui": "./js/ui.js?v=20260530-dashboard-1",
+          "#utils": "./js/utils.js?v=20260530-dashboard-1"
         }
       }
     </script>
