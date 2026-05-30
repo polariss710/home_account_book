@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232d6a5f'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='34' fill='white' font-family='Arial, sans-serif'%3E%E5%AE%B6%3C/text%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=20260530-settlement-3-front" />
+    <link rel="stylesheet" href="styles.css?v=20260530-settlement-4" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
@@ -225,6 +225,7 @@
           <section class="panel">
             <div class="panel-heading">
               <h2>固定资金调拨</h2>
+              <div id="fixedTransferStatus" class="settlement-status"></div>
             </div>
             <form id="fixedTransferForm" class="form-grid">
               <label>
@@ -243,15 +244,11 @@
                 <select id="fixedTransferAccountSelect" name="account_id" required></select>
               </label>
               <label>
-                金额
-                <input name="amount" type="number" inputmode="decimal" step="1" required />
-              </label>
-              <label>
                 备注
                 <input name="note" type="text" />
               </label>
               <div class="button-row form-submit">
-                <button class="primary-button" type="submit">保存调拨</button>
+                <button id="fixedTransferSubmitBtn" class="primary-button" type="submit">保存调拨</button>
               </div>
             </form>
           </section>
@@ -295,8 +292,6 @@
                   <option value="expense">零散支出</option>
                   <option value="income">零散收入</option>
                   <option value="transfer">账户间转账</option>
-                  <option value="fixed_out">固定赤字补充</option>
-                  <option value="fixed_in">固定盈余转入</option>
                 </select>
               </label>
               <label>
@@ -399,17 +394,17 @@
     <script type="importmap">
       {
         "imports": {
-          "#app": "./app.js?v=20260530-settlement-3-front",
-          "#config": "./js/config.js?v=20260530-settlement-3-front",
-          "#elements": "./js/elements.js?v=20260530-settlement-3-front",
-          "#events": "./js/events.js?v=20260530-settlement-3-front",
-          "#fixed-transfer": "./js/fixed-transfer.js?v=20260530-settlement-3-front",
-          "#jpy": "./js/jpy.js?v=20260530-settlement-3-front",
-          "#render": "./js/render.js?v=20260530-settlement-3-front",
-          "#state": "./js/state.js?v=20260530-settlement-3-front",
-          "#supabase": "./js/supabase.js?v=20260530-settlement-3-front",
-          "#ui": "./js/ui.js?v=20260530-settlement-3-front",
-          "#utils": "./js/utils.js?v=20260530-settlement-3-front"
+          "#app": "./app.js?v=20260530-settlement-4",
+          "#config": "./js/config.js?v=20260530-settlement-4",
+          "#elements": "./js/elements.js?v=20260530-settlement-4",
+          "#events": "./js/events.js?v=20260530-settlement-4",
+          "#fixed-transfer": "./js/fixed-transfer.js?v=20260530-settlement-4",
+          "#jpy": "./js/jpy.js?v=20260530-settlement-4",
+          "#render": "./js/render.js?v=20260530-settlement-4",
+          "#state": "./js/state.js?v=20260530-settlement-4",
+          "#supabase": "./js/supabase.js?v=20260530-settlement-4",
+          "#ui": "./js/ui.js?v=20260530-settlement-4",
+          "#utils": "./js/utils.js?v=20260530-settlement-4"
         }
       }
     </script>

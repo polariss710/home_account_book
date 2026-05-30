@@ -173,7 +173,6 @@ export async function createFixedTransfer(record) {
     p_transaction_type: record.transaction_type,
     p_account_id: record.account_id,
     p_transacted_at: record.transacted_at,
-    p_amount: record.amount,
     p_note: record.note,
   });
   if (error) {

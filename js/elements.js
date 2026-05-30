@@ -26,6 +26,8 @@ const elementIds = [
   "incomeItemRows",
   "expenseItemRows",
   "fixedTransferForm",
+  "fixedTransferStatus",
+  "fixedTransferSubmitBtn",
   "fixedTransferAccountSelect",
   "templateRows",
   "stoppedTemplateTitle",

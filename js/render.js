@@ -199,6 +199,8 @@ function bindMonthItemControls() {
   });
   document.querySelectorAll("[data-delete-item]").forEach((button) => {
     button.addEventListener("click", async () => {
+      const item = findMonthItem(button.dataset.deleteItem);
+      if (!confirmDeleteMonthItem(item)) return;
       const result = await deleteMonthItem(button.dataset.deleteItem);
       if (!result) return;
       await loadAppData();
@@ -238,6 +240,11 @@ async function saveItemStatus(id, status) {
 function findMonthItem(id) {
   const items = [...(appState.page?.income_items || []), ...(appState.page?.expense_items || [])];
   return items.find((item) => item.id === id);
+}
+
+function confirmDeleteMonthItem(item) {
+  if (!item?.linked_jpy_transaction_id) return true;
+  return window.confirm("删除这笔固定调拨会同步删除日元零散收支中的对应流水，并可能让已付固定支出恢复为未付。确定删除吗？");
 }
 
 function renderTemplates() {

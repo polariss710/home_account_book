@@ -97,21 +97,34 @@ function renderJpyTransactions() {
 }
 
 function transactionRow(item) {
-  const isFixedTransfer = item.transaction_type === "fixed_in" || item.transaction_type === "fixed_out";
-  const copyButton = isFixedTransfer ? "" : `<button class="ghost-button compact-button" data-copy-jpy="${item.id}" type="button">复制</button>`;
+  const fixedTransfer = isFixedTransfer(item);
+  const amountCell = fixedTransfer
+    ? money(item.amount || 0)
+    : `<input class="table-input amount-input" data-jpy-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" />`;
+  const descriptionCell = fixedTransfer
+    ? escapeHtml(item.description || "")
+    : `<input class="table-input" data-jpy-description="${item.id}" value="${escapeHtml(item.description || "")}" />`;
+  const noteCell = fixedTransfer
+    ? escapeHtml(item.note || "")
+    : `<input class="table-input" data-jpy-note="${item.id}" value="${escapeHtml(item.note || "")}" />`;
+  const editButtons = fixedTransfer
+    ? ""
+    : `
+      <button class="ghost-button compact-button" data-edit-jpy="${item.id}" type="button">编辑</button>
+      <button class="ghost-button compact-button" data-copy-jpy="${item.id}" type="button">复制</button>
+    `;
   return `
     <tr>
       <td>${escapeHtml(item.transacted_at)}</td>
       <td>${labelTransactionType(item.transaction_type)}</td>
       <td>${escapeHtml(item.account_name || "-")}</td>
       <td>${escapeHtml(item.transfer_account_name || "-")}</td>
-      <td><input class="table-input amount-input" data-jpy-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" /></td>
-      <td><input class="table-input" data-jpy-description="${item.id}" value="${escapeHtml(item.description || "")}" /></td>
-      <td><input class="table-input" data-jpy-note="${item.id}" value="${escapeHtml(item.note || "")}" /></td>
+      <td>${amountCell}</td>
+      <td>${descriptionCell}</td>
+      <td>${noteCell}</td>
       <td>
         <div class="button-row">
-          <button class="ghost-button compact-button" data-edit-jpy="${item.id}" type="button">编辑</button>
-          ${copyButton}
+          ${editButtons}
           <button class="danger-button compact-button" data-delete-jpy="${item.id}" type="button">删除</button>
         </div>
       </td>
@@ -131,6 +144,8 @@ function bindTransactionControls() {
   });
   document.querySelectorAll("[data-delete-jpy]").forEach((button) => {
     button.addEventListener("click", async () => {
+      const transaction = findJpyTransaction(button.dataset.deleteJpy);
+      if (!confirmDeleteJpyTransaction(transaction)) return;
       const result = await deleteJpyTransaction(button.dataset.deleteJpy);
       if (!result) return;
       await refreshAfterJpyMutation(result.message || "日元流水已删除。", result.reset_expense_status ? "error" : "success");
@@ -192,6 +207,16 @@ function resetJpyTransactionForm() {
 function findJpyTransaction(id) {
   if (!id) return null;
   return (appState.jpyPage?.transactions || []).find((item) => item.id === id) || null;
+}
+
+function isFixedTransfer(transaction) {
+  const type = typeof transaction === "string" ? transaction : transaction?.transaction_type;
+  return type === "fixed_in" || type === "fixed_out";
+}
+
+function confirmDeleteJpyTransaction(transaction) {
+  if (!isFixedTransfer(transaction)) return true;
+  return window.confirm("删除这笔固定调拨会同步删除固定收支中的对应记录，并可能让已付固定支出恢复为未付。确定删除吗？");
 }
 
 async function refreshAfterJpyMutation(message, type) {

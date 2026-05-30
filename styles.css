@@ -36,6 +36,11 @@ button {
   touch-action: manipulation;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 [hidden] {
   display: none !important;
 }
@@ -284,6 +289,30 @@ input[type="month"] {
 .panel-heading h2 {
   margin: 0;
   font-size: 17px;
+}
+
+.settlement-status {
+  display: inline-grid;
+  gap: 2px;
+  min-width: 150px;
+  justify-items: end;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settlement-status strong {
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.settlement-status.deficit strong {
+  color: var(--unpaid);
+}
+
+.settlement-status.surplus strong {
+  color: var(--paid);
 }
 
 .form-grid {
