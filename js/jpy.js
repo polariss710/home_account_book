@@ -1,6 +1,6 @@
 import { els } from "#elements";
 import { appState } from "#state";
-import { loadAppData, deleteJpyTransaction, isCloudReady, saveJpyTransaction } from "#supabase";
+import { loadAppData, deleteJpyTransaction, isCloudReady, saveJpyTransaction, updateJpyTransaction } from "#supabase";
 import { setActionMessage } from "#ui";
 import { emptyRow, escapeHtml, formData, money, toNumber } from "#utils";
 
@@ -15,13 +15,18 @@ export function bindJpyEvents() {
     }
     const form = event.currentTarget;
     const data = formData(form);
-    const transactionType = data.transaction_type;
+    const existingTransaction = findJpyTransaction(appState.editingJpyTransactionId);
+    const transactionType = existingTransaction?.transaction_type || data.transaction_type;
     const transferAccountId = transactionType === "transfer" ? data.transfer_account_id : null;
+    const isFixedTransfer = transactionType === "fixed_in" || transactionType === "fixed_out";
+    if (!appState.editingJpyTransactionId && isFixedTransfer) {
+      setActionMessage("固定调拨请在日元固定收支页面生成。", "error");
+      return;
+    }
     if (transactionType === "transfer" && (!transferAccountId || transferAccountId === data.account_id)) {
       setActionMessage("账户间转账需要选择不同的转入账户。", "error");
       return;
     }
-    const existingTransaction = findJpyTransaction(appState.editingJpyTransactionId);
     const record = {
       id: appState.editingJpyTransactionId || crypto.randomUUID(),
       transaction_type: transactionType,
@@ -33,12 +38,10 @@ export function bindJpyEvents() {
       note: data.note.trim(),
       created_at: existingTransaction?.created_at || new Date().toISOString(),
     };
-    const ok = await saveJpyTransaction(record);
-    if (!ok) return;
-    await loadAppData();
+    const result = appState.editingJpyTransactionId ? await updateJpyTransaction(record) : await saveJpyTransaction(record);
+    if (!result) return;
     resetJpyTransactionForm();
-    setActionMessage("日元流水已保存。", "success");
-    renderJpyPage();
+    await refreshAfterJpyMutation(result.message || "日元流水已保存。", result.reset_expense_status ? "error" : "success");
   });
 }
 
@@ -95,34 +98,21 @@ function renderJpyTransactions() {
 
 function transactionRow(item) {
   const isFixedTransfer = item.transaction_type === "fixed_in" || item.transaction_type === "fixed_out";
-  const amountCell = isFixedTransfer
-    ? money(item.amount || 0)
-    : `<input class="table-input amount-input" data-jpy-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" />`;
-  const descriptionCell = isFixedTransfer
-    ? escapeHtml(item.description || "")
-    : `<input class="table-input" data-jpy-description="${item.id}" value="${escapeHtml(item.description || "")}" />`;
-  const noteCell = isFixedTransfer
-    ? escapeHtml(item.note || "")
-    : `<input class="table-input" data-jpy-note="${item.id}" value="${escapeHtml(item.note || "")}" />`;
-  const actionButtons = isFixedTransfer
-    ? `<button class="danger-button compact-button" data-delete-jpy="${item.id}" type="button">删除</button>`
-    : `
-        <button class="ghost-button compact-button" data-edit-jpy="${item.id}" type="button">编辑</button>
-        <button class="ghost-button compact-button" data-copy-jpy="${item.id}" type="button">复制</button>
-        <button class="danger-button compact-button" data-delete-jpy="${item.id}" type="button">删除</button>
-      `;
+  const copyButton = isFixedTransfer ? "" : `<button class="ghost-button compact-button" data-copy-jpy="${item.id}" type="button">复制</button>`;
   return `
     <tr>
       <td>${escapeHtml(item.transacted_at)}</td>
       <td>${labelTransactionType(item.transaction_type)}</td>
       <td>${escapeHtml(item.account_name || "-")}</td>
       <td>${escapeHtml(item.transfer_account_name || "-")}</td>
-      <td>${amountCell}</td>
-      <td>${descriptionCell}</td>
-      <td>${noteCell}</td>
+      <td><input class="table-input amount-input" data-jpy-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" /></td>
+      <td><input class="table-input" data-jpy-description="${item.id}" value="${escapeHtml(item.description || "")}" /></td>
+      <td><input class="table-input" data-jpy-note="${item.id}" value="${escapeHtml(item.note || "")}" /></td>
       <td>
         <div class="button-row">
-          ${actionButtons}
+          <button class="ghost-button compact-button" data-edit-jpy="${item.id}" type="button">编辑</button>
+          ${copyButton}
+          <button class="danger-button compact-button" data-delete-jpy="${item.id}" type="button">删除</button>
         </div>
       </td>
     </tr>
@@ -141,10 +131,9 @@ function bindTransactionControls() {
   });
   document.querySelectorAll("[data-delete-jpy]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const ok = await deleteJpyTransaction(button.dataset.deleteJpy);
-      if (!ok) return;
-      await loadAppData();
-      renderJpyPage();
+      const result = await deleteJpyTransaction(button.dataset.deleteJpy);
+      if (!result) return;
+      await refreshAfterJpyMutation(result.message || "日元流水已删除。", result.reset_expense_status ? "error" : "success");
     });
   });
   document.querySelectorAll("[data-edit-jpy]").forEach((button) => {
@@ -166,10 +155,9 @@ function bindTransactionControls() {
 async function saveTransactionPatch(id, patch) {
   const transaction = (appState.jpyPage?.transactions || []).find((item) => item.id === id);
   if (!transaction) return;
-  const ok = await saveJpyTransaction({ ...transaction, ...patch });
-  if (!ok) return;
-  await loadAppData();
-  renderJpyPage();
+  const result = await updateJpyTransaction({ ...transaction, ...patch });
+  if (!result) return;
+  await refreshAfterJpyMutation(result.message || "日元流水已更新。", result.reset_expense_status ? "error" : "success");
 }
 
 function setJpyTransactionForm(transaction, mode) {
@@ -182,6 +170,7 @@ function setJpyTransactionForm(transaction, mode) {
   form.elements.amount.value = transaction.amount ?? "";
   form.elements.description.value = transaction.description || "";
   form.elements.note.value = transaction.note || "";
+  form.elements.transaction_type.disabled = mode === "edit";
   els.jpyTransactionFormTitle.textContent = mode === "edit" ? "编辑日元零散流水" : "复制日元零散流水";
   els.jpyTransactionSubmitBtn.textContent = mode === "edit" ? "保存修改" : "保存为新流水";
   els.jpyTransactionCancelBtn.hidden = false;
@@ -191,6 +180,7 @@ function setJpyTransactionForm(transaction, mode) {
 
 function resetJpyTransactionForm() {
   appState.editingJpyTransactionId = null;
+  els.jpyTransactionForm.elements.transaction_type.disabled = false;
   els.jpyTransactionForm.reset();
   els.jpyTransactionFormTitle.textContent = "日元零散流水登录";
   els.jpyTransactionSubmitBtn.textContent = "保存流水";
@@ -202,6 +192,13 @@ function resetJpyTransactionForm() {
 function findJpyTransaction(id) {
   if (!id) return null;
   return (appState.jpyPage?.transactions || []).find((item) => item.id === id) || null;
+}
+
+async function refreshAfterJpyMutation(message, type) {
+  await loadAppData();
+  setActionMessage(message, type);
+  const { render } = await import("#render");
+  render();
 }
 
 function setJpyTransactionDate() {

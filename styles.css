@@ -344,6 +344,12 @@ input[type="month"] {
 
 .app-message.error {
   color: var(--unpaid);
+  background: #fff4f1;
+  border: 1px solid #f3b8ac;
+  border-radius: 8px;
+  padding: 11px 12px;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .table-wrap {

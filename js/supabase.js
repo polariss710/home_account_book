@@ -5,6 +5,14 @@ import { getConfig, setActionMessage } from "#ui";
 let onCloudChange = () => {};
 let pageLoadPromise = null;
 
+function handleRpcResult(data, fallbackMessage) {
+  if (data?.ok === false) {
+    setActionMessage(data.message || fallbackMessage, "error");
+    return null;
+  }
+  return data;
+}
+
 export function setCloudChangeHandler(handler) {
   onCloudChange = handler;
 }
@@ -172,7 +180,7 @@ export async function createFixedTransfer(record) {
     setActionMessage(`固定资金调拨失败：${error.message}`, "error");
     return null;
   }
-  return data;
+  return handleRpcResult(data, "固定资金调拨失败。");
 }
 
 export async function saveAccount(record) {
@@ -212,11 +220,7 @@ export async function updateMonthItemStatus(id, status) {
     setActionMessage(`固定项状态更新失败：${error.message}`, "error");
     return null;
   }
-  if (data?.ok === false) {
-    setActionMessage(data.message || "固定项状态更新失败。", "error");
-    return null;
-  }
-  return data;
+  return handleRpcResult(data, "固定项状态更新失败。");
 }
 
 export async function updateMonthItemsStatus(direction, status) {
@@ -230,11 +234,7 @@ export async function updateMonthItemsStatus(direction, status) {
     setActionMessage(`固定项状态更新失败：${error.message}`, "error");
     return null;
   }
-  if (data?.ok === false) {
-    setActionMessage(data.message || "固定项状态更新失败。", "error");
-    return null;
-  }
-  return data;
+  return handleRpcResult(data, "固定项状态更新失败。");
 }
 
 export async function saveJpyTransaction(record) {
@@ -251,6 +251,23 @@ export async function saveJpyTransaction(record) {
     created_at: record.created_at,
   };
   return upsert("home_jpy_transactions", withUser(allowedRecord));
+}
+
+export async function updateJpyTransaction(record) {
+  const { data, error } = await appState.supabaseClient.rpc("home_update_jpy_transaction", {
+    p_transaction_id: record.id,
+    p_account_id: record.account_id,
+    p_transfer_account_id: record.transfer_account_id,
+    p_transacted_at: record.transacted_at,
+    p_amount: record.amount,
+    p_description: record.description,
+    p_note: record.note,
+  });
+  if (error) {
+    setActionMessage(`日元流水更新失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "日元流水更新失败。");
 }
 
 export async function deactivateTemplate(id) {
@@ -273,7 +290,7 @@ export async function deleteMonthItem(id) {
     setActionMessage(`固定项删除失败：${error.message}`, "error");
     return null;
   }
-  return data;
+  return handleRpcResult(data, "固定项删除失败。");
 }
 
 export async function deleteJpyTransaction(id) {
@@ -284,7 +301,7 @@ export async function deleteJpyTransaction(id) {
     setActionMessage(`日元流水删除失败：${error.message}`, "error");
     return null;
   }
-  return data;
+  return handleRpcResult(data, "日元流水删除失败。");
 }
 
 export async function deleteAccount(id) {

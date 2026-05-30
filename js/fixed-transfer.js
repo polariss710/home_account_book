@@ -30,7 +30,7 @@ export function bindFixedTransferEvents(afterSave) {
 
     await loadAppData();
     resetFixedTransferForm();
-    setActionMessage("固定资金调拨已保存，日元账户余额已更新。", "success");
+    setActionMessage(result.message || "固定资金调拨已保存，日元账户余额已更新。", "success");
     afterSave();
   });
 }

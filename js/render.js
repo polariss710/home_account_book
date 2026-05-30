@@ -133,7 +133,7 @@ function monthItemAmountCell(item) {
 }
 
 function monthItemStatusCell(item) {
-  if (item.linked_jpy_transaction_id) return labelStatus(item.status);
+  if (item.linked_jpy_transaction_id) return labelStatus("paid");
   return statusSelect(item);
 }
 
@@ -199,9 +199,10 @@ function bindMonthItemControls() {
   });
   document.querySelectorAll("[data-delete-item]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const ok = await deleteMonthItem(button.dataset.deleteItem);
-      if (!ok) return;
-      await loadFixedMonthPage();
+      const result = await deleteMonthItem(button.dataset.deleteItem);
+      if (!result) return;
+      await loadAppData();
+      setActionMessage(result.message || "固定项已删除。", result.reset_expense_status ? "error" : "success");
       render();
     });
   });
@@ -211,7 +212,7 @@ function bindMonthItemControls() {
       const result = await updateMonthItemsStatus(direction, status);
       if (!result) return;
       await loadFixedMonthPage();
-      setActionMessage(`固定项状态已更新 ${Number(result.updated_count || 0)} 条。`, "success");
+      setActionMessage(result.message || `固定项状态已更新 ${Number(result.updated_count || 0)} 条。`, "success");
       render();
     });
   });
@@ -230,6 +231,7 @@ async function saveItemStatus(id, status) {
   const result = await updateMonthItemStatus(id, status);
   if (!result) return;
   await loadFixedMonthPage();
+  setActionMessage(result.message || "固定项状态已更新。", "success");
   render();
 }
 
