@@ -10,6 +10,7 @@ import {
   passwordAuth,
   saveAccount,
   createTemplate,
+  syncFixedMonthItems,
   updateTemplate,
   sendMagicLink,
   signOut,
@@ -39,6 +40,17 @@ export function bindEvents() {
     await loadFixedMonthPage();
     const insertedCount = Number(result.inserted_count || 0);
     setActionMessage(generationMessage(result), insertedCount > 0 || result.all_generated ? "success" : "error");
+    render();
+  });
+
+  els.syncMonthBtn.addEventListener("click", async () => {
+    if (!requireCloudReady("请先登录后再同步本月固定项。")) return;
+    const confirmed = window.confirm("同步后，本月固定项的名称、金额、支付渠道、期限、期数会按当前模板更新；状态和备注会保留。继续同步？");
+    if (!confirmed) return;
+    const result = await syncFixedMonthItems();
+    if (!result) return;
+    await loadFixedMonthPage();
+    setActionMessage(`本月固定项已同步 ${Number(result.updated_count || 0)} 条。`, "success");
     render();
   });
 

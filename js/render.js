@@ -72,7 +72,7 @@ function renderMonthItems() {
   const incomeItems = appState.page?.income_items || [];
   const expenseSections = appState.page?.expense_sections || [];
   const expenseItems = appState.page?.expense_items || [];
-  els.incomeItemRows.innerHTML = incomeItems.length ? incomeItems.map(incomeItemRow).join("") : emptyRow(6);
+  els.incomeItemRows.innerHTML = incomeItems.length ? incomeItems.map(incomeItemRow).join("") : emptyRow(7);
   els.expenseItemRows.innerHTML = renderExpenseRows(expenseSections, expenseItems);
   bindMonthItemControls();
 }
@@ -88,6 +88,7 @@ function incomeItemRow(item) {
     <tr>
       <td>${escapeHtml(item.name)}</td>
       <td><input class="table-input amount-input" data-item-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" /></td>
+      <td>${escapeHtml(item.due_date || "-")}</td>
       <td>${statusSelect(item)}</td>
       <td>${termLabel(item)}</td>
       <td><input class="table-input" data-item-note="${item.id}" value="${escapeHtml(item.note || "")}" /></td>

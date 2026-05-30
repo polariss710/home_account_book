@@ -14,6 +14,7 @@ export function switchView(viewId) {
     view.classList.toggle("is-active", view.id === viewId);
   });
   els.generateMonthBtn.hidden = viewId !== "fixed";
+  els.syncMonthBtn.hidden = viewId !== "fixed";
 }
 
 export function renderShell() {

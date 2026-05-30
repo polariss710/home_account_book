@@ -146,6 +146,18 @@ export async function generateFixedMonth() {
   return data;
 }
 
+export async function syncFixedMonthItems() {
+  const { data, error } = await appState.supabaseClient.rpc("home_sync_fixed_month_items", {
+    p_month_key: appState.activeMonth,
+    p_currency: "JPY",
+  });
+  if (error) {
+    setActionMessage(`同步本月固定项失败：${error.message}`, "error");
+    return null;
+  }
+  return data;
+}
+
 export async function saveAccount(record) {
   return upsert("home_accounts", withUser({ ...record, currency: "JPY" }));
 }

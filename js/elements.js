@@ -8,6 +8,7 @@ const elementIds = [
   "appMessage",
   "monthPicker",
   "generateMonthBtn",
+  "syncMonthBtn",
   "refreshBtn",
   "plannedIncomeTotal",
   "plannedExpenseTotal",
