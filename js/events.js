@@ -9,18 +9,24 @@ import {
   loadFixedMonthPage,
   passwordAuth,
   saveAccount,
+  savePaymentChannel,
   createTemplate,
   syncFixedMonthItems,
+  updatePaymentChannel,
   updateTemplate,
   sendMagicLink,
   signOut,
 } from "#supabase";
-import { emptyToNull, formData, toNumber } from "#utils";
+import { formData, toNumber } from "#utils";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view));
   });
+
+  els.templateForm.elements.fixed_type.addEventListener("change", updateFixedTypeControls);
+  els.templatePaymentGroupSelect.addEventListener("change", applySelectedPaymentChannelDueDay);
+  updateFixedTypeControls();
 
   els.monthPicker.addEventListener("change", async () => {
     appState.activeMonth = els.monthPicker.value;
@@ -61,6 +67,7 @@ export function bindEvents() {
     const data = formData(form);
     const existingTemplate = findFixedTemplate(appState.editingTemplateId);
     const templateId = appState.editingTemplateId;
+    const isShortTerm = data.fixed_type === "short_term";
     const record = {
       direction: data.direction,
       name: data.name.trim(),
@@ -68,8 +75,8 @@ export function bindEvents() {
       default_amount: toNumber(data.default_amount),
       payment_group: data.payment_group.trim() || null,
       due_day: data.due_day ? Number(data.due_day) : null,
-      start_month: data.fixed_type === "short_term" ? data.start_month || appState.activeMonth : emptyToNull(data.start_month),
-      total_terms: data.total_terms ? Number(data.total_terms) : null,
+      start_month: isShortTerm ? data.start_month || appState.activeMonth : null,
+      total_terms: isShortTerm && data.total_terms ? Number(data.total_terms) : null,
       sort_order: existingTemplate?.sort_order ?? (appState.page?.templates || []).length,
     };
     const ok = templateId
@@ -109,6 +116,35 @@ export function bindEvents() {
     await loadAppData();
     form.reset();
     render();
+  });
+
+  els.paymentChannelForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!requireCloudReady("请先登录后再保存支付渠道。")) return;
+    const form = event.currentTarget;
+    const data = formData(form);
+    const channelId = appState.editingPaymentChannelId;
+    const record = {
+      name: data.name.trim(),
+      default_due_day: data.default_due_day ? Number(data.default_due_day) : null,
+    };
+    const ok = channelId
+      ? await updatePaymentChannel(channelId, record)
+      : await savePaymentChannel({
+          ...record,
+          sort_order: (appState.page?.payment_channels || []).length,
+          id: crypto.randomUUID(),
+          is_active: true,
+          created_at: new Date().toISOString(),
+        });
+    if (!ok) return;
+    await loadFixedMonthPage();
+    resetPaymentChannelForm();
+    render();
+  });
+
+  els.paymentChannelCancelBtn.addEventListener("click", () => {
+    resetPaymentChannelForm();
   });
 
   els.authForm.addEventListener("submit", async (event) => {
@@ -167,4 +203,27 @@ function resetTemplateForm() {
   els.templateFormTitle.textContent = "新增固定模板";
   els.templateSubmitBtn.textContent = "保存模板";
   els.templateCancelBtn.hidden = true;
+  updateFixedTypeControls();
+}
+
+function resetPaymentChannelForm() {
+  appState.editingPaymentChannelId = null;
+  els.paymentChannelForm.reset();
+  els.paymentChannelSubmitBtn.textContent = "添加";
+  els.paymentChannelCancelBtn.hidden = true;
+}
+
+function updateFixedTypeControls() {
+  const isShortTerm = els.templateForm.elements.fixed_type.value === "short_term";
+  els.templateForm.elements.start_month.disabled = !isShortTerm;
+  els.templateForm.elements.total_terms.disabled = !isShortTerm;
+  if (!isShortTerm) {
+    els.templateForm.elements.start_month.value = "";
+    els.templateForm.elements.total_terms.value = "";
+  }
+}
+
+function applySelectedPaymentChannelDueDay() {
+  const dueDay = els.templatePaymentGroupSelect.selectedOptions[0]?.dataset.defaultDueDay || "";
+  els.templateForm.elements.due_day.value = dueDay;
 }

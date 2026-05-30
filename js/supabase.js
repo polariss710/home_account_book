@@ -170,6 +170,14 @@ export async function updateTemplate(id, patch) {
   return updateById("home_fixed_templates", id, patch);
 }
 
+export async function savePaymentChannel(record) {
+  return upsert("home_payment_channels", withUser({ ...record, currency: "JPY" }));
+}
+
+export async function updatePaymentChannel(id, patch) {
+  return updateById("home_payment_channels", id, patch);
+}
+
 export async function saveMonthItem(record) {
   return upsert("home_fixed_month_items", withUser(record));
 }
@@ -196,6 +204,10 @@ export async function deactivateTemplate(id) {
 
 export async function reactivateTemplate(id) {
   return updateById("home_fixed_templates", id, { is_active: true });
+}
+
+export async function deactivatePaymentChannel(id) {
+  return updateById("home_payment_channels", id, { is_active: false });
 }
 
 export async function deleteMonthItem(id) {

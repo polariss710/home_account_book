@@ -6,6 +6,7 @@ export const appState = {
   jpyPage: null,
   editingJpyTransactionId: null,
   editingTemplateId: null,
+  editingPaymentChannelId: null,
   stoppedTemplatesExpanded: false,
   supabaseClient: null,
   currentUser: null,

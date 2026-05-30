@@ -3,7 +3,7 @@ import { renderJpyPage } from "#jpy";
 import { appState, findFixedTemplate, getFixedTemplateTermStatus } from "#state";
 import { renderShell, setActionMessage } from "#ui";
 import { emptyRow, escapeHtml, money } from "#utils";
-import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate } from "#supabase";
+import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate, deactivatePaymentChannel } from "#supabase";
 
 export function render() {
   renderShell();
@@ -11,6 +11,8 @@ export function render() {
   renderMonthItems();
   renderTemplates();
   renderAccounts();
+  renderTemplatePaymentGroupOptions();
+  renderPaymentChannels();
   renderJpyPage();
 }
 
@@ -236,6 +238,64 @@ function renderTemplates() {
   });
 }
 
+function renderTemplatePaymentGroupOptions(selectedValue = els.templatePaymentGroupSelect.value) {
+  const channels = appState.page?.payment_channels || [];
+  const hasSelectedValue = selectedValue && channels.some((channel) => channel.name === selectedValue);
+  const channelOptions = channels
+    .map(
+      (channel) =>
+        `<option value="${escapeHtml(channel.name)}" data-default-due-day="${channel.default_due_day || ""}">${escapeHtml(channel.name)}</option>`,
+    )
+    .join("");
+  const selectedOption = selectedValue && !hasSelectedValue ? `<option value="${escapeHtml(selectedValue)}">${escapeHtml(selectedValue)}</option>` : "";
+  els.templatePaymentGroupSelect.innerHTML = `<option value="">未分组</option>${selectedOption}${channelOptions}`;
+  els.templatePaymentGroupSelect.value = selectedValue || "";
+}
+
+function renderPaymentChannels() {
+  const channels = appState.page?.payment_channels || [];
+  els.paymentChannelRows.innerHTML = channels.length
+    ? channels
+        .map(
+          (item) => `
+            <div class="settings-item">
+              <div>
+                <strong>${escapeHtml(item.name)}</strong>
+                <span>默认支付日 ${item.default_due_day || "-"}</span>
+              </div>
+              <div class="button-row">
+                <button class="ghost-button compact-button" data-edit-payment-channel="${item.id}" type="button">编辑</button>
+                <button class="danger-button compact-button" data-disable-payment-channel="${item.id}" type="button">停用</button>
+              </div>
+            </div>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state">暂无日元支付渠道</div>`;
+
+  document.querySelectorAll("[data-edit-payment-channel]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const channel = findPaymentChannel(button.dataset.editPaymentChannel);
+      if (!channel) return;
+      setPaymentChannelForm(channel);
+    });
+  });
+
+  document.querySelectorAll("[data-disable-payment-channel]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const channel = findPaymentChannel(button.dataset.disablePaymentChannel);
+      if (!channel) return;
+      const confirmed = window.confirm(`停用支付渠道「${channel.name}」？已有模板和历史固定项会保留当前文字。`);
+      if (!confirmed) return;
+      const ok = await deactivatePaymentChannel(channel.id);
+      if (!ok) return;
+      await loadFixedMonthPage();
+      setActionMessage("支付渠道已停用。", "success");
+      render();
+    });
+  });
+}
+
 function templateRow(item, status) {
   const statusLabel = status === "stopped" ? "停止生成" : "使用中";
   const periodLabel = templatePeriodLabel(item);
@@ -265,6 +325,7 @@ function templatePeriodLabel(item) {
 function setTemplateForm(template, mode) {
   const form = els.templateForm;
   appState.editingTemplateId = mode === "edit" ? template.id : null;
+  renderTemplatePaymentGroupOptions(template.payment_group || "");
   form.elements.name.value = template.name || "";
   form.elements.direction.value = template.direction || "expense";
   form.elements.fixed_type.value = template.fixed_type || "long_term";
@@ -276,8 +337,24 @@ function setTemplateForm(template, mode) {
   els.templateFormTitle.textContent = mode === "edit" ? "编辑固定模板" : "复制固定模板";
   els.templateSubmitBtn.textContent = mode === "edit" ? "保存修改" : "保存为新模板";
   els.templateCancelBtn.hidden = false;
+  form.elements.fixed_type.dispatchEvent(new Event("change"));
   form.elements.name.focus();
   setActionMessage(mode === "edit" ? "正在编辑固定模板。" : "已复制到表单，保存后会成为新模板。", "success");
+}
+
+function setPaymentChannelForm(channel) {
+  const form = els.paymentChannelForm;
+  appState.editingPaymentChannelId = channel.id;
+  form.elements.name.value = channel.name || "";
+  form.elements.default_due_day.value = channel.default_due_day || "";
+  els.paymentChannelSubmitBtn.textContent = "保存修改";
+  els.paymentChannelCancelBtn.hidden = false;
+  form.elements.name.focus();
+}
+
+function findPaymentChannel(id) {
+  if (!id) return null;
+  return (appState.page?.payment_channels || []).find((item) => item.id === id) || null;
 }
 
 function renderAccounts() {

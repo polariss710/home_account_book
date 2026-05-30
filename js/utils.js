@@ -15,10 +15,6 @@ export function money(value) {
   return new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 0 }).format(Math.round(toNumber(value)));
 }
 
-export function emptyToNull(value) {
-  return value === "" ? null : value;
-}
-
 export function emptyRow(colspan) {
   return `<tr><td colspan="${colspan}" class="empty-state">暂无数据</td></tr>`;
 }
