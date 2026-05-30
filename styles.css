@@ -490,6 +490,11 @@ th {
   color: var(--unpaid);
 }
 
+.badge.settled {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
 .settings-list {
   display: grid;
   gap: 10px;

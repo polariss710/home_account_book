@@ -92,7 +92,7 @@ export async function passwordAuth(mode, email, password) {
   setActionMessage("注册成功，请按邮箱确认后再登录。", "success");
 }
 
-export function queuePageLoad() {
+function queuePageLoad() {
   if (!isCloudReady()) return Promise.resolve();
   if (!pageLoadPromise) {
     pageLoadPromise = loadAppData()
@@ -125,7 +125,7 @@ export async function loadFixedMonthPage() {
   appState.page = data;
 }
 
-export async function loadJpyAccountPage() {
+async function loadJpyAccountPage() {
   if (!isCloudReady()) return;
   const { data, error } = await appState.supabaseClient.rpc("home_get_jpy_account_page", {
     p_month_key: appState.activeMonth,
@@ -138,7 +138,7 @@ export async function loadJpyAccountPage() {
   appState.jpyPage = data;
 }
 
-export async function loadCnyAccountPage() {
+async function loadCnyAccountPage() {
   if (!isCloudReady()) return;
   const { data, error } = await appState.supabaseClient.rpc("home_get_cny_account_page", {
     p_month_key: appState.activeMonth,
@@ -151,7 +151,7 @@ export async function loadCnyAccountPage() {
   appState.cnyPage = data;
 }
 
-export async function loadCnyFixedPage() {
+async function loadCnyFixedPage() {
   if (!isCloudReady()) return;
   const { data, error } = await appState.supabaseClient.rpc("home_get_fixed_month_page", {
     p_month_key: appState.activeMonth,
