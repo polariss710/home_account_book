@@ -70,9 +70,9 @@ function renderPendingSummary(metrics) {
 
 function renderMonthItems() {
   const incomeItems = appState.page?.income_items || [];
-  const expenseItems = appState.page?.expense_items || [];
+  const expenseSections = appState.page?.expense_sections || [];
   els.incomeItemRows.innerHTML = incomeItems.length ? incomeItems.map(incomeItemRow).join("") : emptyRow(6);
-  els.expenseItemRows.innerHTML = expenseItems.length ? expenseItems.map(expenseItemRow).join("") : emptyRow(8);
+  els.expenseItemRows.innerHTML = expenseSections.length ? expenseSections.map(expenseSectionRows).join("") : emptyRow(8);
   bindMonthItemControls();
 }
 
@@ -101,6 +101,20 @@ function expenseItemRow(item) {
       <td><input class="table-input" data-item-note="${item.id}" value="${escapeHtml(item.note || "")}" /></td>
       <td><button class="danger-button compact-button" data-delete-item="${item.id}" type="button">删除</button></td>
     </tr>
+  `;
+}
+
+function expenseSectionRows(section) {
+  return `
+    <tr class="fixed-expense-section">
+      <td colspan="8">
+        <div>
+          <strong>${escapeHtml(section.payment_group || "未分组")}</strong>
+          <span>期限 ${escapeHtml(section.first_due_date || "-")} · 合计 ${money(section.total || 0)} · 已付 ${money(section.paid || 0)} · 未付 ${money(section.unpaid || 0)}</span>
+        </div>
+      </td>
+    </tr>
+    ${(section.items || []).map(expenseItemRow).join("")}
   `;
 }
 
