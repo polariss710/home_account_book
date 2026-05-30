@@ -349,6 +349,32 @@ export async function updateCnyTransaction(record) {
   return handleRpcResult(data, "人民币流水更新失败。");
 }
 
+export async function updateCnyFixedItem(record) {
+  const { data, error } = await appState.supabaseClient.rpc("home_update_cny_fixed_item", {
+    p_item_id: record.id,
+    p_amount: record.amount,
+    p_account_id: record.account_id,
+    p_note: record.note,
+  });
+  if (error) {
+    setActionMessage(`人民币固定项更新失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "人民币固定项更新失败。");
+}
+
+export async function updateCnyFixedItemStatus(id, status) {
+  const { data, error } = await appState.supabaseClient.rpc("home_update_cny_fixed_item_status", {
+    p_item_id: id,
+    p_status: status,
+  });
+  if (error) {
+    setActionMessage(`人民币固定项状态更新失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "人民币固定项状态更新失败。");
+}
+
 export async function deactivateTemplate(id) {
   return updateById("home_fixed_templates", id, { is_active: false });
 }
@@ -392,6 +418,17 @@ export async function deleteCnyTransaction(id) {
     return null;
   }
   return handleRpcResult(data, "人民币流水删除失败。");
+}
+
+export async function deleteCnyFixedItem(id) {
+  const { data, error } = await appState.supabaseClient.rpc("home_delete_cny_fixed_item", {
+    p_item_id: id,
+  });
+  if (error) {
+    setActionMessage(`人民币固定项删除失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "人民币固定项删除失败。");
 }
 
 export async function deleteAccount(id) {

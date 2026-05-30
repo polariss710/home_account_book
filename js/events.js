@@ -131,7 +131,7 @@ export function bindEvents() {
 
   els.paymentChannelForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!requireCloudReady("请先登录后再保存支付渠道。")) return;
+    if (!requireCloudReady("请先登录后再保存日元固定收支账户。")) return;
     const form = event.currentTarget;
     const data = formData(form);
     const channelId = appState.editingPaymentChannelId;

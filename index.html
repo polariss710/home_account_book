@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232d6a5f'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='34' fill='white' font-family='Arial, sans-serif'%3E%E5%AE%B6%3C/text%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=20260531-cny-2" />
+    <link rel="stylesheet" href="styles.css?v=20260531-cny-4" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
@@ -256,9 +256,10 @@
 
           <section class="panel">
             <div class="panel-heading">
-              <h2>使用中的固定模板</h2>
+              <h2 id="activeTemplateTitle">使用中的固定模板（0）</h2>
+              <button id="toggleActiveTemplatesBtn" class="ghost-button compact-button" type="button">展开</button>
             </div>
-            <div id="templateRows" class="settings-list"></div>
+            <div id="templateRows" class="settings-list" hidden></div>
           </section>
 
           <section class="panel">
@@ -345,22 +346,6 @@
             </div>
           </section>
 
-          <section class="panel">
-            <div class="panel-heading">
-              <h2>日元账户管理</h2>
-            </div>
-            <form id="accountForm" class="inline-form">
-              <input name="name" type="text" placeholder="现金 / 银行卡" required />
-              <select name="account_type" required>
-                <option value="cash">现金</option>
-                <option value="bank">银行卡</option>
-              </select>
-              <input name="opening_balance" type="number" step="1" placeholder="期初余额" required />
-              <button id="accountSubmitBtn" class="primary-button" type="submit">添加</button>
-              <button id="accountCancelBtn" class="ghost-button" type="button" hidden>取消编辑</button>
-            </form>
-            <div id="accountRows" class="settings-list"></div>
-          </section>
         </section>
 
         <section id="cny" class="view">
@@ -373,38 +358,6 @@
 
           <section class="panel">
             <div class="panel-heading">
-              <h2 id="cnyFixedTemplateTitle">人民币固定收支设置</h2>
-              <button id="generateCnyFixedMonthBtn" class="ghost-button compact-button" type="button">生成本月固定项</button>
-            </div>
-            <form id="cnyFixedTemplateForm" class="form-grid">
-              <label>
-                名称
-                <input name="name" type="text" placeholder="房贷 / 社保 / 工资" required />
-              </label>
-              <label>
-                收支
-                <select name="direction" required>
-                  <option value="expense">支出</option>
-                  <option value="income">收入</option>
-                </select>
-              </label>
-              <label>
-                默认金额
-                <input name="default_amount" type="number" inputmode="decimal" step="0.01" required />
-              </label>
-              <label>
-                支付日
-                <input name="due_day" type="number" min="1" max="31" placeholder="可选" />
-              </label>
-              <div class="button-row form-submit">
-                <button id="cnyFixedTemplateSubmitBtn" class="primary-button" type="submit">保存固定项</button>
-                <button id="cnyFixedTemplateCancelBtn" class="ghost-button" type="button" hidden>取消编辑</button>
-              </div>
-            </form>
-          </section>
-
-          <section class="panel">
-            <div class="panel-heading">
               <h2>本月人民币固定收入</h2>
             </div>
             <div class="table-wrap">
@@ -413,6 +366,7 @@
                   <tr>
                     <th>项目</th>
                     <th>金额</th>
+                    <th>账户</th>
                     <th>期限</th>
                     <th>状态</th>
                     <th>备注</th>
@@ -434,6 +388,7 @@
                   <tr>
                     <th>项目</th>
                     <th>金额</th>
+                    <th>账户</th>
                     <th>期限</th>
                     <th>状态</th>
                     <th>备注</th>
@@ -447,9 +402,54 @@
 
           <section class="panel">
             <div class="panel-heading">
-              <h2>人民币固定模板</h2>
+              <h2 id="cnyFixedTemplateTitle">人民币固定收支设置</h2>
+              <button id="generateCnyFixedMonthBtn" class="ghost-button compact-button" type="button">生成本月固定项</button>
             </div>
-            <div id="cnyFixedTemplateRows" class="settings-list"></div>
+            <form id="cnyFixedTemplateForm" class="form-grid">
+              <label>
+                名称
+                <input name="name" type="text" placeholder="房贷 / 社保 / 工资" required />
+              </label>
+              <label>
+                收支
+                <select name="direction" required>
+                  <option value="expense">支出</option>
+                  <option value="income">收入</option>
+                </select>
+              </label>
+              <label>
+                账户
+                <select id="cnyFixedTemplateAccountSelect" name="default_account_id" required></select>
+              </label>
+              <label>
+                默认金额
+                <input name="default_amount" type="number" inputmode="decimal" step="0.01" required />
+              </label>
+              <label>
+                支付日
+                <input name="due_day" type="number" min="1" max="31" placeholder="可选" />
+              </label>
+              <div class="button-row form-submit">
+                <button id="cnyFixedTemplateSubmitBtn" class="primary-button" type="submit">保存固定项</button>
+                <button id="cnyFixedTemplateCancelBtn" class="ghost-button" type="button" hidden>取消编辑</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2 id="cnyFixedTemplateListTitle">人民币固定模板（0）</h2>
+              <button id="toggleCnyFixedTemplatesBtn" class="ghost-button compact-button" type="button">展开</button>
+            </div>
+            <div id="cnyFixedTemplateRows" class="settings-list" hidden></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2 id="cnyStoppedTemplateTitle">停止生成的固定模板（0）</h2>
+              <button id="toggleCnyStoppedTemplatesBtn" class="ghost-button compact-button" type="button">展开</button>
+            </div>
+            <div id="cnyStoppedTemplateRows" class="settings-list" hidden></div>
           </section>
 
           <section class="panel">
@@ -546,9 +546,42 @@
             </div>
           </section>
 
+        </section>
+
+        <section id="settings" class="view">
           <section class="panel">
             <div class="panel-heading">
-              <h2>人民币账户管理</h2>
+              <h2>日元固定收支账户</h2>
+            </div>
+            <form id="paymentChannelForm" class="inline-form">
+              <input name="name" type="text" placeholder="乐天卡 / 邮局卡 / 现金支付" required />
+              <input name="default_due_day" type="number" min="1" max="31" placeholder="默认支付日" />
+              <button id="paymentChannelSubmitBtn" class="primary-button" type="submit">添加</button>
+              <button id="paymentChannelCancelBtn" class="ghost-button" type="button" hidden>取消编辑</button>
+            </form>
+            <div id="paymentChannelRows" class="settings-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>日元零散收支账户</h2>
+            </div>
+            <form id="accountForm" class="inline-form">
+              <input name="name" type="text" placeholder="现金 / 银行卡" required />
+              <select name="account_type" required>
+                <option value="cash">现金</option>
+                <option value="bank">银行卡</option>
+              </select>
+              <input name="opening_balance" type="number" step="1" placeholder="期初余额" required />
+              <button id="accountSubmitBtn" class="primary-button" type="submit">添加</button>
+              <button id="accountCancelBtn" class="ghost-button" type="button" hidden>取消编辑</button>
+            </form>
+            <div id="accountRows" class="settings-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>人民币收支账户</h2>
             </div>
             <form id="cnyAccountForm" class="inline-form">
               <input name="name" type="text" placeholder="余额宝 / 余利宝 / 银行卡" required />
@@ -563,21 +596,6 @@
               <button id="cnyAccountCancelBtn" class="ghost-button" type="button" hidden>取消编辑</button>
             </form>
             <div id="cnyAccountRows" class="settings-list"></div>
-          </section>
-        </section>
-
-        <section id="settings" class="view">
-          <section class="panel">
-            <div class="panel-heading">
-              <h2>日元支付渠道</h2>
-            </div>
-            <form id="paymentChannelForm" class="inline-form">
-              <input name="name" type="text" placeholder="乐天卡 / 邮局卡 / 现金支付" required />
-              <input name="default_due_day" type="number" min="1" max="31" placeholder="默认支付日" />
-              <button id="paymentChannelSubmitBtn" class="primary-button" type="submit">添加</button>
-              <button id="paymentChannelCancelBtn" class="ghost-button" type="button" hidden>取消编辑</button>
-            </form>
-            <div id="paymentChannelRows" class="settings-list"></div>
           </section>
 
           <section class="panel">
@@ -598,18 +616,18 @@
     <script type="importmap">
       {
         "imports": {
-          "#app": "./app.js?v=20260531-cny-2",
-          "#cny": "./js/cny.js?v=20260531-cny-2",
-          "#config": "./js/config.js?v=20260531-cny-2",
-          "#elements": "./js/elements.js?v=20260531-cny-2",
-          "#events": "./js/events.js?v=20260531-cny-2",
-          "#fixed-transfer": "./js/fixed-transfer.js?v=20260531-cny-2",
-          "#jpy": "./js/jpy.js?v=20260531-cny-2",
-          "#render": "./js/render.js?v=20260531-cny-2",
-          "#state": "./js/state.js?v=20260531-cny-2",
-          "#supabase": "./js/supabase.js?v=20260531-cny-2",
-          "#ui": "./js/ui.js?v=20260531-cny-2",
-          "#utils": "./js/utils.js?v=20260531-cny-2"
+          "#app": "./app.js?v=20260531-cny-4",
+          "#cny": "./js/cny.js?v=20260531-cny-4",
+          "#config": "./js/config.js?v=20260531-cny-4",
+          "#elements": "./js/elements.js?v=20260531-cny-4",
+          "#events": "./js/events.js?v=20260531-cny-4",
+          "#fixed-transfer": "./js/fixed-transfer.js?v=20260531-cny-4",
+          "#jpy": "./js/jpy.js?v=20260531-cny-4",
+          "#render": "./js/render.js?v=20260531-cny-4",
+          "#state": "./js/state.js?v=20260531-cny-4",
+          "#supabase": "./js/supabase.js?v=20260531-cny-4",
+          "#ui": "./js/ui.js?v=20260531-cny-4",
+          "#utils": "./js/utils.js?v=20260531-cny-4"
         }
       }
     </script>

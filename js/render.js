@@ -252,15 +252,24 @@ function confirmDeleteMonthItem(item) {
 function renderTemplates() {
   const templates = appState.page?.templates || [];
   const stoppedTemplates = appState.page?.stopped_templates || [];
-  els.templateRows.innerHTML = templates.length
-    ? templates.map((item) => templateRow(item, "active")).join("")
-    : `<div class="empty-state">暂无固定模板</div>`;
+  els.activeTemplateTitle.textContent = `使用中的固定模板（${templates.length}）`;
+  els.templateRows.hidden = !appState.jpyTemplatesExpanded;
+  els.toggleActiveTemplatesBtn.textContent = appState.jpyTemplatesExpanded ? "收起" : "展开";
+  els.templateRows.innerHTML = appState.jpyTemplatesExpanded
+    ? templates.map((item) => templateRow(item, "active")).join("") || `<div class="empty-state">暂无固定模板</div>`
+    : "";
+
   els.stoppedTemplateTitle.textContent = `停止生成的固定模板（${stoppedTemplates.length}）`;
   els.stoppedTemplateRows.hidden = !appState.stoppedTemplatesExpanded;
   els.toggleStoppedTemplatesBtn.textContent = appState.stoppedTemplatesExpanded ? "收起" : "展开";
   els.stoppedTemplateRows.innerHTML = appState.stoppedTemplatesExpanded
     ? stoppedTemplates.map((item) => templateRow(item, "stopped")).join("") || `<div class="empty-state">暂无停止生成的模板</div>`
     : "";
+
+  els.toggleActiveTemplatesBtn.onclick = () => {
+    appState.jpyTemplatesExpanded = !appState.jpyTemplatesExpanded;
+    renderTemplates();
+  };
 
   els.toggleStoppedTemplatesBtn.onclick = () => {
     appState.stoppedTemplatesExpanded = !appState.stoppedTemplatesExpanded;
@@ -343,7 +352,7 @@ function renderPaymentChannels() {
           `,
         )
         .join("")
-    : `<div class="empty-state">暂无日元支付渠道</div>`;
+    : `<div class="empty-state">暂无日元固定收支账户</div>`;
 
   document.querySelectorAll("[data-edit-payment-channel]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -357,12 +366,12 @@ function renderPaymentChannels() {
     button.addEventListener("click", async () => {
       const channel = findPaymentChannel(button.dataset.disablePaymentChannel);
       if (!channel) return;
-      const confirmed = window.confirm(`停用支付渠道「${channel.name}」？已有模板和历史固定项会保留当前文字。`);
+      const confirmed = window.confirm(`停用日元固定收支账户「${channel.name}」？已有模板和历史固定项会保留当前文字。`);
       if (!confirmed) return;
       const ok = await deactivatePaymentChannel(channel.id);
       if (!ok) return;
       await loadFixedMonthPage();
-      setActionMessage("支付渠道已停用。", "success");
+      setActionMessage("日元固定收支账户已停用。", "success");
       render();
     });
   });

@@ -19,7 +19,10 @@ export const appState = {
   },
   editingTemplateId: null,
   editingPaymentChannelId: null,
+  jpyTemplatesExpanded: false,
   stoppedTemplatesExpanded: false,
+  cnyFixedTemplatesExpanded: false,
+  cnyStoppedTemplatesExpanded: false,
   supabaseClient: null,
   currentUser: null,
 };

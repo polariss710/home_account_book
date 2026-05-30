@@ -4,17 +4,18 @@ import {
   createCnyTemplate,
   deactivateTemplate,
   deleteAccount,
+  deleteCnyFixedItem,
   deleteCnyTransaction,
-  deleteMonthItem,
   generateCnyFixedMonth,
   isCloudReady,
   loadAppData,
+  reactivateTemplate,
   saveCnyAccount,
   saveCnyTransaction,
-  saveMonthItem,
   updateAccount,
+  updateCnyFixedItem,
+  updateCnyFixedItemStatus,
   updateCnyTransaction,
-  updateMonthItemStatus,
   updateTemplate,
 } from "#supabase";
 import { setActionMessage } from "#ui";
@@ -125,6 +126,7 @@ async function saveFixedTemplate(event) {
     name: data.name.trim(),
     fixed_type: "long_term",
     default_amount: toNumber(data.default_amount),
+    default_account_id: data.default_account_id,
     payment_group: null,
     due_day: data.due_day ? Number(data.due_day) : null,
     start_month: null,
@@ -180,6 +182,7 @@ function renderAccountOptions() {
   const accounts = appState.cnyPage?.accounts || [];
   const options = accounts.map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`).join("");
   els.cnyAccountSelect.innerHTML = options || `<option value="">请先新增账户</option>`;
+  els.cnyFixedTemplateAccountSelect.innerHTML = options || `<option value="">请先新增账户</option>`;
   els.cnyTransferAccountSelect.innerHTML = `<option value="">不使用</option>${options}`;
   els.cnyFilterAccountSelect.innerHTML = `<option value="">全部账户</option>${options}`;
   updateTransferAccountControl();
@@ -196,8 +199,8 @@ function renderFilterControls() {
 function renderFixedItems() {
   const incomeItems = appState.cnyFixedPage?.income_items || [];
   const expenseItems = appState.cnyFixedPage?.expense_items || [];
-  els.cnyFixedIncomeRows.innerHTML = incomeItems.length ? incomeItems.map(fixedItemRow).join("") : emptyRow(6);
-  els.cnyFixedExpenseRows.innerHTML = expenseItems.length ? expenseItems.map(fixedItemRow).join("") : emptyRow(6);
+  els.cnyFixedIncomeRows.innerHTML = incomeItems.length ? incomeItems.map(fixedItemRow).join("") : emptyRow(7);
+  els.cnyFixedExpenseRows.innerHTML = expenseItems.length ? expenseItems.map(fixedItemRow).join("") : emptyRow(7);
   bindFixedItemControls();
 }
 
@@ -206,6 +209,7 @@ function fixedItemRow(item) {
     <tr>
       <td>${escapeHtml(item.name)}</td>
       <td><input class="table-input amount-input" data-cny-fixed-amount="${item.id}" type="number" step="0.01" value="${Number(item.amount || 0)}" /></td>
+      <td><select class="table-input" data-cny-fixed-account="${item.id}">${accountOptions(item.account_id)}</select></td>
       <td>${escapeHtml(item.due_date || "-")}</td>
       <td>${fixedStatusSelect(item)}</td>
       <td><input class="table-input" data-cny-fixed-note="${item.id}" value="${escapeHtml(item.note || "")}" /></td>
@@ -224,9 +228,20 @@ function fixedStatusSelect(item) {
   `;
 }
 
+function accountOptions(selectedId) {
+  const accounts = appState.cnyPage?.accounts || [];
+  const options = accounts
+    .map((account) => `<option value="${account.id}"${account.id === selectedId ? " selected" : ""}>${escapeHtml(account.name)}</option>`)
+    .join("");
+  return options || `<option value="">请先新增账户</option>`;
+}
+
 function bindFixedItemControls() {
   document.querySelectorAll("[data-cny-fixed-amount]").forEach((input) => {
     input.addEventListener("change", () => saveFixedItemPatch(input.dataset.cnyFixedAmount, { amount: Number(input.value || 0) }));
+  });
+  document.querySelectorAll("[data-cny-fixed-account]").forEach((select) => {
+    select.addEventListener("change", () => saveFixedItemPatch(select.dataset.cnyFixedAccount, { account_id: select.value }));
   });
   document.querySelectorAll("[data-cny-fixed-status]").forEach((select) => {
     select.addEventListener("change", () => saveFixedItemStatus(select.dataset.cnyFixedStatus, select.value));
@@ -236,7 +251,7 @@ function bindFixedItemControls() {
   });
   document.querySelectorAll("[data-delete-cny-fixed]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const result = await deleteMonthItem(button.dataset.deleteCnyFixed);
+      const result = await deleteCnyFixedItem(button.dataset.deleteCnyFixed);
       if (!result) return;
       await refreshAfterMutation(result.message || "人民币固定项已删除。", "success");
     });
@@ -246,36 +261,67 @@ function bindFixedItemControls() {
 async function saveFixedItemPatch(id, patch) {
   const item = findFixedItem(id);
   if (!item) return;
-  const ok = await saveMonthItem({ ...item, ...patch });
-  if (!ok) return;
-  await refreshAfterMutation("人民币固定项已更新。", "success");
+  const result = await updateCnyFixedItem({
+    id,
+    amount: patch.amount ?? item.amount,
+    account_id: patch.account_id ?? item.account_id,
+    note: patch.note ?? item.note ?? "",
+  });
+  if (!result) return;
+  await refreshAfterMutation(result.message || "人民币固定项已更新。", "success");
 }
 
 async function saveFixedItemStatus(id, status) {
-  const result = await updateMonthItemStatus(id, status);
+  const result = await updateCnyFixedItemStatus(id, status);
   if (!result) return;
   await refreshAfterMutation(result.message || "人民币固定项状态已更新。", "success");
 }
 
 function renderFixedTemplates() {
   const templates = appState.cnyFixedPage?.templates || [];
-  els.cnyFixedTemplateRows.innerHTML = templates.length
-    ? templates.map(fixedTemplateRow).join("")
-    : `<div class="empty-state">暂无人民币固定模板</div>`;
+  const stoppedTemplates = appState.cnyFixedPage?.stopped_templates || [];
+  els.cnyFixedTemplateListTitle.textContent = `人民币固定模板（${templates.length}）`;
+  els.cnyFixedTemplateRows.hidden = !appState.cnyFixedTemplatesExpanded;
+  els.toggleCnyFixedTemplatesBtn.textContent = appState.cnyFixedTemplatesExpanded ? "收起" : "展开";
+  els.cnyFixedTemplateRows.innerHTML = appState.cnyFixedTemplatesExpanded
+    ? templates.map((item) => fixedTemplateRow(item, "active")).join("") || `<div class="empty-state">暂无人民币固定模板</div>`
+    : "";
+
+  els.cnyStoppedTemplateTitle.textContent = `停止生成的固定模板（${stoppedTemplates.length}）`;
+  els.cnyStoppedTemplateRows.hidden = !appState.cnyStoppedTemplatesExpanded;
+  els.toggleCnyStoppedTemplatesBtn.textContent = appState.cnyStoppedTemplatesExpanded ? "收起" : "展开";
+  els.cnyStoppedTemplateRows.innerHTML = appState.cnyStoppedTemplatesExpanded
+    ? stoppedTemplates.map((item) => fixedTemplateRow(item, "stopped")).join("") || `<div class="empty-state">暂无停止生成的人民币固定模板</div>`
+    : "";
+
+  els.toggleCnyFixedTemplatesBtn.onclick = () => {
+    appState.cnyFixedTemplatesExpanded = !appState.cnyFixedTemplatesExpanded;
+    renderFixedTemplates();
+  };
+  els.toggleCnyStoppedTemplatesBtn.onclick = () => {
+    appState.cnyStoppedTemplatesExpanded = !appState.cnyStoppedTemplatesExpanded;
+    renderFixedTemplates();
+  };
+
   bindFixedTemplateControls();
 }
 
-function fixedTemplateRow(template) {
+function fixedTemplateRow(template, mode) {
+  const account = findCnyAccount(template.default_account_id);
+  const actionButton =
+    mode === "stopped"
+      ? `<button class="primary-button compact-button" data-reactivate-cny-template="${template.id}" type="button">恢复生成</button>`
+      : `<button class="danger-button compact-button" data-disable-cny-template="${template.id}" type="button">停用</button>`;
   return `
     <div class="settings-item">
       <div>
         <strong>${escapeHtml(template.name)}</strong>
-        <span>${labelDirection(template.direction)} · ${moneyCny(template.default_amount || 0)} · 支付日 ${template.due_day || "-"}</span>
+        <span>${labelDirection(template.direction)} · ${escapeHtml(account?.name || "未选账户")} · ${moneyCny(template.default_amount || 0)} · 支付日 ${template.due_day || "-"}</span>
       </div>
       <div class="button-row">
         <button class="ghost-button compact-button" data-edit-cny-template="${template.id}" type="button">编辑</button>
         <button class="ghost-button compact-button" data-copy-cny-template="${template.id}" type="button">复制</button>
-        <button class="danger-button compact-button" data-disable-cny-template="${template.id}" type="button">停用</button>
+        ${actionButton}
       </div>
     </div>
   `;
@@ -307,6 +353,13 @@ function bindFixedTemplateControls() {
       await refreshAfterMutation("人民币固定模板已停用。", "success");
     });
   });
+  document.querySelectorAll("[data-reactivate-cny-template]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const ok = await reactivateTemplate(button.dataset.reactivateCnyTemplate);
+      if (!ok) return;
+      await refreshAfterMutation("人民币固定模板已恢复生成。", "success");
+    });
+  });
 }
 
 function updateTransferAccountControl() {
@@ -334,22 +387,26 @@ function filteredTransactions() {
 }
 
 function transactionRow(item) {
+  const locked = Boolean(item.linked_fixed_month_item_id);
+  const controls = locked
+    ? `<span class="badge settled">固定项生成</span>`
+    : `
+      <div class="button-row">
+        <button class="ghost-button compact-button" data-edit-cny="${item.id}" type="button">编辑</button>
+        <button class="ghost-button compact-button" data-copy-cny="${item.id}" type="button">复制</button>
+        <button class="danger-button compact-button" data-delete-cny="${item.id}" type="button">删除</button>
+      </div>
+    `;
   return `
     <tr>
       <td>${escapeHtml(item.transacted_at)}</td>
       <td>${labelTransactionType(item.transaction_type)}</td>
       <td>${escapeHtml(item.account_name || "-")}</td>
       <td>${escapeHtml(item.transfer_account_name || "-")}</td>
-      <td><input class="table-input amount-input" data-cny-amount="${item.id}" type="number" step="0.01" value="${Number(item.amount || 0)}" /></td>
-      <td><input class="table-input" data-cny-description="${item.id}" value="${escapeHtml(item.description || "")}" /></td>
-      <td><input class="table-input" data-cny-note="${item.id}" value="${escapeHtml(item.note || "")}" /></td>
-      <td>
-        <div class="button-row">
-          <button class="ghost-button compact-button" data-edit-cny="${item.id}" type="button">编辑</button>
-          <button class="ghost-button compact-button" data-copy-cny="${item.id}" type="button">复制</button>
-          <button class="danger-button compact-button" data-delete-cny="${item.id}" type="button">删除</button>
-        </div>
-      </td>
+      <td><input class="table-input amount-input" data-cny-amount="${item.id}" type="number" step="0.01" value="${Number(item.amount || 0)}"${locked ? " disabled" : ""} /></td>
+      <td><input class="table-input" data-cny-description="${item.id}" value="${escapeHtml(item.description || "")}"${locked ? " disabled" : ""} /></td>
+      <td><input class="table-input" data-cny-note="${item.id}" value="${escapeHtml(item.note || "")}"${locked ? " disabled" : ""} /></td>
+      <td>${controls}</td>
     </tr>
   `;
 }
@@ -501,6 +558,7 @@ function setFixedTemplateForm(template, mode) {
   appState.editingCnyTemplateId = mode === "edit" ? template.id : null;
   form.elements.name.value = template.name || "";
   form.elements.direction.value = template.direction || "expense";
+  form.elements.default_account_id.value = template.default_account_id || "";
   form.elements.default_amount.value = template.default_amount ?? "";
   form.elements.due_day.value = template.due_day || "";
   els.cnyFixedTemplateTitle.textContent = mode === "edit" ? "编辑人民币固定项" : "复制人民币固定项";
