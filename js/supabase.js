@@ -375,6 +375,19 @@ export async function updateCnyFixedItemStatus(id, status) {
   return handleRpcResult(data, "人民币固定项状态更新失败。");
 }
 
+export async function updateCnyFixedItemsStatus(direction, status) {
+  const { data, error } = await appState.supabaseClient.rpc("home_update_cny_fixed_items_status", {
+    p_month_key: appState.activeMonth,
+    p_direction: direction,
+    p_status: status,
+  });
+  if (error) {
+    setActionMessage(`人民币固定项批量状态更新失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "人民币固定项批量状态更新失败。");
+}
+
 export async function deactivateTemplate(id) {
   return updateById("home_fixed_templates", id, { is_active: false });
 }

@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232d6a5f'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='34' fill='white' font-family='Arial, sans-serif'%3E%E5%AE%B6%3C/text%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=20260531-cny-4" />
+    <link rel="stylesheet" href="styles.css?v=20260531-cny-5" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
@@ -359,6 +359,11 @@
           <section class="panel">
             <div class="panel-heading">
               <h2>本月人民币固定收入</h2>
+              <div class="button-row">
+                <button class="ghost-button compact-button" data-cny-bulk-fixed-status="income:unpaid" type="button">一键未付</button>
+                <button class="ghost-button compact-button" data-cny-bulk-fixed-status="income:paid" type="button">一键已付</button>
+                <button class="ghost-button compact-button" data-cny-bulk-fixed-status="income:settled" type="button">一键结清</button>
+              </div>
             </div>
             <div class="table-wrap">
               <table>
@@ -381,6 +386,11 @@
           <section class="panel">
             <div class="panel-heading">
               <h2>本月人民币固定支出</h2>
+              <div class="button-row">
+                <button class="ghost-button compact-button" data-cny-bulk-fixed-status="expense:unpaid" type="button">一键未付</button>
+                <button class="ghost-button compact-button" data-cny-bulk-fixed-status="expense:paid" type="button">一键已付</button>
+                <button class="ghost-button compact-button" data-cny-bulk-fixed-status="expense:settled" type="button">一键结清</button>
+              </div>
             </div>
             <div class="table-wrap">
               <table>
@@ -616,18 +626,18 @@
     <script type="importmap">
       {
         "imports": {
-          "#app": "./app.js?v=20260531-cny-4",
-          "#cny": "./js/cny.js?v=20260531-cny-4",
-          "#config": "./js/config.js?v=20260531-cny-4",
-          "#elements": "./js/elements.js?v=20260531-cny-4",
-          "#events": "./js/events.js?v=20260531-cny-4",
-          "#fixed-transfer": "./js/fixed-transfer.js?v=20260531-cny-4",
-          "#jpy": "./js/jpy.js?v=20260531-cny-4",
-          "#render": "./js/render.js?v=20260531-cny-4",
-          "#state": "./js/state.js?v=20260531-cny-4",
-          "#supabase": "./js/supabase.js?v=20260531-cny-4",
-          "#ui": "./js/ui.js?v=20260531-cny-4",
-          "#utils": "./js/utils.js?v=20260531-cny-4"
+          "#app": "./app.js?v=20260531-cny-5",
+          "#cny": "./js/cny.js?v=20260531-cny-5",
+          "#config": "./js/config.js?v=20260531-cny-5",
+          "#elements": "./js/elements.js?v=20260531-cny-5",
+          "#events": "./js/events.js?v=20260531-cny-5",
+          "#fixed-transfer": "./js/fixed-transfer.js?v=20260531-cny-5",
+          "#jpy": "./js/jpy.js?v=20260531-cny-5",
+          "#render": "./js/render.js?v=20260531-cny-5",
+          "#state": "./js/state.js?v=20260531-cny-5",
+          "#supabase": "./js/supabase.js?v=20260531-cny-5",
+          "#ui": "./js/ui.js?v=20260531-cny-5",
+          "#utils": "./js/utils.js?v=20260531-cny-5"
         }
       }
     </script>

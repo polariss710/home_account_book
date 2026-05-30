@@ -14,6 +14,7 @@ import {
   saveCnyTransaction,
   updateAccount,
   updateCnyFixedItem,
+  updateCnyFixedItemsStatus,
   updateCnyFixedItemStatus,
   updateCnyTransaction,
   updateTemplate,
@@ -202,6 +203,7 @@ function renderFixedItems() {
   els.cnyFixedIncomeRows.innerHTML = incomeItems.length ? incomeItems.map(fixedItemRow).join("") : emptyRow(7);
   els.cnyFixedExpenseRows.innerHTML = expenseItems.length ? expenseItems.map(fixedItemRow).join("") : emptyRow(7);
   bindFixedItemControls();
+  bindBulkFixedItemControls();
 }
 
 function fixedItemRow(item) {
@@ -275,6 +277,17 @@ async function saveFixedItemStatus(id, status) {
   const result = await updateCnyFixedItemStatus(id, status);
   if (!result) return;
   await refreshAfterMutation(result.message || "人民币固定项状态已更新。", "success");
+}
+
+function bindBulkFixedItemControls() {
+  document.querySelectorAll("[data-cny-bulk-fixed-status]").forEach((button) => {
+    button.onclick = async () => {
+      const [direction, status] = button.dataset.cnyBulkFixedStatus.split(":");
+      const result = await updateCnyFixedItemsStatus(direction, status);
+      if (!result) return;
+      await refreshAfterMutation(cnyBulkStatusMessage(result), "success");
+    };
+  });
 }
 
 function renderFixedTemplates() {
@@ -651,4 +664,8 @@ function cnyGenerationMessage(result) {
   if (eligibleCount === 0) return "当前没有可生成的人民币固定模板。";
   if (result.all_generated) return "人民币固定项已经生成完毕，无需重复生成。";
   return "没有新增人民币固定项，请刷新后重试。";
+}
+
+function cnyBulkStatusMessage(result) {
+  return `${result.message || "人民币固定项状态已批量更新。"} 共 ${Number(result.updated_count || 0)} 条。`;
 }
