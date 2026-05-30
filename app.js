@@ -1,5 +1,6 @@
 import { bindElements } from "#elements";
 import { bindEvents } from "#events";
+import { bindFixedTransferEvents } from "#fixed-transfer";
 import { bindJpyEvents } from "#jpy";
 import { render } from "#render";
 import { initSupabaseClient, loadAppData, refreshSession, setCloudChangeHandler } from "#supabase";
@@ -8,6 +9,7 @@ import { processAuthHash, setActionMessage, setInitialDates } from "#ui";
 document.addEventListener("DOMContentLoaded", async () => {
   bindElements();
   bindEvents();
+  bindFixedTransferEvents(render);
   bindJpyEvents();
   setCloudChangeHandler(render);
   setInitialDates();

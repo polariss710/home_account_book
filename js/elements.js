@@ -25,6 +25,8 @@ const elementIds = [
   "templateCancelBtn",
   "incomeItemRows",
   "expenseItemRows",
+  "fixedTransferForm",
+  "fixedTransferAccountSelect",
   "templateRows",
   "stoppedTemplateTitle",
   "toggleStoppedTemplatesBtn",

@@ -1,4 +1,5 @@
 import { els } from "#elements";
+import { renderFixedTransferForm } from "#fixed-transfer";
 import { renderJpyPage } from "#jpy";
 import { appState, findFixedTemplate, getFixedTemplateTermStatus } from "#state";
 import { renderShell, setActionMessage } from "#ui";
@@ -12,6 +13,7 @@ export function render() {
   renderTemplates();
   renderAccounts();
   renderTemplatePaymentGroupOptions();
+  renderFixedTransferForm();
   renderPaymentChannels();
   renderJpyPage();
 }
