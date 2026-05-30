@@ -32,7 +32,7 @@ function renderDashboard() {
             <div class="settings-item">
               <div>
                 <strong>${escapeHtml(group.payment_group || "未分组")}</strong>
-                <span>已付 ${money(group.paid || 0)} / 未付 ${money(group.unpaid || 0)}</span>
+                <span>未付金额</span>
               </div>
               <strong>${money(group.unpaid ?? group.total ?? 0)}</strong>
             </div>
@@ -71,9 +71,16 @@ function renderPendingSummary(metrics) {
 function renderMonthItems() {
   const incomeItems = appState.page?.income_items || [];
   const expenseSections = appState.page?.expense_sections || [];
+  const expenseItems = appState.page?.expense_items || [];
   els.incomeItemRows.innerHTML = incomeItems.length ? incomeItems.map(incomeItemRow).join("") : emptyRow(6);
-  els.expenseItemRows.innerHTML = expenseSections.length ? expenseSections.map(expenseSectionRows).join("") : emptyRow(8);
+  els.expenseItemRows.innerHTML = renderExpenseRows(expenseSections, expenseItems);
   bindMonthItemControls();
+}
+
+function renderExpenseRows(sections, items) {
+  if (sections.length) return sections.map(expenseSectionRows).join("");
+  if (items.length) return items.map(expenseItemRow).join("");
+  return emptyRow(8);
 }
 
 function incomeItemRow(item) {
