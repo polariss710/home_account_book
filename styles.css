@@ -376,13 +376,32 @@ th {
   background: #f4f7f5;
 }
 
-.fixed-expense-section strong {
-  margin-right: 10px;
+.fixed-expense-section-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
 }
 
-.fixed-expense-section span {
+.fixed-expense-section-summary > div {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.fixed-expense-section-summary span {
   color: var(--muted);
   font-size: 12px;
+}
+
+.fixed-expense-section-amounts {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.fixed-expense-section-amounts strong {
+  color: var(--text);
+  font-size: 16px;
 }
 
 .table-input {

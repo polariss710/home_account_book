@@ -13,6 +13,8 @@ import {
   loadFixedMonthPage,
   reactivateTemplate,
   saveMonthItem,
+  updateMonthItemsStatus,
+  updateMonthItemStatus,
 } from "#supabase";
 
 export function render() {
@@ -100,11 +102,11 @@ function incomeItemRow(item) {
   return `
     <tr>
       <td>${escapeHtml(item.name)}</td>
-      <td><input class="table-input amount-input" data-item-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" /></td>
+      <td>${monthItemAmountCell(item)}</td>
       <td>${escapeHtml(item.due_date || "-")}</td>
-      <td>${statusSelect(item)}</td>
+      <td>${monthItemStatusCell(item)}</td>
       <td>${termLabel(item)}</td>
-      <td><input class="table-input" data-item-note="${item.id}" value="${escapeHtml(item.note || "")}" /></td>
+      <td>${monthItemNoteCell(item)}</td>
       <td><button class="danger-button compact-button" data-delete-item="${item.id}" type="button">删除</button></td>
     </tr>
   `;
@@ -115,23 +117,45 @@ function expenseItemRow(item) {
     <tr>
       <td>${escapeHtml(item.payment_group || "未分组")}</td>
       <td>${escapeHtml(item.name)}</td>
-      <td><input class="table-input amount-input" data-item-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" /></td>
+      <td>${monthItemAmountCell(item)}</td>
       <td>${escapeHtml(item.due_date || "-")}</td>
-      <td>${statusSelect(item)}</td>
+      <td>${monthItemStatusCell(item)}</td>
       <td>${termLabel(item)}</td>
-      <td><input class="table-input" data-item-note="${item.id}" value="${escapeHtml(item.note || "")}" /></td>
+      <td>${monthItemNoteCell(item)}</td>
       <td><button class="danger-button compact-button" data-delete-item="${item.id}" type="button">删除</button></td>
     </tr>
   `;
+}
+
+function monthItemAmountCell(item) {
+  if (item.linked_jpy_transaction_id) return money(item.amount || 0);
+  return `<input class="table-input amount-input" data-item-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" />`;
+}
+
+function monthItemStatusCell(item) {
+  if (item.linked_jpy_transaction_id) return labelStatus(item.status);
+  return statusSelect(item);
+}
+
+function monthItemNoteCell(item) {
+  if (item.linked_jpy_transaction_id) return escapeHtml(item.note || "");
+  return `<input class="table-input" data-item-note="${item.id}" value="${escapeHtml(item.note || "")}" />`;
 }
 
 function expenseSectionRows(section) {
   return `
     <tr class="fixed-expense-section">
       <td colspan="8">
-        <div>
-          <strong>${escapeHtml(section.payment_group || "未分组")}</strong>
-          <span>期限 ${escapeHtml(section.first_due_date || "-")} · 合计 ${money(section.total || 0)} · 已付 ${money(section.paid || 0)} · 未付 ${money(section.unpaid || 0)}</span>
+        <div class="fixed-expense-section-summary">
+          <div>
+            <strong>${escapeHtml(section.payment_group || "未分组")}</strong>
+            <span>期限 ${escapeHtml(section.first_due_date || "-")}</span>
+          </div>
+          <div class="fixed-expense-section-amounts">
+            <span>合计 <strong>${money(section.total || 0)}</strong></span>
+            <span>已付 <strong>${money(section.paid || 0)}</strong></span>
+            <span>未付 <strong>${money(section.unpaid || 0)}</strong></span>
+          </div>
         </div>
       </td>
     </tr>
@@ -149,6 +173,15 @@ function statusSelect(item) {
   `;
 }
 
+function labelStatus(status) {
+  const labels = {
+    unpaid: "未付",
+    paid: "已付",
+    settled: "已结清",
+  };
+  return labels[status] || status;
+}
+
 function termLabel(item) {
   if (!item.term_no || !item.total_terms) return "-";
   return `${item.term_no}/${item.total_terms}`;
@@ -159,7 +192,7 @@ function bindMonthItemControls() {
     input.addEventListener("change", () => saveItemPatch(input.dataset.itemAmount, { amount: Number(input.value || 0) }));
   });
   document.querySelectorAll("[data-item-status]").forEach((select) => {
-    select.addEventListener("change", () => saveItemPatch(select.dataset.itemStatus, { status: select.value }));
+    select.addEventListener("change", () => saveItemStatus(select.dataset.itemStatus, select.value));
   });
   document.querySelectorAll("[data-item-note]").forEach((input) => {
     input.addEventListener("change", () => saveItemPatch(input.dataset.itemNote, { note: input.value.trim() }));
@@ -172,6 +205,16 @@ function bindMonthItemControls() {
       render();
     });
   });
+  document.querySelectorAll("[data-bulk-item-status]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const [direction, status] = button.dataset.bulkItemStatus.split(":");
+      const result = await updateMonthItemsStatus(direction, status);
+      if (!result) return;
+      await loadFixedMonthPage();
+      setActionMessage(`固定项状态已更新 ${Number(result.updated_count || 0)} 条。`, "success");
+      render();
+    });
+  });
 }
 
 async function saveItemPatch(id, patch) {
@@ -179,6 +222,13 @@ async function saveItemPatch(id, patch) {
   if (!item) return;
   const ok = await saveMonthItem({ ...item, ...patch });
   if (!ok) return;
+  await loadFixedMonthPage();
+  render();
+}
+
+async function saveItemStatus(id, status) {
+  const result = await updateMonthItemStatus(id, status);
+  if (!result) return;
   await loadFixedMonthPage();
   render();
 }

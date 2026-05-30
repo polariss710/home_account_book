@@ -94,20 +94,35 @@ function renderJpyTransactions() {
 }
 
 function transactionRow(item) {
+  const isFixedTransfer = item.transaction_type === "fixed_in" || item.transaction_type === "fixed_out";
+  const amountCell = isFixedTransfer
+    ? money(item.amount || 0)
+    : `<input class="table-input amount-input" data-jpy-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" />`;
+  const descriptionCell = isFixedTransfer
+    ? escapeHtml(item.description || "")
+    : `<input class="table-input" data-jpy-description="${item.id}" value="${escapeHtml(item.description || "")}" />`;
+  const noteCell = isFixedTransfer
+    ? escapeHtml(item.note || "")
+    : `<input class="table-input" data-jpy-note="${item.id}" value="${escapeHtml(item.note || "")}" />`;
+  const actionButtons = isFixedTransfer
+    ? `<button class="danger-button compact-button" data-delete-jpy="${item.id}" type="button">删除</button>`
+    : `
+        <button class="ghost-button compact-button" data-edit-jpy="${item.id}" type="button">编辑</button>
+        <button class="ghost-button compact-button" data-copy-jpy="${item.id}" type="button">复制</button>
+        <button class="danger-button compact-button" data-delete-jpy="${item.id}" type="button">删除</button>
+      `;
   return `
     <tr>
       <td>${escapeHtml(item.transacted_at)}</td>
       <td>${labelTransactionType(item.transaction_type)}</td>
       <td>${escapeHtml(item.account_name || "-")}</td>
       <td>${escapeHtml(item.transfer_account_name || "-")}</td>
-      <td><input class="table-input amount-input" data-jpy-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" /></td>
-      <td><input class="table-input" data-jpy-description="${item.id}" value="${escapeHtml(item.description || "")}" /></td>
-      <td><input class="table-input" data-jpy-note="${item.id}" value="${escapeHtml(item.note || "")}" /></td>
+      <td>${amountCell}</td>
+      <td>${descriptionCell}</td>
+      <td>${noteCell}</td>
       <td>
         <div class="button-row">
-          <button class="ghost-button compact-button" data-edit-jpy="${item.id}" type="button">编辑</button>
-          <button class="ghost-button compact-button" data-copy-jpy="${item.id}" type="button">复制</button>
-          <button class="danger-button compact-button" data-delete-jpy="${item.id}" type="button">删除</button>
+          ${actionButtons}
         </div>
       </td>
     </tr>

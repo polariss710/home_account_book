@@ -1,6 +1,6 @@
 import { els } from "#elements";
 import { appState } from "#state";
-import { isCloudReady, loadAppData, saveJpyTransaction } from "#supabase";
+import { createFixedTransfer, isCloudReady, loadAppData } from "#supabase";
 import { setActionMessage } from "#ui";
 import { escapeHtml, formData, toNumber } from "#utils";
 
@@ -19,19 +19,14 @@ export function bindFixedTransferEvents(afterSave) {
       return;
     }
 
-    const record = {
-      id: crypto.randomUUID(),
+    const result = await createFixedTransfer({
       transaction_type: data.transaction_type,
       account_id: data.account_id,
-      transfer_account_id: null,
       transacted_at: data.transacted_at,
       amount: toNumber(data.amount),
-      description: fixedTransferDescription(data.transaction_type),
       note: data.note.trim(),
-      created_at: new Date().toISOString(),
-    };
-    const ok = await saveJpyTransaction(record);
-    if (!ok) return;
+    });
+    if (!result) return;
 
     await loadAppData();
     resetFixedTransferForm();
@@ -65,8 +60,4 @@ function resetFixedTransferForm() {
 function setFixedTransferDate() {
   if (els.fixedTransferForm.elements.transacted_at.value) return;
   els.fixedTransferForm.elements.transacted_at.value = `${appState.activeMonth}-01`;
-}
-
-function fixedTransferDescription(type) {
-  return type === "fixed_in" ? "固定盈余转入" : "固定赤字补充";
 }

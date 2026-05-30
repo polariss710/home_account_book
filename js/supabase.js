@@ -158,6 +158,23 @@ export async function syncFixedMonthItems() {
   return data;
 }
 
+export async function createFixedTransfer(record) {
+  const { data, error } = await appState.supabaseClient.rpc("home_create_fixed_transfer", {
+    p_month_key: appState.activeMonth,
+    p_currency: "JPY",
+    p_transaction_type: record.transaction_type,
+    p_account_id: record.account_id,
+    p_transacted_at: record.transacted_at,
+    p_amount: record.amount,
+    p_note: record.note,
+  });
+  if (error) {
+    setActionMessage(`固定资金调拨失败：${error.message}`, "error");
+    return null;
+  }
+  return data;
+}
+
 export async function saveAccount(record) {
   return upsert("home_accounts", withUser({ ...record, currency: "JPY" }));
 }
@@ -184,6 +201,32 @@ export async function updatePaymentChannel(id, patch) {
 
 export async function saveMonthItem(record) {
   return upsert("home_fixed_month_items", withUser(record));
+}
+
+export async function updateMonthItemStatus(id, status) {
+  const { data, error } = await appState.supabaseClient.rpc("home_update_fixed_month_item_status", {
+    p_item_id: id,
+    p_status: status,
+  });
+  if (error) {
+    setActionMessage(`固定项状态更新失败：${error.message}`, "error");
+    return null;
+  }
+  return data;
+}
+
+export async function updateMonthItemsStatus(direction, status) {
+  const { data, error } = await appState.supabaseClient.rpc("home_update_fixed_month_items_status", {
+    p_month_key: appState.activeMonth,
+    p_currency: "JPY",
+    p_direction: direction,
+    p_status: status,
+  });
+  if (error) {
+    setActionMessage(`固定项状态更新失败：${error.message}`, "error");
+    return null;
+  }
+  return data;
 }
 
 export async function saveJpyTransaction(record) {
@@ -215,11 +258,25 @@ export async function deactivatePaymentChannel(id) {
 }
 
 export async function deleteMonthItem(id) {
-  return deleteById("home_fixed_month_items", id);
+  const { data, error } = await appState.supabaseClient.rpc("home_delete_fixed_month_item", {
+    p_item_id: id,
+  });
+  if (error) {
+    setActionMessage(`固定项删除失败：${error.message}`, "error");
+    return null;
+  }
+  return data;
 }
 
 export async function deleteJpyTransaction(id) {
-  return deleteById("home_jpy_transactions", id);
+  const { data, error } = await appState.supabaseClient.rpc("home_delete_jpy_transaction", {
+    p_transaction_id: id,
+  });
+  if (error) {
+    setActionMessage(`日元流水删除失败：${error.message}`, "error");
+    return null;
+  }
+  return data;
 }
 
 export async function deleteAccount(id) {
