@@ -1,15 +1,19 @@
 :root {
   color-scheme: light;
-  --bg: #f6f7f4;
+  --bg: #f4f6f3;
   --surface: #ffffff;
-  --surface-2: #eef3ef;
+  --surface-2: #edf4ef;
+  --surface-soft: #f9fbf9;
   --text: #1d2524;
   --muted: #6d7774;
-  --line: #dbe2de;
+  --line: #d8e0db;
+  --line-strong: #c6d2cc;
   --accent: #2d6a5f;
+  --accent-dark: #23574e;
   --paid: #1f7a4d;
   --unpaid: #a03a2f;
-  --shadow: 0 16px 40px rgba(28, 37, 36, 0.08);
+  --focus: rgba(45, 106, 95, 0.2);
+  --shadow: 0 14px 34px rgba(28, 37, 36, 0.07);
 }
 
 * {
@@ -23,6 +27,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.5;
 }
 
 button,
@@ -34,6 +39,11 @@ select {
 button {
   cursor: pointer;
   touch-action: manipulation;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 button:disabled {
@@ -72,8 +82,12 @@ button:disabled {
 }
 
 .sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
   border-right: 1px solid var(--line);
-  background: #fbfcfa;
+  background: var(--surface-soft);
   padding: 24px 18px;
 }
 
@@ -93,6 +107,7 @@ button:disabled {
   color: #fff;
   border-radius: 8px;
   font-weight: 800;
+  box-shadow: 0 8px 18px rgba(45, 106, 95, 0.16);
 }
 
 .brand h1 {
@@ -124,6 +139,7 @@ button:disabled {
   color: var(--muted);
   padding: 11px 12px;
   text-align: left;
+  font-weight: 650;
 }
 
 .nav-button.is-active {
@@ -134,7 +150,7 @@ button:disabled {
 
 .workspace {
   min-width: 0;
-  padding: 22px;
+  padding: 24px;
 }
 
 .topbar {
@@ -142,7 +158,12 @@ button:disabled {
   justify-content: space-between;
   gap: 16px;
   align-items: end;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 22px rgba(28, 37, 36, 0.04);
 }
 
 .topbar label,
@@ -173,6 +194,23 @@ select {
   color: var(--text);
   padding: 0 11px;
   line-height: 1.2;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+
+input:hover,
+select:hover,
+.ghost-button:hover {
+  border-color: var(--line-strong);
+}
+
+input:focus,
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus);
+  outline: none;
 }
 
 select {
@@ -211,11 +249,16 @@ input[type="month"] {
   border-radius: 8px;
   padding: 0 14px;
   border: 1px solid transparent;
+  font-weight: 750;
 }
 
 .primary-button {
   background: var(--accent);
   color: #fff;
+}
+
+.primary-button:hover {
+  background: var(--accent-dark);
 }
 
 .ghost-button {
@@ -230,13 +273,17 @@ input[type="month"] {
   color: var(--unpaid);
 }
 
+.danger-button:hover {
+  background: #ffebe5;
+}
+
 .view {
   display: none;
 }
 
 .view.is-active {
   display: grid;
-  gap: 18px;
+  gap: 20px;
 }
 
 .metric-grid {
@@ -254,6 +301,8 @@ input[type="month"] {
 }
 
 .metric {
+  display: grid;
+  gap: 8px;
   padding: 18px;
 }
 
@@ -261,12 +310,14 @@ input[type="month"] {
   display: block;
   color: var(--muted);
   font-size: 13px;
-  margin-bottom: 8px;
+  margin-bottom: 0;
+  font-weight: 700;
 }
 
 .metric strong {
-  font-size: 28px;
+  font-size: 30px;
   line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 
 .metric strong.negative {
@@ -275,6 +326,7 @@ input[type="month"] {
 
 .panel {
   min-width: 0;
+  overflow: hidden;
 }
 
 .panel-heading {
@@ -284,11 +336,13 @@ input[type="month"] {
   align-items: center;
   padding: 16px 18px;
   border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
 }
 
 .panel-heading h2 {
   margin: 0;
   font-size: 17px;
+  letter-spacing: 0;
 }
 
 .settlement-status {
@@ -317,7 +371,7 @@ input[type="month"] {
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
   gap: 14px;
   padding: 18px;
 }
@@ -421,9 +475,18 @@ th {
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
+  background: #fbfcfa;
+}
+
+tbody tr:hover td {
+  background: #fbfcfa;
 }
 
 .fixed-expense-section td {
+  background: #f4f7f5;
+}
+
+.fixed-expense-section:hover td {
   background: #f4f7f5;
 }
 
@@ -507,7 +570,7 @@ th {
   gap: 12px;
   align-items: center;
   padding: 12px;
-  background: #fbfcfa;
+  background: var(--surface-soft);
   border: 1px solid var(--line);
   border-radius: 8px;
 }
@@ -536,10 +599,12 @@ th {
 
 .balance-card {
   display: grid;
-  gap: 22px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: end;
   min-height: 112px;
   padding: 18px;
-  background: #fbfcfa;
+  background: var(--surface-soft);
   border: 1px solid var(--line);
   border-radius: 8px;
 }
@@ -578,6 +643,7 @@ th {
     position: sticky;
     top: 0;
     z-index: 5;
+    height: auto;
     border-right: 0;
     border-bottom: 1px solid var(--line);
     padding: 14px;
@@ -609,6 +675,7 @@ th {
     display: grid;
     grid-template-columns: 1fr;
     align-items: stretch;
+    padding: 14px;
   }
 
   .topbar-actions {
@@ -654,6 +721,25 @@ th {
     font-size: 18px;
   }
 
+  .nav {
+    display: flex;
+    grid-template-columns: none;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-button {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 94px;
+    white-space: nowrap;
+  }
+
   .workspace {
     padding: 12px;
   }
@@ -680,6 +766,10 @@ th {
     align-items: flex-start;
     flex-direction: column;
     padding: 14px;
+  }
+
+  .panel-heading .button-row {
+    width: 100%;
   }
 
   .form-grid,
@@ -715,6 +805,8 @@ th {
   }
 
   .balance-card {
+    grid-template-columns: 1fr;
+    gap: 12px;
     min-height: 0;
     padding: 16px;
   }
