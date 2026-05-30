@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232d6a5f'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='34' fill='white' font-family='Arial, sans-serif'%3E%E5%AE%B6%3C/text%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=20260531-fx-1" />
+    <link rel="stylesheet" href="styles.css?v=20260531-fx-2" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
@@ -294,6 +294,7 @@
                   <option value="expense">零散支出</option>
                   <option value="income">零散收入</option>
                   <option value="transfer">账户间转账</option>
+                  <option value="fx_out">换汇转出</option>
                 </select>
               </label>
               <label>
@@ -303,6 +304,14 @@
               <label>
                 转入账户
                 <select id="jpyTransferAccountSelect" name="transfer_account_id"></select>
+              </label>
+              <label>
+                人民币入账账户
+                <select id="jpyFxCnyAccountSelect" name="cny_account_id"></select>
+              </label>
+              <label>
+                人民币到账金额
+                <input id="jpyFxCnyAmountInput" name="cny_amount" type="number" inputmode="decimal" step="0.01" />
               </label>
               <label>
                 金额
@@ -636,18 +645,18 @@
     <script type="importmap">
       {
         "imports": {
-          "#app": "./app.js?v=20260531-fx-1",
-          "#cny": "./js/cny.js?v=20260531-fx-1",
-          "#config": "./js/config.js?v=20260531-fx-1",
-          "#elements": "./js/elements.js?v=20260531-fx-1",
-          "#events": "./js/events.js?v=20260531-fx-1",
-          "#fixed-transfer": "./js/fixed-transfer.js?v=20260531-fx-1",
-          "#jpy": "./js/jpy.js?v=20260531-fx-1",
-          "#render": "./js/render.js?v=20260531-fx-1",
-          "#state": "./js/state.js?v=20260531-fx-1",
-          "#supabase": "./js/supabase.js?v=20260531-fx-1",
-          "#ui": "./js/ui.js?v=20260531-fx-1",
-          "#utils": "./js/utils.js?v=20260531-fx-1"
+          "#app": "./app.js?v=20260531-fx-2",
+          "#cny": "./js/cny.js?v=20260531-fx-2",
+          "#config": "./js/config.js?v=20260531-fx-2",
+          "#elements": "./js/elements.js?v=20260531-fx-2",
+          "#events": "./js/events.js?v=20260531-fx-2",
+          "#fixed-transfer": "./js/fixed-transfer.js?v=20260531-fx-2",
+          "#jpy": "./js/jpy.js?v=20260531-fx-2",
+          "#render": "./js/render.js?v=20260531-fx-2",
+          "#state": "./js/state.js?v=20260531-fx-2",
+          "#supabase": "./js/supabase.js?v=20260531-fx-2",
+          "#ui": "./js/ui.js?v=20260531-fx-2",
+          "#utils": "./js/utils.js?v=20260531-fx-2"
         }
       }
     </script>

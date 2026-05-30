@@ -434,11 +434,15 @@ function filteredTransactions() {
 function transactionRow(item) {
   const fixedLocked = Boolean(item.linked_fixed_month_item_id);
   const fxLinked = Boolean(item.linked_jpy_transaction_id);
+  const sourceFx = fxLinked && item.transaction_type === "fx_out";
+  const generatedFx = fxLinked && item.transaction_type === "fx_in";
   const locked = fixedLocked || fxLinked;
   const targetAccountName = fxLinked ? item.linked_jpy_account_name : item.transfer_account_name;
   const controls = fixedLocked
     ? `<span class="badge settled">固定项生成</span>`
-    : fxLinked
+    : generatedFx
+      ? `<span class="badge settled">换汇生成</span>`
+    : sourceFx
       ? `
         <div class="button-row">
           <button class="ghost-button compact-button" data-edit-cny="${item.id}" type="button">编辑</button>

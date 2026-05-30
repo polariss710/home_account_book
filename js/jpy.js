@@ -1,6 +1,15 @@
 import { els } from "#elements";
 import { appState } from "#state";
-import { loadAppData, deleteJpyTransaction, isCloudReady, saveJpyTransaction, updateJpyTransaction } from "#supabase";
+import {
+  createJpyToCnyFx,
+  deleteJpyToCnyFx,
+  loadAppData,
+  deleteJpyTransaction,
+  isCloudReady,
+  saveJpyTransaction,
+  updateJpyToCnyFx,
+  updateJpyTransaction,
+} from "#supabase";
 import { setActionMessage } from "#ui";
 import { emptyRow, escapeHtml, formData, money, toNumber } from "#utils";
 
@@ -27,18 +36,31 @@ export function bindJpyEvents() {
       setActionMessage("账户间转账需要选择不同的转入账户。", "error");
       return;
     }
+    if (transactionType === "fx_out" && (!data.cny_account_id || toNumber(data.cny_amount) <= 0)) {
+      setActionMessage("换汇转出需要选择人民币入账账户，并填写实际到账人民币金额。", "error");
+      return;
+    }
     const record = {
       id: appState.editingJpyTransactionId || crypto.randomUUID(),
       transaction_type: transactionType,
       account_id: data.account_id,
       transfer_account_id: transferAccountId,
+      cny_account_id: transactionType === "fx_out" ? data.cny_account_id : null,
       transacted_at: data.transacted_at,
       amount: toNumber(data.amount),
+      cny_amount: transactionType === "fx_out" ? toNumber(data.cny_amount) : null,
       description: data.description.trim(),
       note: data.note.trim(),
       created_at: existingTransaction?.created_at || new Date().toISOString(),
     };
-    const result = appState.editingJpyTransactionId ? await updateJpyTransaction(record) : await saveJpyTransaction(record);
+    const result =
+      transactionType === "fx_out"
+        ? appState.editingJpyTransactionId
+          ? await updateJpyToCnyFx(record)
+          : await createJpyToCnyFx(record)
+        : appState.editingJpyTransactionId
+          ? await updateJpyTransaction(record)
+          : await saveJpyTransaction(record);
     if (!result) return;
     resetJpyTransactionForm();
     await refreshAfterJpyMutation(result.message || "日元流水已保存。", result.reset_expense_status ? "error" : "success");
@@ -77,17 +99,33 @@ function renderJpyBalances() {
 
 function renderJpyAccountOptions() {
   const accounts = appState.jpyPage?.accounts || [];
+  const cnyAccounts = appState.cnyPage?.accounts || [];
   const options = accounts.map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`).join("");
+  const cnyOptions = cnyAccounts.map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`).join("");
   els.jpyAccountSelect.innerHTML = options || `<option value="">请先新增账户</option>`;
   els.jpyTransferAccountSelect.innerHTML = `<option value="">不使用</option>${options}`;
+  els.jpyFxCnyAccountSelect.innerHTML = cnyOptions || `<option value="">请先新增人民币账户</option>`;
   updateTransferAccountControl();
 }
 
 function updateTransferAccountControl() {
-  const isTransfer = els.jpyTransactionForm.elements.transaction_type.value === "transfer";
+  const transactionType = els.jpyTransactionForm.elements.transaction_type.value;
+  const isTransfer = transactionType === "transfer";
+  const isFxOut = transactionType === "fx_out";
   els.jpyTransferAccountSelect.disabled = !isTransfer;
   els.jpyTransferAccountSelect.required = isTransfer;
   if (!isTransfer) els.jpyTransferAccountSelect.value = "";
+  els.jpyTransferAccountSelect.parentElement.hidden = isFxOut;
+  els.jpyFxCnyAccountSelect.disabled = !isFxOut;
+  els.jpyFxCnyAccountSelect.required = isFxOut;
+  els.jpyFxCnyAccountSelect.parentElement.hidden = !isFxOut;
+  els.jpyFxCnyAmountInput.disabled = !isFxOut;
+  els.jpyFxCnyAmountInput.required = isFxOut;
+  els.jpyFxCnyAmountInput.parentElement.hidden = !isFxOut;
+  if (!isFxOut) {
+    els.jpyFxCnyAccountSelect.value = "";
+    els.jpyFxCnyAmountInput.value = "";
+  }
 }
 
 function renderJpyTransactions() {
@@ -99,7 +137,10 @@ function renderJpyTransactions() {
 function transactionRow(item) {
   const fixedTransfer = isFixedTransfer(item);
   const fxLinked = Boolean(item.linked_cny_transaction_id);
-  const locked = fixedTransfer || fxLinked;
+  const sourceFx = fxLinked && item.transaction_type === "fx_out";
+  const generatedFx = fxLinked && item.transaction_type === "fx_in";
+  const locked = fixedTransfer || generatedFx || sourceFx;
+  const targetAccountName = sourceFx || generatedFx ? item.linked_cny_account_name : item.transfer_account_name;
   const amountCell = locked
     ? money(item.amount || 0)
     : `<input class="table-input amount-input" data-jpy-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" />`;
@@ -109,13 +150,15 @@ function transactionRow(item) {
   const noteCell = locked
     ? escapeHtml(item.note || "")
     : `<input class="table-input" data-jpy-note="${item.id}" value="${escapeHtml(item.note || "")}" />`;
-  const controls = fxLinked
+  const controls = generatedFx
     ? `<span class="badge settled">购汇生成</span>`
     : `
       <div class="button-row">
         ${
           fixedTransfer
             ? ""
+            : sourceFx
+              ? `<button class="ghost-button compact-button" data-edit-jpy="${item.id}" type="button">编辑</button>`
             : `
               <button class="ghost-button compact-button" data-edit-jpy="${item.id}" type="button">编辑</button>
               <button class="ghost-button compact-button" data-copy-jpy="${item.id}" type="button">复制</button>
@@ -129,7 +172,7 @@ function transactionRow(item) {
       <td>${escapeHtml(item.transacted_at)}</td>
       <td>${labelTransactionType(item.transaction_type)}</td>
       <td>${escapeHtml(item.account_name || "-")}</td>
-      <td>${escapeHtml(item.transfer_account_name || "-")}</td>
+      <td>${escapeHtml(targetAccountName || "-")}</td>
       <td>${amountCell}</td>
       <td>${descriptionCell}</td>
       <td>${noteCell}</td>
@@ -152,7 +195,9 @@ function bindTransactionControls() {
     button.addEventListener("click", async () => {
       const transaction = findJpyTransaction(button.dataset.deleteJpy);
       if (!confirmDeleteJpyTransaction(transaction)) return;
-      const result = await deleteJpyTransaction(button.dataset.deleteJpy);
+      const result = transaction?.transaction_type === "fx_out"
+        ? await deleteJpyToCnyFx(button.dataset.deleteJpy)
+        : await deleteJpyTransaction(button.dataset.deleteJpy);
       if (!result) return;
       await refreshAfterJpyMutation(result.message || "日元流水已删除。", result.reset_expense_status ? "error" : "success");
     });
@@ -188,7 +233,9 @@ function setJpyTransactionForm(transaction, mode) {
   form.elements.transaction_type.value = transaction.transaction_type || "expense";
   form.elements.account_id.value = transaction.account_id || "";
   form.elements.transfer_account_id.value = transaction.transfer_account_id || "";
+  form.elements.cny_account_id.value = transaction.linked_cny_account_id || "";
   form.elements.amount.value = transaction.amount ?? "";
+  form.elements.cny_amount.value = transaction.linked_cny_amount ?? "";
   form.elements.description.value = transaction.description || "";
   form.elements.note.value = transaction.note || "";
   form.elements.transaction_type.disabled = mode === "edit";
