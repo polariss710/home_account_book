@@ -5,6 +5,7 @@ export const appState = {
   page: null,
   jpyPage: null,
   editingJpyTransactionId: null,
+  editingAccountId: null,
   editingTemplateId: null,
   editingPaymentChannelId: null,
   stoppedTemplatesExpanded: false,
@@ -16,6 +17,12 @@ export function findFixedTemplate(id) {
   if (!id) return null;
   const templates = [...(appState.page?.templates || []), ...(appState.page?.stopped_templates || [])];
   return templates.find((item) => item.id === id) || null;
+}
+
+export function findJpyAccount(id) {
+  if (!id) return null;
+  const accounts = [...(appState.jpyPage?.accounts || []), ...(appState.page?.accounts || [])];
+  return accounts.find((item) => item.id === id) || null;
 }
 
 export function getFixedTemplateTermStatus(template, monthKey) {

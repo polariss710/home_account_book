@@ -32,6 +32,8 @@ const elementIds = [
   "toggleStoppedTemplatesBtn",
   "stoppedTemplateRows",
   "accountForm",
+  "accountSubmitBtn",
+  "accountCancelBtn",
   "accountRows",
   "jpyBalanceRows",
   "jpyTransactionFormTitle",

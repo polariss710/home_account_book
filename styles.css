@@ -299,7 +299,7 @@ input[type="month"] {
 
 .inline-form {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 160px 160px auto;
+  grid-template-columns: minmax(220px, 1fr) 160px 160px auto auto;
   gap: 12px;
   padding: 18px;
   border-bottom: 1px solid var(--line);

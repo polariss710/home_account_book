@@ -1,8 +1,9 @@
 import { els } from "#elements";
-import { appState, findFixedTemplate, getFixedTemplateTermStatus } from "#state";
+import { appState, findFixedTemplate, findJpyAccount, getFixedTemplateTermStatus } from "#state";
 import { render } from "#render";
 import { setActionMessage, switchView } from "#ui";
 import {
+  createTemplate,
   generateFixedMonth,
   isCloudReady,
   loadAppData,
@@ -10,12 +11,12 @@ import {
   passwordAuth,
   saveAccount,
   savePaymentChannel,
-  createTemplate,
-  syncFixedMonthItems,
-  updatePaymentChannel,
-  updateTemplate,
   sendMagicLink,
   signOut,
+  syncFixedMonthItems,
+  updateAccount,
+  updatePaymentChannel,
+  updateTemplate,
 } from "#supabase";
 import { formData, toNumber } from "#utils";
 
@@ -99,23 +100,33 @@ export function bindEvents() {
 
   els.accountForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!requireCloudReady("请先登录后再新增账户。")) return;
+    if (!requireCloudReady("请先登录后再保存账户。")) return;
     const form = event.currentTarget;
     const data = formData(form);
+    const accountId = appState.editingAccountId;
+    const existingAccount = findJpyAccount(accountId);
     const record = {
-      id: crypto.randomUUID(),
       name: data.name.trim(),
       account_type: data.account_type,
       opening_balance: toNumber(data.opening_balance),
-      is_active: true,
-      sort_order: (appState.page?.accounts || []).length,
-      created_at: new Date().toISOString(),
+      sort_order: existingAccount?.sort_order ?? (appState.jpyPage?.accounts || []).length,
     };
-    const ok = await saveAccount(record);
+    const ok = accountId
+      ? await updateAccount(accountId, record)
+      : await saveAccount({
+          ...record,
+          id: crypto.randomUUID(),
+          is_active: true,
+          created_at: new Date().toISOString(),
+        });
     if (!ok) return;
     await loadAppData();
-    form.reset();
+    resetAccountForm();
     render();
+  });
+
+  els.accountCancelBtn.addEventListener("click", () => {
+    resetAccountForm();
   });
 
   els.paymentChannelForm.addEventListener("submit", async (event) => {
@@ -195,6 +206,13 @@ function generationMessage(result) {
   }
   if (result.all_generated) return `当前还在使用的固定项已经生成完毕，无需重复生成。${expiredHint}`;
   return `没有新增固定项，请刷新后重试；若仍出现，请检查恢复生成的模板状态。${expiredHint}`;
+}
+
+function resetAccountForm() {
+  appState.editingAccountId = null;
+  els.accountForm.reset();
+  els.accountSubmitBtn.textContent = "添加";
+  els.accountCancelBtn.hidden = true;
 }
 
 function resetTemplateForm() {

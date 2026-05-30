@@ -162,6 +162,10 @@ export async function saveAccount(record) {
   return upsert("home_accounts", withUser({ ...record, currency: "JPY" }));
 }
 
+export async function updateAccount(id, patch) {
+  return updateById("home_accounts", id, patch);
+}
+
 export async function createTemplate(record) {
   return upsert("home_fixed_templates", withUser({ ...record, currency: "JPY" }));
 }
@@ -216,6 +220,10 @@ export async function deleteMonthItem(id) {
 
 export async function deleteJpyTransaction(id) {
   return deleteById("home_jpy_transactions", id);
+}
+
+export async function deleteAccount(id) {
+  return deleteById("home_accounts", id);
 }
 
 async function upsert(table, record) {

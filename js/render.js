@@ -1,10 +1,19 @@
 import { els } from "#elements";
 import { renderFixedTransferForm } from "#fixed-transfer";
 import { renderJpyPage } from "#jpy";
-import { appState, findFixedTemplate, getFixedTemplateTermStatus } from "#state";
+import { appState, findFixedTemplate, findJpyAccount, getFixedTemplateTermStatus } from "#state";
 import { renderShell, setActionMessage } from "#ui";
 import { emptyRow, escapeHtml, money } from "#utils";
-import { deleteMonthItem, loadFixedMonthPage, saveMonthItem, deactivateTemplate, reactivateTemplate, deactivatePaymentChannel } from "#supabase";
+import {
+  deactivatePaymentChannel,
+  deactivateTemplate,
+  deleteAccount,
+  deleteMonthItem,
+  loadAppData,
+  loadFixedMonthPage,
+  reactivateTemplate,
+  saveMonthItem,
+} from "#supabase";
 
 export function render() {
   renderShell();
@@ -370,11 +379,58 @@ function renderAccounts() {
                 <strong>${escapeHtml(item.name)}</strong>
                 <span>${labelAccountType(item.account_type)} · 期初 ${money(item.opening_balance || 0)}</span>
               </div>
+              <div class="button-row">
+                <button class="ghost-button compact-button" data-edit-account="${item.id}" type="button">编辑</button>
+                <button class="ghost-button compact-button" data-copy-account="${item.id}" type="button">复制</button>
+                <button class="danger-button compact-button" data-delete-account="${item.id}" type="button">删除</button>
+              </div>
             </div>
           `,
         )
         .join("")
     : `<div class="empty-state">暂无日元账户</div>`;
+
+  document.querySelectorAll("[data-edit-account]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const account = findJpyAccount(button.dataset.editAccount);
+      if (!account) return;
+      setAccountForm(account, "edit");
+    });
+  });
+
+  document.querySelectorAll("[data-copy-account]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const account = findJpyAccount(button.dataset.copyAccount);
+      if (!account) return;
+      setAccountForm({ ...account, name: `${account.name} 复制` }, "copy");
+    });
+  });
+
+  document.querySelectorAll("[data-delete-account]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const account = findJpyAccount(button.dataset.deleteAccount);
+      if (!account) return;
+      const confirmed = window.confirm(`删除「${account.name}」？该账户关联的日元流水也会被删除，余额会重新计算。`);
+      if (!confirmed) return;
+      const ok = await deleteAccount(account.id);
+      if (!ok) return;
+      await loadAppData();
+      setActionMessage("日元账户已删除。", "success");
+      render();
+    });
+  });
+}
+
+function setAccountForm(account, mode) {
+  const form = els.accountForm;
+  appState.editingAccountId = mode === "edit" ? account.id : null;
+  form.elements.name.value = account.name || "";
+  form.elements.account_type.value = account.account_type || "cash";
+  form.elements.opening_balance.value = account.opening_balance ?? "";
+  els.accountSubmitBtn.textContent = mode === "edit" ? "保存修改" : "保存为新账户";
+  els.accountCancelBtn.hidden = false;
+  form.elements.name.focus();
+  setActionMessage(mode === "edit" ? "正在编辑日元账户。" : "已复制到账户表单，保存后会成为新账户。", "success");
 }
 
 function labelDirection(direction) {
