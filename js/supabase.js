@@ -212,6 +212,10 @@ export async function updateMonthItemStatus(id, status) {
     setActionMessage(`固定项状态更新失败：${error.message}`, "error");
     return null;
   }
+  if (data?.ok === false) {
+    setActionMessage(data.message || "固定项状态更新失败。", "error");
+    return null;
+  }
   return data;
 }
 
@@ -224,6 +228,10 @@ export async function updateMonthItemsStatus(direction, status) {
   });
   if (error) {
     setActionMessage(`固定项状态更新失败：${error.message}`, "error");
+    return null;
+  }
+  if (data?.ok === false) {
+    setActionMessage(data.message || "固定项状态更新失败。", "error");
     return null;
   }
   return data;
