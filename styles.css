@@ -320,17 +320,6 @@ input[type="month"] {
   overflow: hidden;
 }
 
-.metric::after {
-  content: "";
-  position: absolute;
-  top: 22px;
-  right: 22px;
-  width: 58px;
-  height: 28px;
-  border-radius: 999px;
-  background: var(--surface-2);
-}
-
 .metric span {
   display: block;
   color: var(--muted);
@@ -806,11 +795,6 @@ tbody tr:hover td {
 
   .metric strong {
     font-size: 25px;
-  }
-
-  .metric::after {
-    top: 16px;
-    right: 16px;
   }
 
   .panel-heading {
