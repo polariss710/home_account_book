@@ -1,3 +1,3 @@
-export const APP_VERSION = "20260531-annual-1";
+export const APP_VERSION = "20260531-ui-final-1";
 export const DEFAULT_SUPABASE_URL = "https://ahtgiwdzocerkonrjmdo.supabase.co";
 export const DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_HTCFg_w3vmdNqfG2ZE46-A_6KXpxAnz";

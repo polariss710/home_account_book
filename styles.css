@@ -13,7 +13,8 @@
   --paid: #1f7a4d;
   --unpaid: #a03a2f;
   --focus: rgba(45, 106, 95, 0.2);
-  --shadow: 0 14px 34px rgba(28, 37, 36, 0.07);
+  --shadow: 0 16px 34px rgba(28, 37, 36, 0.065);
+  --shadow-soft: 0 8px 20px rgba(28, 37, 36, 0.045);
 }
 
 * {
@@ -87,15 +88,15 @@ button:disabled {
   align-self: start;
   height: 100vh;
   border-right: 1px solid var(--line);
-  background: var(--surface-soft);
-  padding: 24px 18px;
+  background: #fbfcfa;
+  padding: 28px 20px;
 }
 
 .brand {
   display: flex;
   gap: 12px;
   align-items: center;
-  margin-bottom: 26px;
+  margin-bottom: 34px;
 }
 
 .brand-mark {
@@ -112,7 +113,8 @@ button:disabled {
 
 .brand h1 {
   margin: 0;
-  font-size: 20px;
+  font-size: 21px;
+  line-height: 1.2;
 }
 
 .brand p {
@@ -128,7 +130,7 @@ button:disabled {
 
 .nav {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .nav-button {
@@ -137,20 +139,26 @@ button:disabled {
   border-radius: 8px;
   background: transparent;
   color: var(--muted);
-  padding: 11px 12px;
+  padding: 12px 14px;
   text-align: left;
   font-weight: 650;
+}
+
+.nav-button:hover {
+  background: #f2f6f3;
+  color: var(--text);
 }
 
 .nav-button.is-active {
   background: var(--surface-2);
   color: var(--text);
-  font-weight: 700;
+  font-weight: 800;
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .workspace {
   min-width: 0;
-  padding: 24px;
+  padding: 26px 28px 34px;
 }
 
 .topbar {
@@ -158,12 +166,12 @@ button:disabled {
   justify-content: space-between;
   gap: 16px;
   align-items: end;
-  margin-bottom: 14px;
-  padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.72);
+  margin-bottom: 16px;
+  padding: 15px 18px;
+  background: rgba(255, 255, 255, 0.8);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 8px 22px rgba(28, 37, 36, 0.04);
+  box-shadow: var(--shadow-soft);
 }
 
 .topbar label,
@@ -194,6 +202,7 @@ select {
   color: var(--text);
   padding: 0 11px;
   line-height: 1.2;
+  font-weight: 650;
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease,
@@ -255,10 +264,12 @@ input[type="month"] {
 .primary-button {
   background: var(--accent);
   color: #fff;
+  box-shadow: 0 10px 18px rgba(45, 106, 95, 0.12);
 }
 
 .primary-button:hover {
   background: var(--accent-dark);
+  box-shadow: 0 12px 22px rgba(45, 106, 95, 0.16);
 }
 
 .ghost-button {
@@ -283,13 +294,13 @@ input[type="month"] {
 
 .view.is-active {
   display: grid;
-  gap: 20px;
+  gap: 22px;
 }
 
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 
 .metric,
@@ -301,9 +312,23 @@ input[type="month"] {
 }
 
 .metric {
+  position: relative;
   display: grid;
-  gap: 8px;
-  padding: 18px;
+  gap: 14px;
+  min-height: 126px;
+  padding: 20px 22px;
+  overflow: hidden;
+}
+
+.metric::after {
+  content: "";
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  width: 58px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--surface-2);
 }
 
 .metric span {
@@ -318,6 +343,10 @@ input[type="month"] {
   font-size: 30px;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
+  align-self: end;
+  word-break: break-word;
+  position: relative;
+  z-index: 1;
 }
 
 .metric strong.negative {
@@ -339,14 +368,14 @@ input[type="month"] {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
-  padding: 16px 18px;
+  padding: 17px 20px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-soft);
 }
 
 .panel-heading h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 18px;
   letter-spacing: 0;
 }
 
@@ -377,15 +406,15 @@ input[type="month"] {
 .form-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(150px, 1fr));
-  gap: 14px;
-  padding: 18px;
+  gap: 16px;
+  padding: 20px;
 }
 
 .filter-form {
   display: grid;
   grid-template-columns: repeat(5, minmax(120px, 1fr));
   gap: 12px;
-  padding: 14px 18px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -405,14 +434,14 @@ input[type="month"] {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) 160px 160px auto auto;
   gap: 12px;
-  padding: 18px;
+  padding: 20px;
   border-bottom: 1px solid var(--line);
 }
 
 .settings-form {
   display: grid;
   gap: 14px;
-  padding: 18px;
+  padding: 20px;
   max-width: 760px;
 }
 
@@ -459,6 +488,7 @@ input[type="month"] {
 .table-wrap {
   overflow: auto;
   -webkit-overflow-scrolling: touch;
+  background: var(--surface);
 }
 
 table {
@@ -471,7 +501,7 @@ table {
 th,
 td {
   border-bottom: 1px solid var(--line);
-  padding: 12px 14px;
+  padding: 14px 16px;
   text-align: left;
   white-space: nowrap;
 }
@@ -479,20 +509,21 @@ td {
 th {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 850;
   background: #fbfcfa;
+  letter-spacing: 0;
 }
 
 tbody tr:hover td {
-  background: #fbfcfa;
+  background: #f8fbf8;
 }
 
 .fixed-expense-section td {
-  background: #f4f7f5;
+  background: #f3f7f4;
 }
 
 .fixed-expense-section:hover td {
-  background: #f4f7f5;
+  background: #f3f7f4;
 }
 
 .fixed-expense-section-summary {
@@ -565,19 +596,23 @@ tbody tr:hover td {
 
 .settings-list {
   display: grid;
-  gap: 10px;
-  padding: 14px 18px 18px;
+  gap: 12px;
+  padding: 16px 20px 20px;
 }
 
 .settings-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: 14px;
   align-items: center;
-  padding: 12px;
+  padding: 14px;
   background: var(--surface-soft);
   border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+.settings-item strong {
+  font-size: 15px;
 }
 
 .settings-item span {
@@ -607,8 +642,8 @@ tbody tr:hover td {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 18px;
   align-items: end;
-  min-height: 112px;
-  padding: 18px;
+  min-height: 118px;
+  padding: 20px;
   background: var(--surface-soft);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -620,7 +655,7 @@ tbody tr:hover td {
 }
 
 .balance-card-main strong {
-  font-size: 18px;
+  font-size: 19px;
 }
 
 .balance-card-main span {
@@ -629,7 +664,7 @@ tbody tr:hover td {
 }
 
 .balance-current strong {
-  font-size: 28px;
+  font-size: 30px;
   line-height: 1.1;
 }
 
@@ -652,6 +687,7 @@ tbody tr:hover td {
     border-right: 0;
     border-bottom: 1px solid var(--line);
     padding: 14px;
+    box-shadow: var(--shadow-soft);
   }
 
   .brand {
@@ -674,6 +710,10 @@ tbody tr:hover td {
     padding: 10px 6px;
     text-align: center;
     line-height: 1.2;
+  }
+
+  .nav-button.is-active {
+    box-shadow: inset 0 -3px 0 var(--accent);
   }
 
   .topbar {
@@ -760,11 +800,17 @@ tbody tr:hover td {
   }
 
   .metric {
-    padding: 14px;
+    min-height: 112px;
+    padding: 16px;
   }
 
   .metric strong {
-    font-size: 24px;
+    font-size: 25px;
+  }
+
+  .metric::after {
+    top: 16px;
+    right: 16px;
   }
 
   .panel-heading {
