@@ -2,10 +2,13 @@ import { monthKey } from "#utils";
 
 export const appState = {
   activeMonth: monthKey(new Date()),
+  activeYear: new Date().getFullYear(),
+  activeView: "dashboard",
   page: null,
   jpyPage: null,
   cnyPage: null,
   cnyFixedPage: null,
+  yearSummary: null,
   editingJpyTransactionId: null,
   editingCnyTransactionId: null,
   editingAccountId: null,

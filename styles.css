@@ -324,6 +324,11 @@ input[type="month"] {
   color: var(--unpaid);
 }
 
+.negative-text {
+  color: var(--unpaid);
+  font-weight: 800;
+}
+
 .panel {
   min-width: 0;
   overflow: hidden;

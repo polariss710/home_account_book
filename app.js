@@ -1,4 +1,5 @@
 import { bindElements } from "#elements";
+import { bindAnnualEvents } from "#annual";
 import { bindCnyEvents } from "#cny";
 import { bindEvents } from "#events";
 import { bindFixedTransferEvents } from "#fixed-transfer";
@@ -10,6 +11,7 @@ import { processAuthHash, setActionMessage, setInitialDates } from "#ui";
 document.addEventListener("DOMContentLoaded", async () => {
   bindElements();
   bindEvents();
+  bindAnnualEvents(render);
   bindFixedTransferEvents(render);
   bindJpyEvents();
   bindCnyEvents();

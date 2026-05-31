@@ -4,9 +4,11 @@ import { appState } from "#state";
 
 export function setInitialDates() {
   els.monthPicker.value = appState.activeMonth;
+  if (els.annualYearPicker) els.annualYearPicker.value = appState.activeYear;
 }
 
 export function switchView(viewId) {
+  appState.activeView = viewId;
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.view === viewId);
   });

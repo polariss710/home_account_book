@@ -8,6 +8,7 @@ import {
   isCloudReady,
   loadAppData,
   loadFixedMonthPage,
+  loadYearSummary,
   passwordAuth,
   saveAccount,
   savePaymentChannel,
@@ -22,7 +23,13 @@ import { formData, toNumber } from "#utils";
 
 export function bindEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
-    button.addEventListener("click", () => switchView(button.dataset.view));
+    button.addEventListener("click", async () => {
+      switchView(button.dataset.view);
+      if (button.dataset.view === "annual" && isCloudReady()) {
+        await loadYearSummary(appState.activeYear);
+      }
+      render();
+    });
   });
 
   els.templateForm.elements.fixed_type.addEventListener("change", updateFixedTypeControls);
@@ -36,7 +43,7 @@ export function bindEvents() {
   });
 
   els.refreshBtn.addEventListener("click", async () => {
-    await loadAppData();
+    await loadCurrentViewData();
     render();
   });
 
@@ -176,6 +183,14 @@ export function bindEvents() {
     await signOut();
     render();
   });
+}
+
+async function loadCurrentViewData() {
+  if (appState.activeView === "annual") {
+    await loadYearSummary(appState.activeYear);
+    return;
+  }
+  await loadAppData();
 }
 
 async function runPasswordAuth(mode) {

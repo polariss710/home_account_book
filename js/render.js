@@ -1,4 +1,5 @@
 import { els } from "#elements";
+import { renderAnnualPage } from "#annual";
 import { renderCnyPage } from "#cny";
 import { renderFixedTransferForm } from "#fixed-transfer";
 import { renderJpyPage } from "#jpy";
@@ -21,6 +22,7 @@ import {
 export function render() {
   renderShell();
   renderDashboard();
+  renderAnnualPage();
   renderMonthItems();
   renderTemplates();
   renderAccounts();

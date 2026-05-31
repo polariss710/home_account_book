@@ -111,6 +111,19 @@ export async function loadAppData() {
   await Promise.all([loadFixedMonthPage(), loadJpyAccountPage(), loadCnyAccountPage(), loadCnyFixedPage()]);
 }
 
+export async function loadYearSummary(year = appState.activeYear) {
+  if (!isCloudReady()) return;
+  const { data, error } = await appState.supabaseClient.rpc("home_get_year_summary", {
+    p_year: Number(year),
+  });
+  if (error) {
+    setActionMessage(`年度统计读取失败：${error.message}`, "error");
+    appState.yearSummary = null;
+    return;
+  }
+  appState.yearSummary = data;
+}
+
 export async function loadFixedMonthPage() {
   if (!isCloudReady()) return;
   const { data, error } = await appState.supabaseClient.rpc("home_get_fixed_month_page", {
