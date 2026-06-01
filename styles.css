@@ -507,6 +507,31 @@ tbody tr:hover td {
   background: #f8fbf8;
 }
 
+.status-paid-row td {
+  background: #f2f8f4;
+}
+
+.status-paid-row:hover td {
+  background: #eef6f1;
+}
+
+.status-paid-row td:first-child {
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+
+.status-paid-row .amount-input,
+.status-paid-row select[data-item-status],
+.status-paid-row select[data-cny-fixed-status] {
+  color: var(--paid);
+  font-weight: 800;
+}
+
+.status-unpaid-row select[data-item-status],
+.status-unpaid-row select[data-cny-fixed-status] {
+  color: var(--unpaid);
+  font-weight: 800;
+}
+
 .fixed-expense-section td {
   background: #f3f7f4;
 }

@@ -227,7 +227,7 @@ function renderFixedItems() {
 
 function fixedItemRow(item) {
   return `
-    <tr>
+    <tr class="${fixedStatusRowClass(item)}">
       <td>${escapeHtml(item.name)}</td>
       <td><input class="table-input amount-input" data-cny-fixed-amount="${item.id}" type="number" step="0.01" value="${Number(item.amount || 0)}" /></td>
       <td><select class="table-input" data-cny-fixed-account="${item.id}">${accountOptions(item.account_id)}</select></td>
@@ -237,6 +237,10 @@ function fixedItemRow(item) {
       <td><button class="danger-button compact-button" data-delete-cny-fixed="${item.id}" type="button">删除</button></td>
     </tr>
   `;
+}
+
+function fixedStatusRowClass(item) {
+  return item.status === "paid" || item.status === "settled" ? "status-paid-row" : "status-unpaid-row";
 }
 
 function fixedStatusSelect(item) {

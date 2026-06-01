@@ -104,7 +104,7 @@ function renderExpenseRows(sections, items) {
 
 function incomeItemRow(item) {
   return `
-    <tr>
+    <tr class="${fixedStatusRowClass(item)}">
       <td>${escapeHtml(item.name)}</td>
       <td>${monthItemAmountCell(item)}</td>
       <td>${escapeHtml(item.due_date || "-")}</td>
@@ -118,7 +118,7 @@ function incomeItemRow(item) {
 
 function expenseItemRow(item) {
   return `
-    <tr>
+    <tr class="${fixedStatusRowClass(item)}">
       <td>${escapeHtml(item.payment_group || "未分组")}</td>
       <td>${escapeHtml(item.name)}</td>
       <td>${monthItemAmountCell(item)}</td>
@@ -175,6 +175,11 @@ function statusSelect(item) {
       <option value="settled"${item.status === "settled" ? " selected" : ""}>已结清</option>
     </select>
   `;
+}
+
+function fixedStatusRowClass(item) {
+  if (item.status === "paid" || item.status === "settled" || item.linked_jpy_transaction_id) return "status-paid-row";
+  return "status-unpaid-row";
 }
 
 function labelStatus(status) {
