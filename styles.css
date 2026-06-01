@@ -508,11 +508,11 @@ tbody tr:hover td {
 }
 
 .status-paid-row td {
-  background: #f2f8f4;
+  background: #e6f2eb;
 }
 
 .status-paid-row:hover td {
-  background: #eef6f1;
+  background: #dfeee5;
 }
 
 .status-paid-row td:first-child {
