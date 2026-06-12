@@ -38,4 +38,12 @@ Balances remain read-time calculations from `opening_balance` plus transaction m
 
 ## Cross-Project Boundary
 
-Cash System now has the DB/RPC primitive needed by the school project, but no cross-project integration exists here. The school project must own mapping/outbox state and call this RPC from a future server-side integration path.
+Cash System now has the DB/RPC primitive needed by the school project. The school project owns mapping/outbox state and the manual Phase 1 sync executor. Cash System receives idempotent RPC calls and stores external JPY rows with `created_by_external = true`.
+
+Verified Phase 1 E2E test:
+
+- Cash account: `94000000-0000-4000-8000-000000150501`
+- Cash JPY transaction: `fbd3e5df-14be-4b3b-9a0b-319f4416968b`
+- school payment request reference: `94000000-0000-4000-8000-000000150101`
+
+Remaining out of scope: CNY linkage, reversal sync, automatic background retry, Cash UI changes for external rows, and cross-DB strong transactions.

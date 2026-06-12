@@ -8,12 +8,13 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 - Cash System is a static Supabase-backed household ledger using `home_` tables.
 - Normal JPY/CNY account and transaction UI remains unchanged.
-- Phase 1 external JPY transaction support for aozora school personal-business teacher wage linkage is now available at the DB/RPC layer only.
-- No school DB writes or cross-project writes are implemented in this repository.
+- Phase 1 external JPY transaction support for aozora school personal-business teacher wage linkage is available through the Cash DB/RPC layer.
+- A school-side manual sync executor has successfully called the Cash RPC and inserted one whitelisted external JPY test transaction.
+- No school DB writes, background worker, or page/UI changes are implemented in this repository.
 
 ## Latest Update
 
-2026-06-13 external JPY transaction RPC checkpoint:
+2026-06-13 external JPY transaction RPC and E2E checkpoint:
 
 - Executed incremental SQL file `supabase-update-20260613-external-jpy-1.sql` against polariss710's Cash System.
 - Added external/idempotency metadata columns to `home_jpy_transactions`:
@@ -32,6 +33,13 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - Added RPC `home_create_external_jpy_transaction(...)`.
 - Verified schema/RPC existence after execution.
 - Verified idempotency by rollback test: first call inserted a temporary external JPY expense, second call with the same idempotency key returned the same transaction id with `inserted=false`, count stayed 1 inside the transaction, and rollback residue was 0.
+- School-side manual E2E sync later called `home_create_external_jpy_transaction(...)` successfully for whitelist test data:
+  - Cash test account: `94000000-0000-4000-8000-000000150501`
+  - school payment request: `94000000-0000-4000-8000-000000150101`
+  - Cash JPY transaction: `fbd3e5df-14be-4b3b-9a0b-319f4416968b`
+  - transaction type: `expense`
+  - amount: `6789`
+  - duplicate script run left Cash transaction count at 1.
 
 ## Boundaries
 
@@ -41,11 +49,12 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - No cross-DB transaction.
 - No automatic retry worker.
 - No page/UI changes.
+- No reversal sync.
 - No change to ordinary JPY transaction create/update/delete paths.
 - Do not run `supabase-schema.sql` for this update; it is an incremental migration checkpoint.
 
 ## Next Steps
 
-- School project can later add mapping/outbox and call this Cash RPC from a server-side integration path.
+- School project owns mapping/outbox and has a manual sync executor for Phase 1. Future work should add guarded retry/operator workflow only if needed.
 - If reversal is wired, use a separate external event with `transaction_type = income`; do not delete the original Cash transaction.
 - Any future Cash UI display for external rows should treat them as externally owned and avoid ordinary edit/delete unless a guarded edit/reversal design exists.

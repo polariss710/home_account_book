@@ -5,11 +5,11 @@ Status date: 2026-06-13
 | Module | Current State | Next Priority |
 | --- | --- | --- |
 | JPY accounts | Existing UI/RPC behavior unchanged | Keep ordinary account management stable |
-| JPY transactions | Existing ordinary flows unchanged; external JPY DB/RPC insert support added | Future UI should display external rows as externally owned if needed |
+| JPY transactions | Existing ordinary flows unchanged; external JPY DB/RPC insert support added and E2E test transaction created | Future UI should display external rows as externally owned if needed |
 | CNY transactions | Unchanged | No Phase 1 external support |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
 | FX linkage | Unchanged | Keep FX linkage separate |
-| External school linkage | DB/RPC support complete for idempotent JPY insert only | Wait for school-side mapping/outbox and server-side integration |
+| External school linkage | Phase 1 manual E2E sync verified for personal-business teacher wage JPY payment | Reversal sync / retry UI / cleanup require separate guarded phases |
 
 ## External JPY Transaction Support
 
@@ -35,9 +35,19 @@ Idempotency:
 - Duplicate external source event returns the existing transaction when payload matches.
 - Payload mismatch returns an error object and does not create a new row.
 
+Verified E2E test row:
+
+- Cash test account: `94000000-0000-4000-8000-000000150501`
+- school payment request: `94000000-0000-4000-8000-000000150101`
+- Cash JPY transaction: `fbd3e5df-14be-4b3b-9a0b-319f4416968b`
+- `transaction_type = expense`
+- `amount = 6789`
+- duplicate school sync run left transaction count at 1.
+
 ## Hard Stops
 
 - Do not use `supabase-schema.sql` for incremental external linkage updates.
 - Do not add CNY/school/cross-DB writes in this repository without a separate design.
 - Do not delete existing transactions as a reversal mechanism.
 - Do not change ordinary page modules for this DB/RPC-only checkpoint.
+- Do not add automatic retry/background sync in Cash System; school owns the manual sync executor and outbox state.
