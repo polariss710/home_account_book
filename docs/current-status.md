@@ -10,9 +10,29 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - Normal JPY/CNY account and transaction UI remains unchanged.
 - External JPY transaction support for aozora school now covers Phase 1 personal-business teacher wage payments and Phase 2 personal-business tuition JPY income.
 - A school-side manual sync executor successfully called the Cash RPC for both supported flows, verified idempotent duplicate execution, and later cleaned the whitelist test transaction/account residue.
-- No school DB writes, background worker, or page/UI changes are implemented in this repository.
+- The manual sync executor is now classified as a verification/operations tool, not the final daily business entry point.
+- Cash linkage v2 target is page-driven confirmation: School creates a pending request, Cash page approves or rejects, and only approval creates a Cash transaction and changes Cash balance.
+- No school DB writes, background worker, pending-request table, approve/reject RPC, or Cash page/UI changes are implemented yet in this repository.
 
 ## Latest Update
+
+2026-06-13 Cash linkage v2 direction checkpoint:
+
+- Documented the target external school linkage flow:
+  - School page requests sync to Cash System.
+  - Cash System stores a pending external transaction request.
+  - Cash page displays pending requests and allows approve/reject.
+  - Approve calls existing `home_create_external_jpy_transaction(...)`, creates the JPY transaction, and changes Cash balance.
+  - Reject stores rejection state/reason and creates no transaction.
+- The existing `home_create_external_jpy_transaction(...)` remains the idempotent transaction creation primitive, but should be called by the Cash approval flow, not directly by the School daily business page.
+- Recommended next architecture:
+  - add `home_external_transaction_requests` or equivalent
+  - add approve/reject RPCs
+  - add Cash pending request list/detail UI
+  - use a Supabase Edge Function as the School-click backend bridge
+- Do not let the School browser directly write the Cash DB with Cash anon credentials.
+- Do not make the Cash frontend directly read the School DB.
+- Continue excluding 青空塾, CNY, non-target linkage, reimbursement, company account spending, and arbitrary school events.
 
 2026-06-13 Phase 2 tuition income E2E checkpoint:
 
@@ -81,6 +101,8 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - No CNY external transaction support.
 - No 青空塾, company account spending, reimbursement, non-`teacher_wage`, or part-time wage income linkage.
 - Personal tuition income support is limited to personal-business `tuition` JPY income through the school outbox and manual sync executor.
+- No Cash pending external transaction request table yet.
+- No Cash approve/reject UI yet.
 - No FX support.
 - No school DB writes.
 - No cross-DB transaction.
@@ -93,6 +115,8 @@ This document keeps the current Cash System implementation checkpoint, safety no
 ## Next Steps
 
 - School project owns mapping/outbox and has a manual sync executor for Phase 1. Future work should add guarded retry/operator workflow only if needed.
+- Cash linkage v2 should add a Cash-owned pending request and approval workflow before using real teacher wage payment rows. The zsh executor remains verification/operations only.
+- First v2 implementation phase should be Cash DB/RPC: external request table plus approve/reject functions. The second phase should be Cash UI for pending request list/detail/approve/reject.
 - If reversal is wired, use a separate external event with `transaction_type = income`; do not delete the original Cash transaction.
 - Any future Cash UI display for external rows should treat them as externally owned and avoid ordinary edit/delete unless a guarded edit/reversal design exists.
-- Phase 2 follow-ups are linked tuition reverse sync, automatic sync scheduling, sync-status UI, and failed retry operation UI. Continue to exclude 青空塾 and CNY.
+- For the planned 2026-05 teacher wage trial, first read-only confirm the two pending personal-business `teacher_wage` JPY candidates, then use one approve test and one reject test after the pending request flow exists. Real data should not be cleaned up; whitelist test data still requires cleanup.

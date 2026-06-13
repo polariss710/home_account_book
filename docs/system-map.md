@@ -10,6 +10,7 @@ Status date: 2026-06-13
 - `home_cny_transactions`: CNY ledger movements.
 - `home_fixed_templates`: recurring fixed item templates.
 - `home_fixed_month_items`: generated monthly fixed items.
+- Planned for Cash linkage v2: `home_external_transaction_requests` or equivalent pending request table for aozora school external transaction requests. Not implemented yet.
 
 ## Core RPCs
 
@@ -17,10 +18,15 @@ Status date: 2026-06-13
 - `home_update_jpy_transaction(...)`: updates ordinary JPY transactions.
 - `home_delete_jpy_transaction(uuid)`: deletes ordinary JPY transactions.
 - `home_create_external_jpy_transaction(...)`: creates idempotent external-source JPY transactions for guarded aozora school linkages.
+- Planned for Cash linkage v2: request create/approve/reject RPCs. Approve should call `home_create_external_jpy_transaction(...)`; reject should create no transaction. Not implemented yet.
 
 ## External JPY RPC Boundary
 
 `home_create_external_jpy_transaction(...)` only writes `home_jpy_transactions`.
+
+In the Cash linkage v2 target architecture, this RPC is not the first business
+entry point. It should run only after a Cash user approves a pending external
+request in the Cash System UI.
 
 It does not write:
 
@@ -46,6 +52,20 @@ Balances remain read-time calculations from `opening_balance` plus transaction m
 
 Cash System now has the DB/RPC primitive needed by the school project. The school project owns mapping/outbox state and the manual sync executor. Cash System receives idempotent RPC calls and stores external JPY rows with `created_by_external = true`.
 
+The current school zsh sync executor is a verification/operations tool. The
+target daily business flow is page-driven:
+
+1. School page requests sync to Cash System.
+2. Cash System creates a pending external transaction request.
+3. Cash page approves or rejects.
+4. Approval creates the Cash JPY transaction and changes Cash balance.
+5. Rejection creates no transaction and leaves Cash balance unchanged.
+6. School displays `synced/cash_confirmed` or `cash_rejected`.
+
+Recommended bridge: Supabase Edge Function. The School browser should not
+directly write the Cash project with Cash credentials, and the Cash frontend
+should not directly read the School DB.
+
 Phase 1 completed scope:
 
 - Personal-business school `teacher_wage` JPY payment only.
@@ -64,3 +84,13 @@ Verified Phase 1 E2E test, later cleaned:
 Remaining out of Phase 1: 青空塾, 青空塾 teacher wages, 青空塾 reimbursements, company account spending, CNY, non-`teacher_wage`, personal tuition income, part-time wage income, reversal sync, automatic background retry, Cash UI changes for external rows, and cross-DB strong transactions.
 
 Phase 2 Cash guard extension is prepared for personal-business tuition income -> Cash System JPY income transaction. It is limited to `school_income_records` + `tuition_income_received` and must create a positive JPY `income` transaction. It continues to exclude 青空塾, CNY, reimbursement, company account spending, and arbitrary school events.
+
+Cash linkage v2 implementation order:
+
+1. Cash DB: add pending external transaction request table and approve/reject RPCs.
+2. Cash UI: add pending request list, detail, approve, reject, and approve confirmation.
+3. Edge Function: School request -> Cash pending request.
+4. School DB/UI: extend payment linkage lifecycle and change personal JPY teacher wage action from direct confirmation to `请求同步到 Cash System`.
+5. ROLLBACK whitelist tests.
+6. COMMIT whitelist E2E approve/reject tests.
+7. Decide whether to run the 2026-05 real two-row JPY teacher wage trial: one approve, one reject. Real data should not be cleaned up; whitelist test data should be cleaned up.

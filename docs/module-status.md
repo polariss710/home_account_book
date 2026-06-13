@@ -5,15 +5,21 @@ Status date: 2026-06-13
 | Module | Current State | Next Priority |
 | --- | --- | --- |
 | JPY accounts | Existing UI/RPC behavior unchanged | Keep ordinary account management stable |
-| JPY transactions | Existing ordinary flows unchanged; external JPY DB/RPC insert support added for Phase 1 teacher wage and Phase 2 tuition income | Future UI should display external rows as externally owned if needed |
+| JPY transactions | Existing ordinary flows unchanged; external JPY DB/RPC insert support added for Phase 1 teacher wage and Phase 2 tuition income | Keep `home_create_external_jpy_transaction` as approval-time primitive |
 | CNY transactions | Unchanged | No Phase 1 external support |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
 | FX linkage | Unchanged | Keep FX linkage separate |
-| External school linkage | Phase 1 teacher wage JPY payment and Phase 2 tuition JPY income manual E2E sync completed; test DB residue cleaned | Reversal sync, automatic scheduling, sync-status UI, and retry UI require separate guarded phases |
+| External school linkage | Phase 1 teacher wage JPY payment and Phase 2 tuition JPY income manual E2E sync verified; Cash linkage v2 pending-request confirmation planned | Add Cash pending request table/RPC and approve/reject UI before real teacher wage trial |
 
 ## External JPY Transaction Support
 
 Implemented through `supabase-update-20260613-external-jpy-1.sql`; Phase 2 tuition income guard extension was executed through `supabase-update-20260613-external-jpy-2.sql`.
+
+Current role:
+
+- `home_create_external_jpy_transaction(...)` is the idempotent transaction creation primitive.
+- The zsh sync executor that calls it directly is a verification/operations tool, not the final daily business entry point.
+- In Cash linkage v2, this RPC should be called only after a Cash user approves a pending external request from the Cash page.
 
 Allowed external events:
 
@@ -64,11 +70,51 @@ Phase 1 does not link 青空塾, 青空塾 teacher wages, 青空塾 reimbursemen
 
 Phase 2 tuition income guard is narrow: only personal-business school income records may use `tuition_income_received`, it must create a JPY `income` transaction, and it must not be used for expense, CNY, 青空塾, reimbursement, company account, or arbitrary school events.
 
+## Cash Linkage v2 Pending Request Direction
+
+Target flow:
+
+1. School page requests sync to Cash System.
+2. Cash System stores a pending external transaction request.
+3. Cash page shows pending request list/detail.
+4. Cash user approves or rejects.
+5. Approve calls existing `home_create_external_jpy_transaction(...)`, creates a Cash transaction, and changes balance.
+6. Reject stores rejection state/reason and creates no Cash transaction.
+
+Design principles:
+
+- Cash balance can change only after Cash-side approval.
+- School request is not payment confirmation.
+- Idempotency starts at pending request creation and continues at transaction creation.
+- Continue excluding 青空塾, CNY, non-target linkage, reimbursement, company account spending, and arbitrary school events.
+
+Likely Cash objects:
+
+- `home_external_transaction_requests`
+- `home_create_external_transaction_request(...)`
+- `home_approve_external_transaction_request(...)`
+- `home_reject_external_transaction_request(...)`
+- Cash UI view for external pending requests, detail, approve, reject, and approve confirmation.
+
+Recommended bridge:
+
+- Supabase Edge Function from School click to Cash pending request.
+- Do not expose Cash service credentials in the School browser.
+- Do not make the Cash frontend directly read School DB.
+
+Planned 2026-05 teacher wage trial:
+
+- Read-only confirm two pending personal-business `teacher_wage` JPY payment candidates.
+- Use one approve test and one reject test.
+- Approve should create exactly one Cash JPY expense and change balance.
+- Reject should create no Cash transaction and leave balance unchanged.
+- Real data should not be cleaned up; cleanup applies only to clearly marked whitelist test data.
+
 ## Hard Stops
 
 - Do not use `supabase-schema.sql` for incremental external linkage updates.
 - Do not add CNY/school/cross-DB writes in this repository without a separate design.
 - Do not broaden Phase 2 tuition income beyond personal + tuition + JPY without a separate guarded implementation workflow.
 - Do not delete existing transactions as a reversal mechanism.
-- Do not change ordinary page modules for this DB/RPC-only checkpoint.
-- Do not add automatic retry/background sync in Cash System; school owns the manual sync executor and outbox state.
+- Do not change ordinary JPY/CNY page modules while adding external request confirmation.
+- Do not add automatic retry/background sync before the page-driven pending request flow is implemented and tested.
