@@ -9,7 +9,7 @@ Status date: 2026-06-13
 | CNY transactions | Unchanged | No Phase 1 external support |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
 | FX linkage | Unchanged | Keep FX linkage separate |
-| External school linkage | Phase 1/2 manual E2E sync verified; Cash linkage v2 pending request table/RPC/UI implemented in code | Apply SQL, then add Edge Function and School request flow before real teacher wage trial |
+| External school linkage | Phase 1/2 manual E2E sync verified; Cash linkage v2 pending request table/RPC/UI implemented in code | Keep Cash `外部待确认` as approval entry; School should embed request creation in income/payment pages |
 
 ## External JPY Transaction Support
 
@@ -74,7 +74,7 @@ Phase 2 tuition income guard is narrow: only personal-business school income rec
 
 Target flow:
 
-1. School page requests sync to Cash System.
+1. School income/payment business page submits a Cash confirmation request after the user selects the Cash 收款账户 / 支付账户.
 2. Cash System stores a pending external transaction request.
 3. Cash page shows pending request list/detail.
 4. Cash user approves or rejects.
@@ -84,7 +84,7 @@ Target flow:
 Design principles:
 
 - Cash balance can change only after Cash-side approval.
-- School request is not payment confirmation.
+- School business submission to Cash is not Cash approval/payment confirmation.
 - Idempotency starts at pending request creation and continues at transaction creation.
 - Continue excluding 青空塾, CNY, non-target linkage, reimbursement, company account spending, and arbitrary school events.
 
@@ -99,7 +99,7 @@ Likely Cash objects:
 
 Recommended bridge:
 
-- Supabase Edge Function from School click to Cash pending request.
+- Supabase Edge Function behind School income/payment business actions.
 - Do not expose Cash service credentials in the School browser.
 - Do not make the Cash frontend directly read School DB.
 
@@ -108,13 +108,13 @@ Current implementation boundary:
 - Pending request creation does not change Cash balance.
 - Approve is the only path that creates/reuses a JPY transaction.
 - Reject records status/reason and leaves Cash balance unchanged.
-- The School -> Cash request entry and Edge Function are not implemented yet.
-- The SQL has been authored but still requires DB apply and verification.
+- The School -> Cash embedded income/payment page action and Edge Function deployment are not implemented yet.
+- The SQL has been applied and rollback-verified; full School embedded income/payment page E2E remains pending.
 
 Planned 2026-05 teacher wage trial:
 
 - Read-only confirm two pending personal-business `teacher_wage` JPY payment candidates.
-- Use one approve test and one reject test.
+- Use one approve test and one reject test from the School teacher wage payment page after selecting Cash 支付账户.
 - Approve should create exactly one Cash JPY expense and change balance.
 - Reject should create no Cash transaction and leave balance unchanged.
 - Real data should not be cleaned up; cleanup applies only to clearly marked whitelist test data.

@@ -56,14 +56,18 @@ Balances remain read-time calculations from `opening_balance` plus transaction m
 Cash System now has the DB/RPC primitive needed by the school project. The school project owns mapping/outbox state and the manual sync executor. Cash System receives idempotent RPC calls and stores external JPY rows with `created_by_external = true`.
 
 The current school zsh sync executor is a verification/operations tool. The
-target daily business flow is page-driven:
+target daily business flow is page-driven and embedded in the real School
+business pages, not a separate School sync page:
 
-1. School page requests sync to Cash System.
+1. School income record page submits personal tuition JPY income with a Cash
+   收款账户, or School teacher wage payment page submits personal teacher_wage
+   JPY payment with a Cash 支付账户.
 2. Cash System creates a pending external transaction request.
 3. Cash page approves or rejects.
 4. Approval creates the Cash JPY transaction and changes Cash balance.
 5. Rejection creates no transaction and leaves Cash balance unchanged.
-6. School displays `synced/cash_confirmed` or `cash_rejected`.
+6. School displays business labels such as `Cash待确认`, `Cash已确认`, or
+   `Cash已拒绝`.
 
 Recommended bridge: Supabase Edge Function. The School browser should not
 directly write the Cash project with Cash credentials, and the Cash frontend
@@ -76,10 +80,10 @@ Cash-side v2 stage 1 implemented objects:
 - Create/approve/reject/read RPCs listed above
 - UI view: `外部待确认`
 
-Important boundary: this stage does not implement the School page request
-button or the Edge Function bridge. Until that exists, the Cash page can approve
-or reject requests already present in Cash DB, but the daily School-triggered
-business flow is not complete.
+Important boundary: this stage does not implement the School income/payment
+page embedded request action or the Edge Function bridge. Until that exists,
+the Cash page can approve or reject requests already present in Cash DB, but
+the daily School-triggered business flow is not complete.
 
 Phase 1 completed scope:
 
@@ -102,10 +106,10 @@ Phase 2 Cash guard extension is prepared for personal-business tuition income ->
 
 Cash linkage v2 implementation order:
 
-1. Cash DB: add pending external transaction request table and approve/reject RPCs. Implemented in code; DB apply pending.
+1. Cash DB: add pending external transaction request table and approve/reject RPCs. Implemented, applied, and rollback-verified.
 2. Cash UI: add pending request list, detail, approve, reject, and approve confirmation. Implemented in code.
-3. Edge Function: School request -> Cash pending request.
-4. School DB/UI: extend payment linkage lifecycle and change personal JPY teacher wage action from direct confirmation to `请求同步到 Cash System`.
+3. Edge Function: School income/payment page action -> Cash pending request.
+4. School DB/UI: extend payment linkage lifecycle and embed Cash account selection in the business pages: tuition income uses Cash 收款账户; personal JPY teacher wage payment uses Cash 支付账户 and `提交到 Cash 确认` / `请求支付确认`.
 5. ROLLBACK whitelist tests.
 6. COMMIT whitelist E2E approve/reject tests.
 7. Decide whether to run the 2026-05 real two-row JPY teacher wage trial: one approve, one reject. Real data should not be cleaned up; whitelist test data should be cleaned up.
