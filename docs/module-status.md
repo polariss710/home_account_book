@@ -5,15 +5,15 @@ Status date: 2026-06-13
 | Module | Current State | Next Priority |
 | --- | --- | --- |
 | JPY accounts | Existing UI/RPC behavior unchanged | Keep ordinary account management stable |
-| JPY transactions | Existing ordinary flows unchanged; external JPY DB/RPC insert support added for Phase 1 teacher wage, with Phase 2 tuition income guard SQL prepared | Future UI should display external rows as externally owned if needed |
+| JPY transactions | Existing ordinary flows unchanged; external JPY DB/RPC insert support added for Phase 1 teacher wage and Phase 2 tuition income | Future UI should display external rows as externally owned if needed |
 | CNY transactions | Unchanged | No Phase 1 external support |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
 | FX linkage | Unchanged | Keep FX linkage separate |
-| External school linkage | Phase 1 manual E2E sync completed for personal-business teacher wage JPY payment; test DB residue cleaned; Phase 2 tuition income Cash guard SQL prepared | School-side tuition income implementation, reversal sync, and retry UI require separate guarded phases |
+| External school linkage | Phase 1 teacher wage JPY payment and Phase 2 tuition JPY income manual E2E sync completed; test DB residue cleaned | Reversal sync, automatic scheduling, sync-status UI, and retry UI require separate guarded phases |
 
 ## External JPY Transaction Support
 
-Implemented through `supabase-update-20260613-external-jpy-1.sql`; Phase 2 tuition income guard extension is prepared in `supabase-update-20260613-external-jpy-2.sql`.
+Implemented through `supabase-update-20260613-external-jpy-1.sql`; Phase 2 tuition income guard extension was executed through `supabase-update-20260613-external-jpy-2.sql`.
 
 Allowed external events:
 
@@ -49,7 +49,18 @@ Verified E2E test row, later cleaned:
 - duplicate school sync run left transaction count at 1.
 - cleanup verification later confirmed the target Cash transaction/account counts are 0, and school target linkage/payment/mapping/business entity counts are 0.
 
-Phase 1 does not link 青空塾, 青空塾 teacher wages, 青空塾 reimbursements, company account spending, CNY, non-`teacher_wage`, personal tuition income, or part-time wage income.
+Verified Phase 2 E2E test row, later cleaned:
+
+- Cash test account: `95000000-0000-4000-8000-000000160501`
+- school income record: `484e9ecf-e48d-4f8a-8812-3b32fdef0df6`
+- school income linkage event: `36a6108f-e638-4107-9a1f-0023de536bd7`
+- Cash JPY transaction: `2430846f-e8d2-4e31-b9c6-6fb05279dbc5`
+- `transaction_type = income`
+- `amount = 6789`
+- duplicate school sync run left transaction count at 1.
+- cleanup verification later confirmed target Cash transaction/account counts are 0, Cash external event/reference counts are 0, `home_cny_transactions` marker count is 0, and school target business/student/mapping/income/event counts are 0.
+
+Phase 1 does not link 青空塾, 青空塾 teacher wages, 青空塾 reimbursements, company account spending, CNY, non-`teacher_wage`, or part-time wage income. Phase 2 only adds personal-business `tuition` JPY income.
 
 Phase 2 tuition income guard is narrow: only personal-business school income records may use `tuition_income_received`, it must create a JPY `income` transaction, and it must not be used for expense, CNY, 青空塾, reimbursement, company account, or arbitrary school events.
 
@@ -57,7 +68,7 @@ Phase 2 tuition income guard is narrow: only personal-business school income rec
 
 - Do not use `supabase-schema.sql` for incremental external linkage updates.
 - Do not add CNY/school/cross-DB writes in this repository without a separate design.
-- Do not execute the Phase 2 tuition income Cash SQL or add school-side tuition income linkage without the separate guarded implementation workflow.
+- Do not broaden Phase 2 tuition income beyond personal + tuition + JPY without a separate guarded implementation workflow.
 - Do not delete existing transactions as a reversal mechanism.
 - Do not change ordinary page modules for this DB/RPC-only checkpoint.
 - Do not add automatic retry/background sync in Cash System; school owns the manual sync executor and outbox state.

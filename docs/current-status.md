@@ -8,16 +8,15 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 - Cash System is a static Supabase-backed household ledger using `home_` tables.
 - Normal JPY/CNY account and transaction UI remains unchanged.
-- External JPY transaction support for aozora school now covers the Phase 1 personal-business teacher wage linkage and has a Phase 2 guard extension prepared for personal-business tuition income.
-- A school-side manual sync executor successfully called the Cash RPC, inserted one whitelisted external JPY test transaction, verified idempotent duplicate execution, then cleaned the Phase 1 test transaction/account residue.
+- External JPY transaction support for aozora school now covers Phase 1 personal-business teacher wage payments and Phase 2 personal-business tuition JPY income.
+- A school-side manual sync executor successfully called the Cash RPC for both supported flows, verified idempotent duplicate execution, and later cleaned the whitelist test transaction/account residue.
 - No school DB writes, background worker, or page/UI changes are implemented in this repository.
 
 ## Latest Update
 
-2026-06-13 Phase 2 tuition income guard SQL checkpoint:
+2026-06-13 Phase 2 tuition income E2E checkpoint:
 
-- Added incremental SQL file `supabase-update-20260613-external-jpy-2.sql`.
-- This SQL has not been executed in this documentation checkpoint.
+- Executed incremental SQL file `supabase-update-20260613-external-jpy-2.sql`.
 - It preserves existing Phase 1 support:
   - `external_reference_type = school_payment_requests`
   - `external_event_type = teacher_wage_payment_confirm` -> `transaction_type = expense`
@@ -30,6 +29,20 @@ This document keeps the current Cash System implementation checkpoint, safety no
   - positive amount only
 - Idempotency keys, external source event uniqueness, duplicate return behavior, and payload mismatch behavior remain unchanged.
 - The guard is intentionally narrow and does not allow arbitrary school events.
+- School-side COMMIT E2E sync successfully created one Cash JPY income transaction:
+  - Cash test account: `95000000-0000-4000-8000-000000160501`
+  - school income record: `484e9ecf-e48d-4f8a-8812-3b32fdef0df6`
+  - school income linkage event: `36a6108f-e638-4107-9a1f-0023de536bd7`
+  - Cash JPY transaction: `2430846f-e8d2-4e31-b9c6-6fb05279dbc5`
+  - transaction type: `income`
+  - amount: `6789`
+  - duplicate school sync run left Cash transaction count at 1.
+- Phase 2 cleanup completed after verification:
+  - target Cash JPY transaction count: 0
+  - target Cash account count: 0
+  - target Cash external event/reference counts: 0
+  - `home_cny_transactions` marker count: 0
+  - school-side target business/student/mapping/income/event counts: 0
 
 2026-06-13 external JPY transaction RPC and E2E checkpoint:
 
@@ -67,7 +80,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 - No CNY external transaction support.
 - No 青空塾, company account spending, reimbursement, non-`teacher_wage`, or part-time wage income linkage.
-- Personal tuition income is only prepared as a Phase 2 JPY income guard in Cash SQL; the school-side implementation and DB execution remain separate future work.
+- Personal tuition income support is limited to personal-business `tuition` JPY income through the school outbox and manual sync executor.
 - No FX support.
 - No school DB writes.
 - No cross-DB transaction.
@@ -82,4 +95,4 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - School project owns mapping/outbox and has a manual sync executor for Phase 1. Future work should add guarded retry/operator workflow only if needed.
 - If reversal is wired, use a separate external event with `transaction_type = income`; do not delete the original Cash transaction.
 - Any future Cash UI display for external rows should treat them as externally owned and avoid ordinary edit/delete unless a guarded edit/reversal design exists.
-- Phase 2 next step is school-side implementation for personal-business tuition income -> Cash System JPY income transaction. Reuse external/idempotency/linkage event/outbox patterns, and continue to exclude 青空塾 and CNY.
+- Phase 2 follow-ups are linked tuition reverse sync, automatic sync scheduling, sync-status UI, and failed retry operation UI. Continue to exclude 青空塾 and CNY.
