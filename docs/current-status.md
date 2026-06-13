@@ -13,7 +13,8 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - The manual sync executor is now classified as a verification/operations tool, not the final daily business entry point.
 - Cash linkage v2 target is page-driven confirmation embedded in the real School business pages: the School income record page selects a Cash 收款账户 for personal tuition JPY income, and the School teacher wage payment page selects a Cash 支付账户 for personal teacher_wage JPY payment. Cash System keeps the separate `外部待确认` page as the ledger-side approve/reject entry, and only approval creates a Cash transaction and changes Cash balance.
 - Cash-side pending request table, create/approve/reject RPCs, and Cash approval UI are implemented in this repository.
-- No school DB writes, School-side Edge Function deployment, School embedded income/payment page action, background worker, or automatic scheduler is implemented in this repository.
+- Cash approval UI now calls a School-owned Edge Function after local approve/reject: approve creates the Cash transaction first, then requests School writeback; reject records Cash rejection first, then requests School writeback. If School writeback fails, Cash state is not rolled back and the UI tells the operator to retry later.
+- No direct School DB writes, School-side Edge Function deployment, background worker, or automatic scheduler is implemented in this repository.
 
 ## Latest Update
 
@@ -36,6 +37,16 @@ This document keeps the current Cash System implementation checkpoint, safety no
   - `school_income_records` + `tuition_income_received` -> JPY `income`
 - School -> Cash request entry belongs inside the School income/payment business pages, not a standalone School sync page. The intended bridge is still a Supabase Edge Function behind those business actions, not direct School-browser writes to Cash DB.
 - This checkpoint adds code/SQL/docs; the SQL was applied and rollback-verified in a later guarded DB apply phase.
+
+2026-06-13 Cash linkage v2 approve/reject School writeback code:
+
+- Cash external request approve/reject UI now calls `syncCashRequestResultToSchool(...)` after the local Cash RPC succeeds.
+- The wrapper posts to the School-owned `sync-cash-request-result` Edge Function with `cash_request_id` and `action = approved | rejected`.
+- Cash approve still owns Cash transaction creation through `home_approve_external_transaction_request(...)`.
+- Cash reject still creates no transaction and does not change balance.
+- The browser does not write School DB directly and does not receive service-role keys.
+- The School callback Function URL is configured in `js/config.js`; no School key is committed. The School Function is expected to validate the Cash bearer token internally.
+- If callback fails, Cash request remains approved/rejected and the UI shows: Cash has been processed, but School writeback failed; retry later.
 
 2026-06-13 Cash linkage v2 UI/business direction correction:
 

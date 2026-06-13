@@ -9,7 +9,7 @@ Status date: 2026-06-13
 | CNY transactions | Unchanged | No Phase 1 external support |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
 | FX linkage | Unchanged | Keep FX linkage separate |
-| External school linkage | Phase 1/2 manual E2E sync verified; Cash linkage v2 pending request table/RPC/UI implemented in code | Keep Cash `外部待确认` as approval entry; School should embed request creation in income/payment pages |
+| External school linkage | Phase 1/2 manual E2E sync verified; Cash linkage v2 pending request table/RPC/UI implemented; approve/reject UI calls School callback Function after local Cash mutation | Deploy/configure callback Function, then run approve/reject E2E |
 
 ## External JPY Transaction Support
 
@@ -108,8 +108,15 @@ Current implementation boundary:
 - Pending request creation does not change Cash balance.
 - Approve is the only path that creates/reuses a JPY transaction.
 - Reject records status/reason and leaves Cash balance unchanged.
-- The School -> Cash embedded income/payment page action and Edge Function deployment are not implemented yet.
-- The SQL has been applied and rollback-verified; full School embedded income/payment page E2E remains pending.
+- After local approve/reject succeeds, the Cash UI calls the School-owned
+  `sync-cash-request-result` Edge Function through API wrapper
+  `syncCashRequestResultToSchool(...)`.
+- If School writeback fails, Cash request remains approved/rejected and the UI
+  reports that School writeback should be retried later.
+- The browser does not write School DB directly and does not receive
+  service-role keys.
+- The SQL has been applied and rollback-verified; callback Function deployment
+  and full School embedded approve/reject E2E remain pending.
 
 Planned 2026-05 teacher wage trial:
 

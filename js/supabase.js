@@ -508,6 +508,56 @@ export async function rejectExternalTransactionRequest(id, reason) {
   return handleRpcResult(data, "外部请求拒绝失败。");
 }
 
+export async function syncCashRequestResultToSchool(id, action) {
+  const config = getConfig();
+  const functionUrl = config.schoolCashRequestResultFunctionUrl;
+  if (!functionUrl) {
+    return {
+      ok: false,
+      message: "School 回写 Function URL 未配置。",
+    };
+  }
+
+  const { data: sessionData, error: sessionError } = await appState.supabaseClient.auth.getSession();
+  if (sessionError || !sessionData.session?.access_token) {
+    return {
+      ok: false,
+      message: `Cash 登录状态读取失败：${sessionError?.message || "没有可用 session"}`,
+    };
+  }
+
+  const headers = {
+    authorization: `Bearer ${sessionData.session.access_token}`,
+    "content-type": "application/json",
+  };
+
+  try {
+    const response = await fetch(functionUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        cash_request_id: id,
+        action,
+      }),
+    });
+
+    const data = await response.json().catch(() => null);
+    if (!response.ok || data?.ok === false) {
+      return {
+        ok: false,
+        message: data?.details || data?.message || `School 回写失败：HTTP ${response.status}`,
+      };
+    }
+
+    return data || { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error.message || "School 回写请求失败。",
+    };
+  }
+}
+
 export async function deactivateTemplate(id) {
   return updateById("home_fixed_templates", id, { is_active: false });
 }

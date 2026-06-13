@@ -1,4 +1,9 @@
-import { APP_VERSION, DEFAULT_SUPABASE_ANON_KEY, DEFAULT_SUPABASE_URL } from "#config";
+import {
+  APP_VERSION,
+  DEFAULT_SCHOOL_CASH_REQUEST_RESULT_FUNCTION_URL,
+  DEFAULT_SUPABASE_ANON_KEY,
+  DEFAULT_SUPABASE_URL,
+} from "#config";
 import { els } from "#elements";
 import { appState } from "#state";
 
@@ -52,5 +57,6 @@ export function getConfig() {
   return {
     url: DEFAULT_SUPABASE_URL,
     anonKey: DEFAULT_SUPABASE_ANON_KEY,
+    schoolCashRequestResultFunctionUrl: DEFAULT_SCHOOL_CASH_REQUEST_RESULT_FUNCTION_URL,
   };
 }

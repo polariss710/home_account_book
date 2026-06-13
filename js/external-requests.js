@@ -7,6 +7,7 @@ import {
   loadAppData,
   loadExternalTransactionRequests,
   rejectExternalTransactionRequest,
+  syncCashRequestResultToSchool,
 } from "#supabase";
 import { emptyRow, escapeHtml, money } from "#utils";
 
@@ -77,7 +78,15 @@ function bindRequestActions() {
       if (!confirmed) return;
       const result = await approveExternalTransactionRequest(request.id);
       if (!result) return;
-      await refreshAfterRequestMutation(result.message || "外部请求已确认。");
+      const schoolSync = await syncCashRequestResultToSchool(request.id, "approved");
+      if (!schoolSync?.ok) {
+        await refreshAfterRequestMutation(
+          `Cash 已处理，但回写 School 失败，请稍后重试：${schoolSync?.message || "未知错误"}`,
+          "error",
+        );
+        return;
+      }
+      await refreshAfterRequestMutation("已确认并回写私塾系统。");
     });
   });
 
@@ -89,14 +98,22 @@ function bindRequestActions() {
       if (reason === null) return;
       const result = await rejectExternalTransactionRequest(request.id, reason.trim());
       if (!result) return;
-      await refreshAfterRequestMutation(result.message || "外部请求已拒绝。");
+      const schoolSync = await syncCashRequestResultToSchool(request.id, "rejected");
+      if (!schoolSync?.ok) {
+        await refreshAfterRequestMutation(
+          `Cash 已处理，但回写 School 失败，请稍后重试：${schoolSync?.message || "未知错误"}`,
+          "error",
+        );
+        return;
+      }
+      await refreshAfterRequestMutation("已拒绝并回写私塾系统。");
     });
   });
 }
 
-async function refreshAfterRequestMutation(message) {
+async function refreshAfterRequestMutation(message, type = "success") {
   await Promise.all([loadExternalTransactionRequests(), loadAppData()]);
-  setActionMessage(message, "success");
+  setActionMessage(message, type);
   renderPage();
 }
 

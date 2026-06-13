@@ -73,6 +73,21 @@ Recommended bridge: Supabase Edge Function. The School browser should not
 directly write the Cash project with Cash credentials, and the Cash frontend
 should not directly read the School DB.
 
+Cash approve/reject callback boundary:
+
+- The Cash page first calls Cash RPCs:
+  - approve: `home_approve_external_transaction_request(...)`
+  - reject: `home_reject_external_transaction_request(...)`
+- After the Cash RPC succeeds, the Cash page calls the School-owned
+  `sync-cash-request-result` Edge Function with:
+  - `cash_request_id`
+  - `action = approved | rejected`
+- The Edge Function, not the Cash browser, reads the Cash request with service
+  role and calls School confirmed/rejected RPCs with School service role.
+- If School writeback fails, Cash request state and any approved Cash
+  transaction are not rolled back. The UI instructs the operator to retry the
+  School writeback later.
+
 Cash-side v2 stage 1 implemented objects:
 
 - Formal SQL file: `supabase-update-20260613-external-requests.sql`
@@ -80,10 +95,9 @@ Cash-side v2 stage 1 implemented objects:
 - Create/approve/reject/read RPCs listed above
 - UI view: `外部待确认`
 
-Important boundary: this stage does not implement the School income/payment
-page embedded request action or the Edge Function bridge. Until that exists,
-the Cash page can approve or reject requests already present in Cash DB, but
-the daily School-triggered business flow is not complete.
+Important boundary: the code path now includes the School request Edge Function
+and the Cash-result callback Edge Function, but deployment/configuration and
+approve/reject E2E testing remain separate guarded phases.
 
 Phase 1 completed scope:
 
@@ -108,8 +122,9 @@ Cash linkage v2 implementation order:
 
 1. Cash DB: add pending external transaction request table and approve/reject RPCs. Implemented, applied, and rollback-verified.
 2. Cash UI: add pending request list, detail, approve, reject, and approve confirmation. Implemented in code.
-3. Edge Function: School income/payment page action -> Cash pending request.
-4. School DB/UI: extend payment linkage lifecycle and embed Cash account selection in the business pages: tuition income uses Cash 收款账户; personal JPY teacher wage payment uses Cash 支付账户 and `提交到 Cash 确认` / `请求支付确认`.
-5. ROLLBACK whitelist tests.
-6. COMMIT whitelist E2E approve/reject tests.
-7. Decide whether to run the 2026-05 real two-row JPY teacher wage trial: one approve, one reject. Real data should not be cleaned up; whitelist test data should be cleaned up.
+3. Edge Function: School income/payment page action -> Cash pending request. Implemented for personal JPY teacher wage request code path in School repo.
+4. School DB/UI: extend payment linkage lifecycle and embed Cash account selection in the business pages: personal JPY teacher wage payment uses Cash 支付账户 and `提交到 Cash 确认`; tuition income v2 request confirmation remains a later path.
+5. Cash approve/reject -> School result callback. Code added through School `sync-cash-request-result` Edge Function and Cash UI wrapper.
+6. ROLLBACK whitelist tests.
+7. COMMIT whitelist E2E approve/reject tests.
+8. Decide whether to run the 2026-05 real two-row JPY teacher wage trial: one approve, one reject. Real data should not be cleaned up; whitelist test data should be cleaned up.
