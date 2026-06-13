@@ -59,10 +59,20 @@ Balances remain read-time calculations from `opening_balance` plus transaction m
 
 ## Cross-Project Boundary
 
-Cash System is the actual user-controlled account ledger. School is the
-business ledger and owns business attribution. Cash should record actual account
-movement when School-related money passes through user-controlled accounts;
-School business ownership does not decide Cash eligibility.
+School System is the business ledger. It records operating facts: tuition
+income, teacher wages, student/teacher/month, personal vs 青空塾 ownership, cost
+attribution, corporate-account clearing records, and company expense records.
+
+Cash System remains the user's household/private account ledger. Because many
+school receipts and payments actually pass through user-controlled accounts,
+Cash records those real account movements: Alipay, JPY cash, Mitsubishi/Rakuten
+and other JPY accounts, RMB accounts, actual receipts, actual payments,
+CNY/JPY allocation, transfer to corporate accounts, and corporate reimbursement
+back to user-controlled accounts.
+
+Cash System does not judge business attribution. School business ownership does
+not decide Cash eligibility; actual movement through a user-controlled account
+does.
 
 Cash System now has the DB/RPC primitive needed by the school project for the
 historical JPY paths. The school project owns mapping/outbox state and the
@@ -89,12 +99,33 @@ Correct policy examples:
 - CNY/JPY exchange and account allocation remain manual Cash operations for
   now; School does not automate them.
 
+External request-only rule:
+
+- School initiates external Cash requests from School business flows.
+- Cash System stores and displays pending requests.
+- Cash user approval creates the Cash transaction and changes balance.
+- Cash user rejection creates no transaction and changes no balance.
+- Cash System does not proactively create School business records.
+- Cash System does not proactively initiate School business requests.
+
+Profit and clearing boundary:
+
+- Operating profit includes real tuition income, teacher wages, and real
+  business expenses.
+- Operating profit excludes Cash transfer to corporate accounts, corporate
+  reimbursement to Cash, CNY/JPY exchange, user-account transfers,
+  entrusted-funds clearing, and wage-advance recovery.
+- Cash transfer to corporate account for 青空塾 tuition submission is
+  `支出 / 转给法人账户 / 学费提交 / 代收款清算`.
+- Corporate reimbursement for Cash-advanced 青空塾 wages is
+  `收入 / 法人账户报销 / 青空塾工资垫付报销`.
+
 The current school zsh sync executor is a verification/operations tool. The
 target daily business flow is page-driven and embedded in the real School
 business pages, not a separate School sync page:
 
-1. School income/payment business page submits a Cash request when actual money
-   will move through a user-controlled Cash account.
+1. School income/payment business page submits an external Cash request when
+   actual money will move through a user-controlled Cash account.
 2. Cash System creates a pending external transaction request.
 3. Cash page approves or rejects.
 4. Approval creates the Cash JPY transaction and changes Cash balance.
@@ -155,8 +186,8 @@ Cash linkage v2 implementation order:
 
 1. Cash DB: add pending external transaction request table and approve/reject RPCs. Implemented, applied, and rollback-verified.
 2. Cash UI: add pending request list, detail, approve, reject, and approve confirmation. Implemented in code.
-3. Edge Function: School income/payment page action -> Cash pending request. Implemented for personal JPY teacher wage request code path in School repo.
-4. School DB/UI: extend payment linkage lifecycle and embed Cash account selection in the business pages: personal JPY teacher wage payment uses Cash 支付账户 and `提交到 Cash 确认`; tuition income v2 request confirmation remains a later path.
+3. Edge Function: School income/payment page action -> Cash pending request. Implemented for the historical personal JPY teacher wage request code path in School repo.
+4. School DB/UI: extend payment linkage lifecycle and embed Cash account selection in the business pages. The current implemented subset is personal JPY teacher wage payment with Cash 支付账户 and `提交到 Cash 确认`; the target policy must broaden this to all School money movement that passes through user-controlled accounts, including 青空塾 and CNY/RMB.
 5. Cash approve/reject -> School result callback. Code added through School `sync-cash-request-result` Edge Function and Cash UI wrapper.
 6. ROLLBACK whitelist tests.
 7. COMMIT whitelist E2E approve/reject tests.

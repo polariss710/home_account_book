@@ -11,6 +11,28 @@ Status date: 2026-06-14
 | FX linkage | Unchanged | Keep FX linkage separate |
 | External school linkage | Historical Phase 1/2 manual E2E sync verified; Cash linkage v2 pending request table/RPC/UI implemented; business policy now requires all user-controlled-account School movements to enter Cash | Align implementation with unified personal/青空塾, JPY/CNY policy before real wage trial |
 
+## Final System Boundary
+
+- School System is the business ledger. It records tuition income, teacher wages,
+  student/teacher/month, personal vs 青空塾 ownership, cost attribution,
+  corporate-account clearing records, and company expense records.
+- Cash System remains the user's household/private account ledger. It records
+  actual user-controlled account movement for Alipay, JPY cash,
+  Mitsubishi/Rakuten and other JPY accounts, RMB accounts, actual receipts,
+  actual payments, CNY/JPY allocation, transfers to corporate accounts, and
+  corporate reimbursements.
+- Cash System does not judge School business ownership. School owns business
+  attribution.
+- Cash System accepts external requests only. School initiates requests; Cash
+  users approve/reject; approve creates Cash transactions and changes balances;
+  reject creates no transaction and changes no balance.
+- Cash System must not proactively create School business records or initiate
+  School business requests.
+- Internal clearing is not operating profit: Cash-to-corporate transfer,
+  corporate reimbursement to Cash, CNY/JPY exchange, user-account transfer,
+  entrusted tuition clearing, and wage-advance recovery are excluded from
+  profit statistics.
+
 ## External JPY Transaction Support
 
 Implemented through `supabase-update-20260613-external-jpy-1.sql`; Phase 2 tuition income guard extension was executed through `supabase-update-20260613-external-jpy-2.sql`.
@@ -104,6 +126,9 @@ Design principles:
 
 - Cash balance can change only after Cash-side approval.
 - School business submission to Cash is not Cash approval/payment confirmation.
+- School initiates external requests; Cash does not proactively generate
+  School requests.
+- Cash does not create School business records.
 - Idempotency starts at pending request creation and continues at transaction creation.
 - Do not exclude 青空塾 or CNY/RMB when actual money moves through a user-controlled account. Continue excluding arbitrary school events without real account movement.
 

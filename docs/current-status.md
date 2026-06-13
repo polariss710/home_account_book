@@ -11,7 +11,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - External JPY transaction support for aozora school currently covers historical Phase 1 personal-business teacher wage payments and Phase 2 personal-business tuition JPY income. This is current implementation scope, not the corrected business policy.
 - A school-side manual sync executor successfully called the Cash RPC for both supported flows, verified idempotent duplicate execution, and later cleaned the whitelist test transaction/account residue.
 - The manual sync executor is now classified as a verification/operations tool, not the final daily business entry point.
-- Cash linkage v1 business policy is unified as of 2026-06-14: School is the business ledger and stores business ownership; Cash System is the actual user-controlled account ledger and records real money movement. Any money that passes through a user-controlled account should enter Cash, regardless of whether School ownership is personal business or 青空塾. Business ownership no longer decides Cash eligibility. Cash linkage v2 target remains page-driven confirmation embedded in the real School business pages. Cash System keeps the separate `外部待确认` page as the ledger-side approve/reject entry, and only approval creates a Cash transaction and changes Cash balance.
+- Cash linkage v1 business policy is unified as of 2026-06-14: School is the business ledger and stores business ownership; Cash System's original position remains the user's household/private account ledger, and it records real user-controlled account movement. Any money that passes through a user-controlled account should enter Cash, regardless of whether School ownership is personal business or 青空塾. Business ownership no longer decides Cash eligibility. Cash System only accepts external requests; it does not proactively create School business records or initiate School business requests. Cash keeps the separate `外部待确认` page as the ledger-side approve/reject entry, and only approval creates a Cash transaction and changes Cash balance.
 - Cash-side pending request table, create/approve/reject RPCs, and Cash approval UI are implemented in this repository.
 - Cash approval UI now calls a School-owned Edge Function after local approve/reject: approve creates the Cash transaction first, then requests School writeback; reject records Cash rejection first, then requests School writeback. If School writeback fails, Cash state is not rolled back and the UI tells the operator to retry later.
 - No direct School DB writes, School-side Edge Function deployment, background worker, or automatic scheduler is implemented in this repository.
@@ -40,6 +40,16 @@ This document keeps the current Cash System implementation checkpoint, safety no
   - 青空塾 wage payments should be identifiable as `青空塾工资垫付`
   - later corporate reimbursement should be recorded as `法人账户报销 / 青空塾工资垫付报销`
 - CNY/JPY exchange and account allocation remain manual Cash operations for now, usually monthly; School does not automate them.
+- External request rule:
+  - School sends external requests from tuition/payment business flows.
+  - Cash shows pending requests.
+  - approve creates the Cash transaction and changes balance.
+  - reject creates no transaction and changes no balance.
+  - Cash does not proactively generate School business requests or create School business records.
+- Internal clearing / profit rule:
+  - Cash transfer to corporate account for 青空塾 tuition submission is `支出 / 转给法人账户 / 学费提交 / 代收款清算`.
+  - Corporate reimbursement for Cash-advanced 青空塾 wages is `收入 / 法人账户报销 / 青空塾工资垫付报销`.
+  - Cash-to-corporate transfer, corporate reimbursement, CNY/JPY exchange, user-account transfer, entrusted-funds clearing, and wage-advance recovery are internal clearing/allocation and should not be treated as operating profit.
 - Current Cash code/RPC may still be JPY-only or otherwise narrow. Those are implementation gaps to fix later. The real 2026-05 wage trial remains paused until School and Cash implementation match the corrected policy.
 
 2026-06-13 Cash linkage v2 stage 1 implementation:
@@ -171,6 +181,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - These are implementation limits, not the corrected business policy. The policy is: real movement through user-controlled accounts enters Cash; School keeps business ownership.
 - Historical personal tuition income support is limited to personal-business `tuition` JPY income through the school outbox and manual sync executor.
 - Cash pending external transaction request table/RPC/UI has been applied and rollback-verified; full School page embedded approve/reject E2E remains pending.
+- Cash accepts external requests only. It must not be the originator of School business requests and must not create School business records.
 - No FX support.
 - No school DB writes.
 - No Edge Function bridge from School to Cash request creation.
@@ -187,7 +198,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - School project owns mapping/outbox and has a manual sync executor for Phase 1. Future work should add guarded retry/operator workflow only if needed.
 - `supabase-update-20260613-external-requests.sql` has been applied and rollback-verified; full embedded School page E2E remains pending.
 - Next implementation phase should add or deploy the Supabase Edge Function bridge behind School income/payment business submissions.
-- Then update the School income record and teacher wage payment page flows so personal-business JPY tuition income / teacher wage payment create Cash pending requests through embedded 收款账户 / 支付账户 selection instead of exposing a standalone sync entry.
+- Then update the School income record and teacher wage payment page flows so School-originated tuition income / teacher wage payment create Cash pending requests through embedded 收款账户 / 支付账户 selection instead of exposing a standalone sync entry. The historical personal-business JPY path is only the first implemented subset and must be broadened to the unified policy.
 - If reversal is wired, use a separate external event with `transaction_type = income`; do not delete the original Cash transaction.
 - Any future Cash UI display for external rows should treat them as externally owned and avoid ordinary edit/delete unless a guarded edit/reversal design exists.
 - The planned real 2026-05 teacher wage trial remains paused. Resume only after School and Cash implementation match the corrected unified policy; real data should not be cleaned up, while whitelist test data still requires cleanup.
