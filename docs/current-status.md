@@ -8,8 +8,8 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 - Cash System is a static Supabase-backed household ledger using `home_` tables.
 - Normal JPY/CNY account and transaction UI remains unchanged.
-- Phase 1 external JPY transaction support for aozora school personal-business teacher wage linkage is available through the Cash DB/RPC layer.
-- A school-side manual sync executor has successfully called the Cash RPC and inserted one whitelisted external JPY test transaction.
+- Phase 1 external JPY transaction support for aozora school personal-business teacher wage linkage is complete through the Cash DB/RPC layer.
+- A school-side manual sync executor successfully called the Cash RPC, inserted one whitelisted external JPY test transaction, verified idempotent duplicate execution, then cleaned the Phase 1 test transaction/account residue.
 - No school DB writes, background worker, or page/UI changes are implemented in this repository.
 
 ## Latest Update
@@ -40,10 +40,16 @@ This document keeps the current Cash System implementation checkpoint, safety no
   - transaction type: `expense`
   - amount: `6789`
   - duplicate script run left Cash transaction count at 1.
+- Phase 1 cleanup completed after verification:
+  - target Cash JPY transaction count: 0
+  - target Cash account count: 0
+  - school-side target linkage/payment/mapping/business entity counts: 0
+  - older school income-edit `codex-test` data was intentionally not touched.
 
 ## Boundaries
 
 - No CNY external transaction support.
+- No 青空塾, company account spending, reimbursement, non-`teacher_wage`, personal tuition income, or part-time wage income linkage in Phase 1.
 - No FX support.
 - No school DB writes.
 - No cross-DB transaction.
@@ -58,3 +64,4 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - School project owns mapping/outbox and has a manual sync executor for Phase 1. Future work should add guarded retry/operator workflow only if needed.
 - If reversal is wired, use a separate external event with `transaction_type = income`; do not delete the original Cash transaction.
 - Any future Cash UI display for external rows should treat them as externally owned and avoid ordinary edit/delete unless a guarded edit/reversal design exists.
+- Phase 2 candidate is personal-business tuition income -> Cash System JPY income transaction. Design first, reuse external/idempotency/linkage event/outbox patterns, and continue to exclude 青空塾 and CNY.
