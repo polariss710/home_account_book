@@ -10,7 +10,7 @@ Status date: 2026-06-13
 - `home_cny_transactions`: CNY ledger movements.
 - `home_fixed_templates`: recurring fixed item templates.
 - `home_fixed_month_items`: generated monthly fixed items.
-- Planned for Cash linkage v2: `home_external_transaction_requests` or equivalent pending request table for aozora school external transaction requests. Not implemented yet.
+- `home_external_transaction_requests`: Cash-owned pending request table for aozora school external transaction requests. Pending/rejected rows do not affect Cash balances.
 
 ## Core RPCs
 
@@ -18,7 +18,10 @@ Status date: 2026-06-13
 - `home_update_jpy_transaction(...)`: updates ordinary JPY transactions.
 - `home_delete_jpy_transaction(uuid)`: deletes ordinary JPY transactions.
 - `home_create_external_jpy_transaction(...)`: creates idempotent external-source JPY transactions for guarded aozora school linkages.
-- Planned for Cash linkage v2: request create/approve/reject RPCs. Approve should call `home_create_external_jpy_transaction(...)`; reject should create no transaction. Not implemented yet.
+- `home_create_external_transaction_request(...)`: idempotently creates a pending external request. It does not create a transaction.
+- `home_approve_external_transaction_request(uuid)`: approves a pending request and then calls `home_create_external_jpy_transaction(...)`.
+- `home_reject_external_transaction_request(uuid, text)`: rejects a pending request without creating a transaction.
+- `home_get_external_transaction_requests(text, integer)`: reads requests for the Cash approval UI.
 
 ## External JPY RPC Boundary
 
@@ -66,6 +69,18 @@ Recommended bridge: Supabase Edge Function. The School browser should not
 directly write the Cash project with Cash credentials, and the Cash frontend
 should not directly read the School DB.
 
+Cash-side v2 stage 1 implemented objects:
+
+- Formal SQL file: `supabase-update-20260613-external-requests.sql`
+- Request table: `home_external_transaction_requests`
+- Create/approve/reject/read RPCs listed above
+- UI view: `外部待确认`
+
+Important boundary: this stage does not implement the School page request
+button or the Edge Function bridge. Until that exists, the Cash page can approve
+or reject requests already present in Cash DB, but the daily School-triggered
+business flow is not complete.
+
 Phase 1 completed scope:
 
 - Personal-business school `teacher_wage` JPY payment only.
@@ -87,8 +102,8 @@ Phase 2 Cash guard extension is prepared for personal-business tuition income ->
 
 Cash linkage v2 implementation order:
 
-1. Cash DB: add pending external transaction request table and approve/reject RPCs.
-2. Cash UI: add pending request list, detail, approve, reject, and approve confirmation.
+1. Cash DB: add pending external transaction request table and approve/reject RPCs. Implemented in code; DB apply pending.
+2. Cash UI: add pending request list, detail, approve, reject, and approve confirmation. Implemented in code.
 3. Edge Function: School request -> Cash pending request.
 4. School DB/UI: extend payment linkage lifecycle and change personal JPY teacher wage action from direct confirmation to `请求同步到 Cash System`.
 5. ROLLBACK whitelist tests.

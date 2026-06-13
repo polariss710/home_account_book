@@ -9,7 +9,7 @@ Status date: 2026-06-13
 | CNY transactions | Unchanged | No Phase 1 external support |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
 | FX linkage | Unchanged | Keep FX linkage separate |
-| External school linkage | Phase 1 teacher wage JPY payment and Phase 2 tuition JPY income manual E2E sync verified; Cash linkage v2 pending-request confirmation planned | Add Cash pending request table/RPC and approve/reject UI before real teacher wage trial |
+| External school linkage | Phase 1/2 manual E2E sync verified; Cash linkage v2 pending request table/RPC/UI implemented in code | Apply SQL, then add Edge Function and School request flow before real teacher wage trial |
 
 ## External JPY Transaction Support
 
@@ -90,17 +90,26 @@ Design principles:
 
 Likely Cash objects:
 
-- `home_external_transaction_requests`
-- `home_create_external_transaction_request(...)`
-- `home_approve_external_transaction_request(...)`
-- `home_reject_external_transaction_request(...)`
-- Cash UI view for external pending requests, detail, approve, reject, and approve confirmation.
+- `home_external_transaction_requests`: implemented in `supabase-update-20260613-external-requests.sql`
+- `home_create_external_transaction_request(...)`: implemented; idempotently creates `pending`
+- `home_approve_external_transaction_request(...)`: implemented; only pending requests can approve, then it calls `home_create_external_jpy_transaction(...)`
+- `home_reject_external_transaction_request(...)`: implemented; only pending requests can reject and no Cash transaction is created
+- `home_get_external_transaction_requests(...)`: implemented for the Cash UI
+- Cash UI view `外部待确认`: implemented for list/filter/approve/reject
 
 Recommended bridge:
 
 - Supabase Edge Function from School click to Cash pending request.
 - Do not expose Cash service credentials in the School browser.
 - Do not make the Cash frontend directly read School DB.
+
+Current implementation boundary:
+
+- Pending request creation does not change Cash balance.
+- Approve is the only path that creates/reuses a JPY transaction.
+- Reject records status/reason and leaves Cash balance unchanged.
+- The School -> Cash request entry and Edge Function are not implemented yet.
+- The SQL has been authored but still requires DB apply and verification.
 
 Planned 2026-05 teacher wage trial:
 

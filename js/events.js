@@ -7,6 +7,7 @@ import {
   generateFixedMonth,
   isCloudReady,
   loadAppData,
+  loadExternalTransactionRequests,
   loadFixedMonthPage,
   loadYearSummary,
   passwordAuth,
@@ -27,6 +28,9 @@ export function bindEvents() {
       switchView(button.dataset.view);
       if (button.dataset.view === "annual" && isCloudReady()) {
         await loadYearSummary(appState.activeYear);
+      }
+      if (button.dataset.view === "externalRequests" && isCloudReady()) {
+        await loadExternalTransactionRequests();
       }
       render();
     });
@@ -188,6 +192,10 @@ export function bindEvents() {
 async function loadCurrentViewData() {
   if (appState.activeView === "annual") {
     await loadYearSummary(appState.activeYear);
+    return;
+  }
+  if (appState.activeView === "externalRequests") {
+    await loadExternalTransactionRequests();
     return;
   }
   await loadAppData();

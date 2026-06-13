@@ -87,6 +87,8 @@ const elementIds = [
   "cnyAccountSubmitBtn",
   "cnyAccountCancelBtn",
   "cnyAccountRows",
+  "externalRequestStatusFilter",
+  "externalRequestRows",
   "paymentChannelForm",
   "paymentChannelSubmitBtn",
   "paymentChannelCancelBtn",

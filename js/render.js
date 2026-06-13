@@ -1,6 +1,7 @@
 import { els } from "#elements";
 import { renderAnnualPage } from "#annual";
 import { renderCnyPage } from "#cny";
+import { renderExternalRequestsPage } from "#external-requests";
 import { renderFixedTransferForm } from "#fixed-transfer";
 import { renderJpyPage } from "#jpy";
 import { appState, findFixedTemplate, findJpyAccount, getFixedTemplateTermStatus } from "#state";
@@ -28,6 +29,7 @@ export function render() {
   renderAccounts();
   renderTemplatePaymentGroupOptions();
   renderFixedTransferForm();
+  renderExternalRequestsPage();
   renderPaymentChannels();
   renderJpyPage();
   renderCnyPage();

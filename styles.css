@@ -415,6 +415,19 @@ input[type="month"] {
   font-weight: 650;
 }
 
+.compact-filter {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.compact-filter select {
+  width: 132px;
+}
+
 .form-submit {
   align-self: end;
 }
@@ -612,6 +625,23 @@ tbody tr:hover td {
   display: grid;
   gap: 12px;
   padding: 16px 20px 20px;
+}
+
+.compact-stack {
+  display: grid;
+  gap: 3px;
+  min-width: 280px;
+  white-space: normal;
+}
+
+.compact-stack strong,
+.compact-stack span {
+  overflow-wrap: anywhere;
+}
+
+.compact-stack span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .settings-item {

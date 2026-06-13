@@ -111,6 +111,20 @@ export async function loadAppData() {
   await Promise.all([loadFixedMonthPage(), loadJpyAccountPage(), loadCnyAccountPage(), loadCnyFixedPage()]);
 }
 
+export async function loadExternalTransactionRequests(status = appState.externalRequestStatusFilter) {
+  if (!isCloudReady()) return;
+  const { data, error } = await appState.supabaseClient.rpc("home_get_external_transaction_requests", {
+    p_status: status === "all" ? null : status,
+    p_limit: 100,
+  });
+  if (error) {
+    setActionMessage(`外部待确认请求读取失败：${error.message}`, "error");
+    appState.externalRequests = [];
+    return;
+  }
+  appState.externalRequests = Array.isArray(data) ? data : [];
+}
+
 export async function loadYearSummary(year = appState.activeYear) {
   if (!isCloudReady()) return;
   const { data, error } = await appState.supabaseClient.rpc("home_get_year_summary", {
@@ -469,6 +483,29 @@ export async function updateCnyFixedItemsStatus(direction, status) {
     return null;
   }
   return handleRpcResult(data, "人民币固定项批量状态更新失败。");
+}
+
+export async function approveExternalTransactionRequest(id) {
+  const { data, error } = await appState.supabaseClient.rpc("home_approve_external_transaction_request", {
+    p_request_id: id,
+  });
+  if (error) {
+    setActionMessage(`外部请求确认失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "外部请求确认失败。");
+}
+
+export async function rejectExternalTransactionRequest(id, reason) {
+  const { data, error } = await appState.supabaseClient.rpc("home_reject_external_transaction_request", {
+    p_request_id: id,
+    p_reason: reason,
+  });
+  if (error) {
+    setActionMessage(`外部请求拒绝失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "外部请求拒绝失败。");
 }
 
 export async function deactivateTemplate(id) {

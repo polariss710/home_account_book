@@ -8,6 +8,8 @@ export const appState = {
   jpyPage: null,
   cnyPage: null,
   cnyFixedPage: null,
+  externalRequests: [],
+  externalRequestStatusFilter: "pending",
   yearSummary: null,
   editingJpyTransactionId: null,
   editingCnyTransactionId: null,

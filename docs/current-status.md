@@ -12,9 +12,30 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - A school-side manual sync executor successfully called the Cash RPC for both supported flows, verified idempotent duplicate execution, and later cleaned the whitelist test transaction/account residue.
 - The manual sync executor is now classified as a verification/operations tool, not the final daily business entry point.
 - Cash linkage v2 target is page-driven confirmation: School creates a pending request, Cash page approves or rejects, and only approval creates a Cash transaction and changes Cash balance.
-- No school DB writes, background worker, pending-request table, approve/reject RPC, or Cash page/UI changes are implemented yet in this repository.
+- Cash-side pending request table, create/approve/reject RPCs, and Cash approval UI are implemented in this repository.
+- No school DB writes, Edge Function bridge, School request button, background worker, or automatic scheduler is implemented in this repository.
 
 ## Latest Update
+
+2026-06-13 Cash linkage v2 stage 1 implementation:
+
+- Added formal SQL file `supabase-update-20260613-external-requests.sql`.
+- Added Cash-owned table `home_external_transaction_requests` for aozora school external transaction requests.
+- Added RPCs:
+  - `home_create_external_transaction_request(...)`
+  - `home_approve_external_transaction_request(uuid)`
+  - `home_reject_external_transaction_request(uuid, text)`
+  - `home_get_external_transaction_requests(text, integer)`
+- Added Cash UI page `外部待确认` for request list, filtering, approve, and reject.
+- Pending requests do not create `home_jpy_transactions` and do not change balances.
+- Approve is the only path that calls existing `home_create_external_jpy_transaction(...)`; idempotent duplicate behavior remains owned by that RPC.
+- Reject records `rejected` state/reason and does not create a transaction or change balance.
+- Supported request families remain narrow:
+  - `school_payment_requests` + `teacher_wage_payment_confirm` -> JPY `expense`
+  - `school_payment_requests` + `teacher_wage_payment_reverse` -> JPY `income`
+  - `school_income_records` + `tuition_income_received` -> JPY `income`
+- School -> Cash request entry is not implemented yet; the intended bridge is still a Supabase Edge Function, not direct School-browser writes to Cash DB.
+- This checkpoint only adds code/SQL/docs. The SQL file has not been applied in this turn.
 
 2026-06-13 Cash linkage v2 direction checkpoint:
 
@@ -101,13 +122,14 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - No CNY external transaction support.
 - No 青空塾, company account spending, reimbursement, non-`teacher_wage`, or part-time wage income linkage.
 - Personal tuition income support is limited to personal-business `tuition` JPY income through the school outbox and manual sync executor.
-- No Cash pending external transaction request table yet.
-- No Cash approve/reject UI yet.
+- Cash pending external transaction request table/RPC/UI is implemented in code but still requires DB apply and E2E verification.
 - No FX support.
 - No school DB writes.
+- No Edge Function bridge from School to Cash request creation.
+- No School page request button yet.
 - No cross-DB transaction.
 - No automatic retry worker.
-- No page/UI changes.
+- No School-originated page action or Edge Function request bridge yet.
 - No reversal sync.
 - No change to ordinary JPY transaction create/update/delete paths.
 - Do not run `supabase-schema.sql` for this update; it is an incremental migration checkpoint.
@@ -115,8 +137,9 @@ This document keeps the current Cash System implementation checkpoint, safety no
 ## Next Steps
 
 - School project owns mapping/outbox and has a manual sync executor for Phase 1. Future work should add guarded retry/operator workflow only if needed.
-- Cash linkage v2 should add a Cash-owned pending request and approval workflow before using real teacher wage payment rows. The zsh executor remains verification/operations only.
-- First v2 implementation phase should be Cash DB/RPC: external request table plus approve/reject functions. The second phase should be Cash UI for pending request list/detail/approve/reject.
+- Apply and verify `supabase-update-20260613-external-requests.sql` before E2E tests.
+- Next implementation phase should add the Supabase Edge Function bridge from School click to Cash pending request creation.
+- Then update the School page flow so personal-business JPY teacher wage payment requests create Cash pending requests instead of directly treating Cash sync as completed.
 - If reversal is wired, use a separate external event with `transaction_type = income`; do not delete the original Cash transaction.
 - Any future Cash UI display for external rows should treat them as externally owned and avoid ordinary edit/delete unless a guarded edit/reversal design exists.
 - For the planned 2026-05 teacher wage trial, first read-only confirm the two pending personal-business `teacher_wage` JPY candidates, then use one approve test and one reject test after the pending request flow exists. Real data should not be cleaned up; whitelist test data still requires cleanup.

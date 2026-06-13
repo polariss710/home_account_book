@@ -2,6 +2,7 @@ import { bindElements } from "#elements";
 import { bindAnnualEvents } from "#annual";
 import { bindCnyEvents } from "#cny";
 import { bindEvents } from "#events";
+import { bindExternalRequestEvents } from "#external-requests";
 import { bindFixedTransferEvents } from "#fixed-transfer";
 import { bindJpyEvents } from "#jpy";
 import { render } from "#render";
@@ -11,6 +12,7 @@ import { processAuthHash, setActionMessage, setInitialDates } from "#ui";
 document.addEventListener("DOMContentLoaded", async () => {
   bindElements();
   bindEvents();
+  bindExternalRequestEvents(render);
   bindAnnualEvents(render);
   bindFixedTransferEvents(render);
   bindJpyEvents();
