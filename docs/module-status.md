@@ -1,15 +1,15 @@
 # Module Status
 
-Status date: 2026-06-13
+Status date: 2026-06-14
 
 | Module | Current State | Next Priority |
 | --- | --- | --- |
 | JPY accounts | Existing UI/RPC behavior unchanged | Keep ordinary account management stable |
-| JPY transactions | Existing ordinary flows unchanged; external JPY DB/RPC insert support added for Phase 1 teacher wage and Phase 2 tuition income | Keep `home_create_external_jpy_transaction` as approval-time primitive |
-| CNY transactions | Unchanged | No Phase 1 external support |
+| JPY transactions | Existing ordinary flows unchanged; external JPY DB/RPC insert support added for historical Phase 1 teacher wage and Phase 2 tuition income | Keep `home_create_external_jpy_transaction` as approval-time primitive while aligning policy coverage |
+| CNY transactions | Existing ordinary flows unchanged; no external school support yet | Add CNY/RMB support later for user-controlled account movements such as Alipay |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
 | FX linkage | Unchanged | Keep FX linkage separate |
-| External school linkage | Phase 1/2 manual E2E sync verified; Cash linkage v2 pending request table/RPC/UI implemented; approve/reject UI calls School callback Function after local Cash mutation | Deploy/configure callback Function, then run approve/reject E2E |
+| External school linkage | Historical Phase 1/2 manual E2E sync verified; Cash linkage v2 pending request table/RPC/UI implemented; business policy now requires all user-controlled-account School movements to enter Cash | Align implementation with unified personal/青空塾, JPY/CNY policy before real wage trial |
 
 ## External JPY Transaction Support
 
@@ -20,6 +20,10 @@ Current role:
 - `home_create_external_jpy_transaction(...)` is the idempotent transaction creation primitive.
 - The zsh sync executor that calls it directly is a verification/operations tool, not the final daily business entry point.
 - In Cash linkage v2, this RPC should be called only after a Cash user approves a pending external request from the Cash page.
+- Current external implementation is still JPY-only and historically narrowed.
+  The 2026-06-14 business policy requires later support for every School money
+  movement that actually passes through a user-controlled Cash account,
+  including 青空塾 and CNY/RMB movements.
 
 Allowed external events:
 
@@ -66,9 +70,24 @@ Verified Phase 2 E2E test row, later cleaned:
 - duplicate school sync run left transaction count at 1.
 - cleanup verification later confirmed target Cash transaction/account counts are 0, Cash external event/reference counts are 0, `home_cny_transactions` marker count is 0, and school target business/student/mapping/income/event counts are 0.
 
-Phase 1 does not link 青空塾, 青空塾 teacher wages, 青空塾 reimbursements, company account spending, CNY, non-`teacher_wage`, or part-time wage income. Phase 2 only adds personal-business `tuition` JPY income.
+Historical Phase 1 did not link 青空塾, 青空塾 teacher wages, 青空塾 reimbursements, company account spending, CNY, non-`teacher_wage`, or part-time wage income. Historical Phase 2 only added personal-business `tuition` JPY income. These are implementation history, not current business policy.
 
-Phase 2 tuition income guard is narrow: only personal-business school income records may use `tuition_income_received`, it must create a JPY `income` transaction, and it must not be used for expense, CNY, 青空塾, reimbursement, company account, or arbitrary school events.
+Phase 2 tuition income guard is narrow in current code: only personal-business school income records may use `tuition_income_received`, it must create a JPY `income` transaction, and it does not support expense, CNY, 青空塾, reimbursement, company account, or arbitrary school events. This guard must be broadened later for real user-controlled-account movements while still rejecting arbitrary school events without account movement.
+
+Unified policy targets:
+
+- 青空塾 tuition received through a user-controlled account enters Cash as
+  `青空塾代收学费`.
+- Transfer of entrusted 青空塾 tuition to the corporate account is recorded as
+  `转给法人账户 / 学费提交 / 代收款清算`, not ordinary household expense.
+- 青空塾 teacher wages paid from user-controlled accounts enter Cash as
+  `青空塾工资垫付`.
+- Corporate reimbursement is recorded as
+  `法人账户报销 / 青空塾工资垫付报销`.
+- CNY/RMB receipts and payments, such as Alipay movements, enter Cash when
+  they use a user-controlled account.
+- CNY/JPY exchange and account allocation remain manual Cash operations for
+  now.
 
 ## Cash Linkage v2 Pending Request Direction
 
@@ -86,7 +105,7 @@ Design principles:
 - Cash balance can change only after Cash-side approval.
 - School business submission to Cash is not Cash approval/payment confirmation.
 - Idempotency starts at pending request creation and continues at transaction creation.
-- Continue excluding 青空塾, CNY, non-target linkage, reimbursement, company account spending, and arbitrary school events.
+- Do not exclude 青空塾 or CNY/RMB when actual money moves through a user-controlled account. Continue excluding arbitrary school events without real account movement.
 
 Likely Cash objects:
 
@@ -120,17 +139,16 @@ Current implementation boundary:
 
 Planned 2026-05 teacher wage trial:
 
-- Read-only confirm two pending personal-business `teacher_wage` JPY payment candidates.
-- Use one approve test and one reject test from the School teacher wage payment page after selecting Cash 支付账户.
-- Approve should create exactly one Cash JPY expense and change balance.
-- Reject should create no Cash transaction and leave balance unchanged.
+- Paused until School and Cash implementation match the unified policy.
+- The old two-row personal-business `teacher_wage` JPY trial plan remains only
+  as historical planning context.
 - Real data should not be cleaned up; cleanup applies only to clearly marked whitelist test data.
 
 ## Hard Stops
 
 - Do not use `supabase-schema.sql` for incremental external linkage updates.
 - Do not add CNY/school/cross-DB writes in this repository without a separate design.
-- Do not broaden Phase 2 tuition income beyond personal + tuition + JPY without a separate guarded implementation workflow.
+- Do not broaden current Phase 2 tuition implementation beyond personal + tuition + JPY without a separate guarded implementation workflow, even though the business policy requires that broader coverage later.
 - Do not delete existing transactions as a reversal mechanism.
 - Do not change ordinary JPY/CNY page modules while adding external request confirmation.
 - Do not add automatic retry/background sync before the page-driven pending request flow is implemented and tested.
