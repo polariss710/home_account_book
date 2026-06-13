@@ -71,8 +71,10 @@ Currently allowed school event families:
 This is current implementation scope only. The corrected 2026-06-14 business
 policy is broader: any School-related money movement that actually passes
 through a user-controlled account should enter Cash, including 青空塾 and
-CNY/RMB movements. School-side personal-only/JPY-only guards must be broadened in
-later guarded phases.
+CNY/RMB movements. School-side teacher-wage requests are now broadened to all
+pending `teacher_wage` rows with eligible JPY/CNY Cash accounts. School-side
+income guards remain historically personal/Jpy narrowed and must be broadened in
+a later guarded phase.
 
 ## Balance Rule
 
@@ -174,6 +176,17 @@ Cash approve/reject callback boundary:
   transaction are not rolled back. The UI instructs the operator to retry the
   School writeback later.
 
+Teacher-wage request payload convention:
+
+- `teacher_wage_payment_confirm` requests are Cash `expense` requests.
+- `currency = JPY` approves into `home_jpy_transactions`.
+- `currency = CNY` approves into `home_cny_transactions`.
+- School keeps the teacher wage business cost in JPY and sends the Cash actual
+  payment currency/amount separately.
+- When `currency = CNY`, `payload_snapshot` should include School JPY wage cost,
+  exchange rate, and actual CNY payment amount so the Cash operator can confirm
+  the conversion before approval.
+
 Cash-side v2 stage 1 implemented objects:
 
 - Formal SQL files: `supabase-update-20260613-external-requests.sql`,
@@ -209,8 +222,8 @@ Cash linkage v2 implementation order:
 
 1. Cash DB: add pending external transaction request table and approve/reject RPCs. Implemented, applied, and rollback-verified.
 2. Cash UI: add pending request list, detail, approve, reject, and approve confirmation. Implemented in code.
-3. Edge Function: School income/payment page action -> Cash pending request. Implemented for the historical personal JPY teacher wage request code path in School repo.
-4. School DB/UI: extend payment linkage lifecycle and embed Cash account selection in the business pages. The current implemented subset is personal JPY teacher wage payment with Cash 支付账户 and `提交到 Cash 确认`; the target policy must broaden this to all School money movement that passes through user-controlled accounts, including 青空塾 and CNY/RMB.
+3. Edge Function: School income/payment page action -> Cash pending request. Implemented for all pending School `teacher_wage` payment requests with eligible JPY/CNY Cash accounts; income remains historical personal/Jpy only.
+4. School DB/UI: extend payment linkage lifecycle and embed Cash account selection in the business pages. Teacher-wage payment now reads Cash eligible accounts and supports JPY/CNY. Income must still broaden to all School money movement that passes through user-controlled accounts, including 青空塾 and CNY/RMB.
 5. Cash approve/reject -> School result callback. Code added through School `sync-cash-request-result` Edge Function and Cash UI wrapper.
 6. ROLLBACK whitelist tests.
 7. COMMIT whitelist E2E approve/reject tests.

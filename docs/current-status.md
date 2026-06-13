@@ -8,7 +8,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 - Cash System is a static Supabase-backed household ledger using `home_` tables.
 - Normal JPY/CNY account and transaction UI remains unchanged.
-- External JPY/CNY transaction request infrastructure for aozora school now has the first multicurrency foundation. Historical Phase 1/2 JPY paths remain the only School-page-integrated subset, but Cash request creation/approval can now validate a School-eligible JPY or CNY account and approve into the matching transaction table.
+- External JPY/CNY transaction request infrastructure for aozora school now supports the teacher-wage all-scope School request path: all pending School `teacher_wage` payment requests may submit a Cash confirmation request when the selected account is active, currency-matched, and `allow_school_requests = true`.
 - A school-side manual sync executor successfully called the Cash RPC for both supported flows, verified idempotent duplicate execution, and later cleaned the whitelist test transaction/account residue.
 - The manual sync executor is now classified as a verification/operations tool, not the final daily business entry point.
 - Cash linkage v1 business policy is unified as of 2026-06-14: School is the business ledger and stores business ownership; Cash System's original position remains the user's household/private account ledger, and it records real user-controlled account movement. Any money that passes through a user-controlled account should enter Cash, regardless of whether School ownership is personal business or 青空塾. Business ownership no longer decides Cash eligibility. Cash System only accepts external requests; it does not proactively create School business records or initiate School business requests. Cash keeps the separate `外部待确认` page as the ledger-side approve/reject entry, and only approval creates a Cash transaction and changes Cash balance.
@@ -18,6 +18,23 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - No direct School DB writes, School-side Edge Function deployment, background worker, or automatic scheduler is implemented in this repository.
 
 ## Latest Update
+
+2026-06-14 teacher-wage all-scope Cash request integration:
+
+- School now submits all pending `teacher_wage` payment requests through the external request flow when the actual payment account is Cash-eligible.
+- Cash continues to accept external requests only; it does not create School business requests or School business records.
+- Supported teacher-wage payment currencies:
+  - `JPY` expense -> approved into `home_jpy_transactions`
+  - `CNY` expense -> approved into `home_cny_transactions`
+- Cash request creation still requires:
+  - `external_source = aozora_school`
+  - `external_reference_type = school_payment_requests`
+  - `request_type = teacher_wage_payment_confirm`
+  - `transaction_type = expense`
+  - active account matching request currency
+  - `home_accounts.allow_school_requests = true`
+- Cash UI `外部待确认` now displays teacher-wage payload details when available: School JPY wage cost, exchange rate, and actual Cash payment amount.
+- Cash approve remains the only point that creates a Cash transaction and changes balance. Cash reject creates no transaction and changes no balance. School writeback is still called only after the local Cash approve/reject succeeds.
 
 2026-06-14 School account eligibility and multicurrency request foundation:
 

@@ -9,7 +9,7 @@ Status date: 2026-06-14
 | CNY transactions | Existing ordinary flows unchanged; external CNY approval primitive added for School-eligible active CNY accounts | Wire School income/payment requests to CNY/RMB later |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
 | FX linkage | Unchanged | Keep FX linkage separate |
-| External school linkage | Historical Phase 1/2 manual E2E sync verified; Cash linkage v2 pending request table/RPC/UI implemented; School-account eligibility and JPY/CNY request approval foundation added | Align School implementation with unified personal/青空塾, JPY/CNY policy before real wage trial |
+| External school linkage | Historical Phase 1/2 manual E2E sync verified; Cash linkage v2 pending request table/RPC/UI implemented; teacher-wage all-scope School requests now support eligible JPY/CNY accounts | Complete whitelist E2E and keep income all-scope Cash linkage as next guarded phase |
 
 ## Final System Boundary
 
@@ -64,7 +64,7 @@ Current role:
 - `home_create_external_cny_transaction(...)` is the CNY idempotent transaction creation primitive.
 - The zsh sync executor that calls it directly is a verification/operations tool, not the final daily business entry point.
 - In Cash linkage v2, these transaction primitives should be called only after a Cash user approves a pending external request from the Cash page.
-- Cash request/approval infrastructure now supports JPY and CNY, but School-side pages/functions are still historically narrowed and must be broadened later.
+- Cash request/approval infrastructure now supports JPY and CNY. School-side teacher-wage payment requests are broadened to all pending `teacher_wage` rows with eligible Cash accounts; income pages/functions are still historically narrowed and must be broadened later.
 
 Allowed external events:
 
@@ -114,7 +114,7 @@ Verified Phase 2 E2E test row, later cleaned:
 
 Historical Phase 1 did not link 青空塾, 青空塾 teacher wages, 青空塾 reimbursements, company account spending, CNY, non-`teacher_wage`, or part-time wage income. Historical Phase 2 only added personal-business `tuition` JPY income. These are implementation history, not current business policy.
 
-Phase 2 tuition income guard is narrow in current School code: only personal-business school income records may use `tuition_income_received`, and School pages/functions still do not submit CNY or 青空塾 requests. Cash-side request/approval foundation now supports JPY/CNY for whitelisted event families and School-eligible accounts. School implementation must be broadened later for real user-controlled-account movements while still rejecting arbitrary school events without account movement.
+Phase 2 tuition income guard is narrow in current School code: only personal-business school income records may use `tuition_income_received`, and School income pages/functions still do not submit CNY or 青空塾 requests. Cash-side request/approval foundation now supports JPY/CNY for whitelisted event families and School-eligible accounts. Teacher-wage payment requests are now broadened on the School side for eligible JPY/CNY Cash accounts. Income implementation must be broadened later for real user-controlled-account movements while still rejecting arbitrary school events without account movement.
 
 Unified policy targets:
 
@@ -173,6 +173,9 @@ Current implementation boundary:
 - Pending request creation does not change Cash balance.
 - Approve is the only path that creates/reuses a JPY/CNY external transaction.
 - Reject records status/reason and leaves Cash balance unchanged.
+- `teacher_wage_payment_confirm` requests may be JPY or CNY. When School sends
+  CNY, the payload should include School JPY wage cost, exchange rate, and actual
+  CNY payment amount for operator confirmation.
 - After local approve/reject succeeds, the Cash UI calls the School-owned
   `sync-cash-request-result` Edge Function through API wrapper
   `syncCashRequestResultToSchool(...)`.
@@ -180,14 +183,15 @@ Current implementation boundary:
   reports that School writeback should be retried later.
 - The browser does not write School DB directly and does not receive
   service-role keys.
-- The SQL has been applied and rollback-verified; callback Function deployment
-  and full School embedded approve/reject E2E remain pending.
+- The SQL has been applied and rollback-verified; all-scope teacher-wage
+  whitelist E2E is the next required gate before a real 2026-05 wage trial.
 
 Planned 2026-05 teacher wage trial:
 
-- Paused until School and Cash implementation match the unified policy.
-- The old two-row personal-business `teacher_wage` JPY trial plan remains only
-  as historical planning context.
+- Paused until School/Cash all-scope teacher-wage request implementation is
+  applied, configured, and whitelist-tested.
+- The old two-row personal-business `teacher_wage` JPY trial plan remains only as
+  historical planning context.
 - Real data should not be cleaned up; cleanup applies only to clearly marked whitelist test data.
 
 ## Hard Stops

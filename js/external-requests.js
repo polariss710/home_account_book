@@ -46,6 +46,7 @@ function requestRow(request) {
           <strong>${escapeHtml(referenceLabel(request.external_reference_type))}</strong>
           <span>${escapeHtml(request.external_reference_id || "-")}</span>
           <span>event ${escapeHtml(request.external_event_id || "-")}</span>
+          ${renderPayloadDetails(request)}
           ${request.created_transaction_id ? `<span>transaction ${escapeHtml(request.created_transaction_id)}</span>` : ""}
           ${request.rejected_reason ? `<span>拒绝理由：${escapeHtml(request.rejected_reason)}</span>` : ""}
         </div>
@@ -53,6 +54,23 @@ function requestRow(request) {
       <td>${requestActions(request)}</td>
     </tr>
   `;
+}
+
+function renderPayloadDetails(request) {
+  const payload = request.payload_snapshot || {};
+  if (request.request_type !== "teacher_wage_payment_confirm" || !payload.school_amount_jpy) {
+    return "";
+  }
+
+  const parts = [
+    `School成本 ${money(payload.school_amount_jpy)} JPY`,
+    payload.payment_exchange_rate ? `汇率 ${payload.payment_exchange_rate}` : "",
+    payload.payment_amount && payload.payment_currency
+      ? `实付 ${money(payload.payment_amount)} ${payload.payment_currency}`
+      : "",
+  ].filter(Boolean);
+
+  return parts.map((part) => `<span>${escapeHtml(part)}</span>`).join("");
 }
 
 function requestActions(request) {
