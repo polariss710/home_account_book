@@ -16,7 +16,7 @@ Status date: 2026-06-13
 - `home_get_jpy_account_page(text)`: reads JPY accounts, balances, and month transactions.
 - `home_update_jpy_transaction(...)`: updates ordinary JPY transactions.
 - `home_delete_jpy_transaction(uuid)`: deletes ordinary JPY transactions.
-- `home_create_external_jpy_transaction(...)`: creates idempotent external-source JPY transactions for aozora school Phase 1 linkage.
+- `home_create_external_jpy_transaction(...)`: creates idempotent external-source JPY transactions for guarded aozora school linkages.
 
 ## External JPY RPC Boundary
 
@@ -32,13 +32,19 @@ It does not write:
 
 It requires an active JPY `home_accounts` row and a positive amount.
 
+Allowed school event families:
+
+- `school_payment_requests` + `teacher_wage_payment_confirm` -> JPY `expense`
+- `school_payment_requests` + `teacher_wage_payment_reverse` -> JPY `income`
+- `school_income_records` + `tuition_income_received` -> JPY `income`
+
 ## Balance Rule
 
 Balances remain read-time calculations from `opening_balance` plus transaction movements. The external JPY RPC only inserts a normal JPY `income` or `expense` row with external metadata; it does not store a cached account balance.
 
 ## Cross-Project Boundary
 
-Cash System now has the DB/RPC primitive needed by the school project. The school project owns mapping/outbox state and the manual Phase 1 sync executor. Cash System receives idempotent RPC calls and stores external JPY rows with `created_by_external = true`.
+Cash System now has the DB/RPC primitive needed by the school project. The school project owns mapping/outbox state and the manual sync executor. Cash System receives idempotent RPC calls and stores external JPY rows with `created_by_external = true`.
 
 Phase 1 completed scope:
 
@@ -57,4 +63,4 @@ Verified Phase 1 E2E test, later cleaned:
 
 Remaining out of Phase 1: 青空塾, 青空塾 teacher wages, 青空塾 reimbursements, company account spending, CNY, non-`teacher_wage`, personal tuition income, part-time wage income, reversal sync, automatic background retry, Cash UI changes for external rows, and cross-DB strong transactions.
 
-Phase 2 candidate: personal-business tuition income -> Cash System JPY income transaction. Design first, reuse external/idempotency/linkage event/outbox patterns, and continue to exclude 青空塾 and CNY.
+Phase 2 Cash guard extension is prepared for personal-business tuition income -> Cash System JPY income transaction. It is limited to `school_income_records` + `tuition_income_received` and must create a positive JPY `income` transaction. It continues to exclude 青空塾, CNY, reimbursement, company account spending, and arbitrary school events.
