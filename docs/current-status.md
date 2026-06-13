@@ -19,6 +19,14 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
+2026-06-14 external request retry attempts:
+
+- Cash rejected external requests remain terminal history and are not reused.
+- `home_external_transaction_requests` now keeps `idempotency_key` and `external_event_id` unique per request attempt, while the reference guard for `external_source + external_reference_type + external_reference_id + request_type` is partial for `pending` / `approved` only.
+- This allows School to create a later retry attempt after a rejected teacher-wage Cash request, while still blocking duplicate active pending attempts and any new attempt after an approved request.
+- `home_create_external_transaction_request(...)` now explicitly returns an error when a pending/approved request already exists for the same external reference and request type; exact idempotent repeats still return the existing request.
+- Whitelist E2E used only 2026-06 codex-test teacher-wage data: attempt 1 rejected, attempt 2 approved, duplicate active creation returned the existing pending request, and the approved JPY expense was cleaned. Cleanup removed 2 Cash requests and 1 JPY transaction; target residue is 0 and `日元现金` returned to `202500.00`.
+
 2026-06-14 teacher-wage all-scope Cash request integration:
 
 - School now submits all pending `teacher_wage` payment requests through the external request flow when the actual payment account is Cash-eligible.
