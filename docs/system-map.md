@@ -4,7 +4,7 @@ Status date: 2026-06-14
 
 ## Core Tables
 
-- `home_accounts`: account master data for JPY/CNY accounts.
+- `home_accounts`: account master data for JPY/CNY accounts, including `allow_school_requests` for School-originated external request eligibility.
 - `home_payment_channels`: fixed item payment channel grouping, not a balance ledger.
 - `home_jpy_transactions`: JPY ledger movements.
 - `home_cny_transactions`: CNY ledger movements.
@@ -17,45 +17,66 @@ Status date: 2026-06-14
 - `home_get_jpy_account_page(text)`: reads JPY accounts, balances, and month transactions.
 - `home_update_jpy_transaction(...)`: updates ordinary JPY transactions.
 - `home_delete_jpy_transaction(uuid)`: deletes ordinary JPY transactions.
-- `home_create_external_jpy_transaction(...)`: creates idempotent external-source JPY transactions for guarded aozora school linkages.
-- `home_create_external_transaction_request(...)`: idempotently creates a pending external request. It does not create a transaction.
-- `home_approve_external_transaction_request(uuid)`: approves a pending request and then calls `home_create_external_jpy_transaction(...)`.
+- `home_create_external_jpy_transaction(...)`: creates idempotent external-source JPY transactions for guarded aozora school linkages after Cash approval.
+- `home_create_external_cny_transaction(...)`: creates idempotent external-source CNY transactions for guarded aozora school linkages after Cash approval.
+- `home_create_external_transaction_request(...)`: idempotently creates a pending JPY/CNY external request for a School-eligible account. It does not create a transaction.
+- `home_approve_external_transaction_request(uuid)`: approves a pending request and then calls the matching JPY/CNY external transaction primitive.
 - `home_reject_external_transaction_request(uuid, text)`: rejects a pending request without creating a transaction.
 - `home_get_external_transaction_requests(text, integer)`: reads requests for the Cash approval UI.
+- `home_list_school_eligible_cash_accounts()`: reads active Cash accounts allowed for School-originated request selectors.
 
-## External JPY RPC Boundary
+## School Account Eligibility
+
+Cash owns the School account whitelist through `home_accounts.allow_school_requests`.
+School should read active accounts where this flag is true and should not store
+or maintain Cash balances.
+
+Current allowed accounts:
+
+- `余额宝` (`CNY`, wallet)
+- `日元现金` (`JPY`, cash)
+- `日元三菱卡` (`JPY`, bank)
+- `日元乐天卡` (`JPY`, cash)
+
+Current excluded accounts:
+
+- `余利宝` (`CNY`, wallet)
+- `医生处兑换日元先行支付` (`JPY`, cash)
+
+## External JPY/CNY RPC Boundary
 
 `home_create_external_jpy_transaction(...)` only writes `home_jpy_transactions`.
+`home_create_external_cny_transaction(...)` only writes `home_cny_transactions`.
 
 In the Cash linkage v2 target architecture, this RPC is not the first business
 entry point. It should run only after a Cash user approves a pending external
 request in the Cash System UI.
 
-It does not write:
+These transaction primitives do not write:
 
-- `home_cny_transactions`
 - `home_fixed_month_items`
 - `home_fixed_templates`
 - `home_payment_channels`
 - any school table
 
-It requires an active JPY `home_accounts` row and a positive amount.
+They require an active `home_accounts` row matching the request currency,
+`allow_school_requests = true`, and a positive amount.
 
 Currently allowed school event families:
 
-- `school_payment_requests` + `teacher_wage_payment_confirm` -> JPY `expense`
-- `school_payment_requests` + `teacher_wage_payment_reverse` -> JPY `income`
-- `school_income_records` + `tuition_income_received` -> JPY `income`
+- `school_payment_requests` + `teacher_wage_payment_confirm` -> JPY/CNY `expense`
+- `school_payment_requests` + `teacher_wage_payment_reverse` -> JPY/CNY `income`
+- `school_income_records` + `tuition_income_received` / `income_received` -> JPY/CNY `income`
 
 This is current implementation scope only. The corrected 2026-06-14 business
 policy is broader: any School-related money movement that actually passes
 through a user-controlled account should enter Cash, including 青空塾 and
-CNY/RMB movements. Current JPY-only guards must be broadened in later guarded
-phases.
+CNY/RMB movements. School-side personal-only/JPY-only guards must be broadened in
+later guarded phases.
 
 ## Balance Rule
 
-Balances remain read-time calculations from `opening_balance` plus transaction movements. The external JPY RPC only inserts a normal JPY `income` or `expense` row with external metadata; it does not store a cached account balance.
+Balances remain read-time calculations from `opening_balance` plus transaction movements. The external JPY/CNY RPCs only insert normal `income` or `expense` rows with external metadata; they do not store a cached account balance.
 
 ## Cross-Project Boundary
 
@@ -74,10 +95,11 @@ Cash System does not judge business attribution. School business ownership does
 not decide Cash eligibility; actual movement through a user-controlled account
 does.
 
-Cash System now has the DB/RPC primitive needed by the school project for the
-historical JPY paths. The school project owns mapping/outbox state and the
-manual sync executor for those paths. Cash System receives idempotent RPC calls
-and stores external JPY rows with `created_by_external = true`.
+Cash System now has the DB/RPC primitives needed by the school project for
+JPY/CNY pending external requests. The historical school mapping/outbox and
+manual sync executor remain JPY verification/operations tools. Cash System
+receives idempotent pending requests and stores approved external rows with
+`created_by_external = true`.
 
 Deprecated old policy:
 
@@ -128,7 +150,7 @@ business pages, not a separate School sync page:
    actual money will move through a user-controlled Cash account.
 2. Cash System creates a pending external transaction request.
 3. Cash page approves or rejects.
-4. Approval creates the Cash JPY transaction and changes Cash balance.
+4. Approval creates the matching JPY/CNY Cash transaction and changes Cash balance.
 5. Rejection creates no transaction and leaves Cash balance unchanged.
 6. School displays business labels such as `Cash待确认`, `Cash已确认`, or
    `Cash已拒绝`.
@@ -154,9 +176,10 @@ Cash approve/reject callback boundary:
 
 Cash-side v2 stage 1 implemented objects:
 
-- Formal SQL file: `supabase-update-20260613-external-requests.sql`
+- Formal SQL files: `supabase-update-20260613-external-requests.sql`,
+  `supabase-update-20260613-school-account-eligibility-and-multicurrency.sql`
 - Request table: `home_external_transaction_requests`
-- Create/approve/reject/read RPCs listed above
+- Create/approve/reject/read RPCs listed above, plus School-eligible account reader
 - UI view: `外部待确认`
 
 Important boundary: the code path now includes the School request Edge Function

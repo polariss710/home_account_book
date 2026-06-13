@@ -125,6 +125,16 @@ export async function loadExternalTransactionRequests(status = appState.external
   appState.externalRequests = Array.isArray(data) ? data : [];
 }
 
+export async function listSchoolEligibleCashAccounts() {
+  if (!isCloudReady()) return [];
+  const { data, error } = await appState.supabaseClient.rpc("home_list_school_eligible_cash_accounts");
+  if (error) {
+    setActionMessage(`School 可用 Cash 账户读取失败：${error.message}`, "error");
+    return [];
+  }
+  return Array.isArray(data) ? data : [];
+}
+
 export async function loadYearSummary(year = appState.activeYear) {
   if (!isCloudReady()) return;
   const { data, error } = await appState.supabaseClient.rpc("home_get_year_summary", {

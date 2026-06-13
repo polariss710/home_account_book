@@ -8,15 +8,34 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 - Cash System is a static Supabase-backed household ledger using `home_` tables.
 - Normal JPY/CNY account and transaction UI remains unchanged.
-- External JPY transaction support for aozora school currently covers historical Phase 1 personal-business teacher wage payments and Phase 2 personal-business tuition JPY income. This is current implementation scope, not the corrected business policy.
+- External JPY/CNY transaction request infrastructure for aozora school now has the first multicurrency foundation. Historical Phase 1/2 JPY paths remain the only School-page-integrated subset, but Cash request creation/approval can now validate a School-eligible JPY or CNY account and approve into the matching transaction table.
 - A school-side manual sync executor successfully called the Cash RPC for both supported flows, verified idempotent duplicate execution, and later cleaned the whitelist test transaction/account residue.
 - The manual sync executor is now classified as a verification/operations tool, not the final daily business entry point.
 - Cash linkage v1 business policy is unified as of 2026-06-14: School is the business ledger and stores business ownership; Cash System's original position remains the user's household/private account ledger, and it records real user-controlled account movement. Any money that passes through a user-controlled account should enter Cash, regardless of whether School ownership is personal business or 青空塾. Business ownership no longer decides Cash eligibility. Cash System only accepts external requests; it does not proactively create School business records or initiate School business requests. Cash keeps the separate `外部待确认` page as the ledger-side approve/reject entry, and only approval creates a Cash transaction and changes Cash balance.
 - Cash-side pending request table, create/approve/reject RPCs, and Cash approval UI are implemented in this repository.
+- Cash accounts now include `allow_school_requests`. School-facing account selection must use active accounts with this flag enabled. Current School-eligible accounts are `余额宝`, `日元现金`, `日元三菱卡`, and `日元乐天卡`; `余利宝` and `医生处兑换日元先行支付` are explicitly excluded.
 - Cash approval UI now calls a School-owned Edge Function after local approve/reject: approve creates the Cash transaction first, then requests School writeback; reject records Cash rejection first, then requests School writeback. If School writeback fails, Cash state is not rolled back and the UI tells the operator to retry later.
 - No direct School DB writes, School-side Edge Function deployment, background worker, or automatic scheduler is implemented in this repository.
 
 ## Latest Update
+
+2026-06-14 School account eligibility and multicurrency request foundation:
+
+- Added formal SQL file `supabase-update-20260613-school-account-eligibility-and-multicurrency.sql`.
+- Added `home_accounts.allow_school_requests boolean not null default false`.
+- Current account eligibility:
+  - allowed for School requests: `余额宝`, `日元现金`, `日元三菱卡`, `日元乐天卡`
+  - excluded from School requests: `余利宝`, `医生处兑换日元先行支付`
+- School must read this Cash-owned whitelist for future income/payment account selectors. School must not maintain Cash balances.
+- Extended `home_external_transaction_requests.currency` from JPY-only to `JPY` / `CNY`.
+- `home_create_external_transaction_request(...)` now requires the selected account to be active, match the request currency, and have `allow_school_requests = true`.
+- Added `home_create_external_cny_transaction(...)` and CNY external idempotency metadata on `home_cny_transactions`.
+- `home_approve_external_transaction_request(...)` now dispatches by request currency:
+  - `JPY` -> `home_jpy_transactions`
+  - `CNY` -> `home_cny_transactions`
+- `home_reject_external_transaction_request(...)` remains unchanged: rejection creates no transaction and changes no balance.
+- Added read-only RPC `home_list_school_eligible_cash_accounts()` and JS helper `listSchoolEligibleCashAccounts()` for future School-side account selection.
+- Event/reference guards remain white-listed: `school_payment_requests` teacher wage payment events and `school_income_records` tuition/income received events only. Arbitrary external events are still rejected.
 
 2026-06-14 unified School/Cash flow policy:
 
@@ -50,7 +69,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
   - Cash transfer to corporate account for 青空塾 tuition submission is `支出 / 转给法人账户 / 学费提交 / 代收款清算`.
   - Corporate reimbursement for Cash-advanced 青空塾 wages is `收入 / 法人账户报销 / 青空塾工资垫付报销`.
   - Cash-to-corporate transfer, corporate reimbursement, CNY/JPY exchange, user-account transfer, entrusted-funds clearing, and wage-advance recovery are internal clearing/allocation and should not be treated as operating profit.
-- Current Cash code/RPC may still be JPY-only or otherwise narrow. Those are implementation gaps to fix later. The real 2026-05 wage trial remains paused until School and Cash implementation match the corrected policy.
+- Current School code may still be personal-only / JPY-only. Those are School-side implementation gaps to fix later. The real 2026-05 wage trial remains paused until School and Cash implementation match the corrected policy.
 
 2026-06-13 Cash linkage v2 stage 1 implementation:
 
@@ -66,9 +85,9 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - Approve is the only path that calls existing `home_create_external_jpy_transaction(...)`; idempotent duplicate behavior remains owned by that RPC.
 - Reject records `rejected` state/reason and does not create a transaction or change balance.
 - Supported request families remain narrow:
-  - `school_payment_requests` + `teacher_wage_payment_confirm` -> JPY `expense`
-  - `school_payment_requests` + `teacher_wage_payment_reverse` -> JPY `income`
-  - `school_income_records` + `tuition_income_received` -> JPY `income`
+  - `school_payment_requests` + `teacher_wage_payment_confirm` -> JPY/CNY `expense`
+  - `school_payment_requests` + `teacher_wage_payment_reverse` -> JPY/CNY `income`
+  - `school_income_records` + `tuition_income_received` / `income_received` -> JPY/CNY `income`
 - School -> Cash request entry belongs inside the School income/payment business pages, not a standalone School sync page. The intended bridge is still a Supabase Edge Function behind those business actions, not direct School-browser writes to Cash DB.
 - This checkpoint adds code/SQL/docs; the SQL was applied and rollback-verified in a later guarded DB apply phase.
 
@@ -176,10 +195,10 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Boundaries
 
-- Current implementation has no CNY external transaction support.
+- Current Cash implementation has CNY external request/approval foundation, but School pages and School Edge Functions do not yet submit CNY requests.
 - Current implementation may still exclude 青空塾, reimbursement, non-`teacher_wage`, and part-time wage income linkage.
 - These are implementation limits, not the corrected business policy. The policy is: real movement through user-controlled accounts enters Cash; School keeps business ownership.
-- Historical personal tuition income support is limited to personal-business `tuition` JPY income through the school outbox and manual sync executor.
+- Historical personal tuition income support is limited to personal-business `tuition` JPY income through the school outbox and manual sync executor; the new Cash-side CNY support is infrastructure for the next School implementation phase.
 - Cash pending external transaction request table/RPC/UI has been applied and rollback-verified; full School page embedded approve/reject E2E remains pending.
 - Cash accepts external requests only. It must not be the originator of School business requests and must not create School business records.
 - No FX support.
