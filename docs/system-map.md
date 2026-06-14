@@ -196,8 +196,11 @@ Cash-side v2 stage 1 implemented objects:
 - UI view: `外部待确认`
 
 Important boundary: the code path now includes the School request Edge Function
-and the Cash-result callback Edge Function, but deployment/configuration and
-approve/reject E2E testing remain separate guarded phases.
+and the Cash-result callback Edge Function. Teacher-wage all-scope JPY/CNY
+request creation, Cash approve/reject behavior, and rejected -> retry ->
+approved backend E2E have been whitelist-tested and cleaned to target residue 0.
+Browser automation remains unstable, so the implemented page path can be
+operated manually and verified through DB checks.
 
 Historical Phase 1 completed scope:
 
@@ -225,6 +228,6 @@ Cash linkage v2 implementation order:
 3. Edge Function: School income/payment page action -> Cash pending request. Implemented for all pending School `teacher_wage` payment requests with eligible JPY/CNY Cash accounts; income remains historical personal/Jpy only.
 4. School DB/UI: extend payment linkage lifecycle and embed Cash account selection in the business pages. Teacher-wage payment now reads Cash eligible accounts and supports JPY/CNY. Income must still broaden to all School money movement that passes through user-controlled accounts, including 青空塾 and CNY/RMB.
 5. Cash approve/reject -> School result callback. Code added through School `sync-cash-request-result` Edge Function and Cash UI wrapper.
-6. ROLLBACK whitelist tests.
-7. COMMIT whitelist E2E approve/reject tests.
-8. Real 2026-05 teacher wage trial remains paused until School and Cash implementation match the unified policy. Real data should not be cleaned up; whitelist test data should be cleaned up.
+6. ROLLBACK whitelist tests. Completed for School and Cash JPY/CNY request paths.
+7. COMMIT whitelist E2E approve/reject tests. Completed for teacher-wage rejected -> retry -> approved flow; cleanup confirmed School/Cash target residue 0 and did not use real 2026-05 wage data.
+8. Real 2026-05 teacher wage trial remains not executed. Real data should not be cleaned up; whitelist test data should be cleaned up.

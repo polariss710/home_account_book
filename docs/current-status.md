@@ -9,6 +9,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - Cash System is a static Supabase-backed household ledger using `home_` tables.
 - Normal JPY/CNY account and transaction UI remains unchanged.
 - External JPY/CNY transaction request infrastructure for aozora school now supports the teacher-wage all-scope School request path: all pending School `teacher_wage` payment requests may submit a Cash confirmation request when the selected account is active, currency-matched, and `allow_school_requests = true`.
+- Teacher-wage Cash confirmation is complete for personal business, 青空塾, and mixed-attribution School payment requests. Business ownership no longer decides whether a teacher-wage request can enter Cash; the selected Cash account and actual user-controlled account movement do.
 - A school-side manual sync executor successfully called the Cash RPC for both supported flows, verified idempotent duplicate execution, and later cleaned the whitelist test transaction/account residue.
 - The manual sync executor is now classified as a verification/operations tool, not the final daily business entry point.
 - Cash linkage v1 business policy is unified as of 2026-06-14: School is the business ledger and stores business ownership; Cash System's original position remains the user's household/private account ledger, and it records real user-controlled account movement. Any money that passes through a user-controlled account should enter Cash, regardless of whether School ownership is personal business or 青空塾. Business ownership no longer decides Cash eligibility. Cash System only accepts external requests; it does not proactively create School business records or initiate School business requests. Cash keeps the separate `外部待确认` page as the ledger-side approve/reject entry, and only approval creates a Cash transaction and changes Cash balance.
@@ -26,6 +27,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - This allows School to create a later retry attempt after a rejected teacher-wage Cash request, while still blocking duplicate active pending attempts and any new attempt after an approved request.
 - `home_create_external_transaction_request(...)` now explicitly returns an error when a pending/approved request already exists for the same external reference and request type; exact idempotent repeats still return the existing request.
 - Whitelist E2E used only 2026-06 codex-test teacher-wage data: attempt 1 rejected, attempt 2 approved, duplicate active creation returned the existing pending request, and the approved JPY expense was cleaned. Cleanup removed 2 Cash requests and 1 JPY transaction; target residue is 0 and `日元现金` returned to `202500.00`.
+- Rejected Cash requests are terminal and cannot be approved later. School keeps the payment request pending, shows the rejection reason, and can submit a new attempt / Cash request. Old rejected attempts remain as history, and a single School payment request can have only one active attempt at a time.
 
 2026-06-14 teacher-wage all-scope Cash request integration:
 
@@ -43,6 +45,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
   - `home_accounts.allow_school_requests = true`
 - Cash UI `外部待确认` now displays teacher-wage payload details when available: School JPY wage cost, exchange rate, and actual Cash payment amount.
 - Cash approve remains the only point that creates a Cash transaction and changes balance. Cash reject creates no transaction and changes no balance. School writeback is still called only after the local Cash approve/reject succeeds.
+- School rollback, Cash JPY/CNY request rollback, and rejected -> retry -> approved backend E2E have passed. Cleanup is complete with School/Cash target residue 0. Real 2026-05 wage data was not used.
 
 2026-06-14 School account eligibility and multicurrency request foundation:
 
@@ -220,29 +223,28 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Boundaries
 
-- Current Cash implementation has CNY external request/approval foundation, but School pages and School Edge Functions do not yet submit CNY requests.
-- Current implementation may still exclude 青空塾, reimbursement, non-`teacher_wage`, and part-time wage income linkage.
+- Current teacher-wage Cash confirmation supports School-submitted JPY/CNY requests for all pending `teacher_wage` payment requests, including personal business, 青空塾, and mixed-attribution wages, when the selected account is active, currency-matched, and `allow_school_requests = true`.
+- Current income implementation may still exclude 青空塾 and CNY/RMB income linkage.
 - These are implementation limits, not the corrected business policy. The policy is: real movement through user-controlled accounts enters Cash; School keeps business ownership.
 - Historical personal tuition income support is limited to personal-business `tuition` JPY income through the school outbox and manual sync executor; the new Cash-side CNY support is infrastructure for the next School implementation phase.
-- Cash pending external transaction request table/RPC/UI has been applied and rollback-verified; full School page embedded approve/reject E2E remains pending.
+- Cash pending external transaction request table/RPC/UI has been applied and rollback-verified. Teacher-wage rejected -> retry -> approved backend E2E has passed; browser automation remains unstable, so page paths may be operated manually and verified through DB checks.
 - Cash accepts external requests only. It must not be the originator of School business requests and must not create School business records.
-- No FX support.
+- No automatic FX/account-allocation support; CNY/JPY exchange and account transfers remain manual Cash operations.
 - No school DB writes.
-- No Edge Function bridge from School to Cash request creation.
-- No School income/payment page embedded request action yet.
+- Teacher-wage School Edge Function bridge exists; income all-scope Cash request bridge is not complete.
+- Teacher-wage payment page action exists; income page all-scope request action is not complete.
 - No cross-DB transaction.
 - No automatic retry worker.
-- No School-originated income/payment page action or Edge Function request bridge yet.
 - No reversal sync.
+- Internal clearing / corporate-account profit-stat exclusion is not implemented yet.
 - No change to ordinary JPY transaction create/update/delete paths.
 - Do not run `supabase-schema.sql` for this update; it is an incremental migration checkpoint.
 
 ## Next Steps
 
-- School project owns mapping/outbox and has a manual sync executor for Phase 1. Future work should add guarded retry/operator workflow only if needed.
-- `supabase-update-20260613-external-requests.sql` has been applied and rollback-verified; full embedded School page E2E remains pending.
-- Next implementation phase should add or deploy the Supabase Edge Function bridge behind School income/payment business submissions.
-- Then update the School income record and teacher wage payment page flows so School-originated tuition income / teacher wage payment create Cash pending requests through embedded 收款账户 / 支付账户 selection instead of exposing a standalone sync entry. The historical personal-business JPY path is only the first implemented subset and must be broadened to the unified policy.
+- Real 2026-05 teacher wage trial has not been executed yet.
+- Broaden School income record Cash linkage so all user-controlled-account tuition/income movements can submit Cash requests with eligible accounts. The historical personal-business JPY path is only the first implemented subset and must be broadened to the unified policy.
+- Implement internal clearing / corporate-account settlement reporting exclusions separately.
 - If reversal is wired, use a separate external event with `transaction_type = income`; do not delete the original Cash transaction.
 - Any future Cash UI display for external rows should treat them as externally owned and avoid ordinary edit/delete unless a guarded edit/reversal design exists.
-- The planned real 2026-05 teacher wage trial remains paused. Resume only after School and Cash implementation match the corrected unified policy; real data should not be cleaned up, while whitelist test data still requires cleanup.
+- Browser automation remains unstable for some page flows; manual page operation plus DB verification is acceptable for the current implemented path.

@@ -9,7 +9,7 @@ Status date: 2026-06-14
 | CNY transactions | Existing ordinary flows unchanged; external CNY approval primitive added for School-eligible active CNY accounts | Wire School income/payment requests to CNY/RMB later |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
 | FX linkage | Unchanged | Keep FX linkage separate |
-| External school linkage | Historical Phase 1/2 manual E2E sync verified; Cash linkage v2 pending request table/RPC/UI implemented; teacher-wage all-scope School requests now support eligible JPY/CNY accounts | Complete whitelist E2E and keep income all-scope Cash linkage as next guarded phase |
+| External school linkage | Historical Phase 1/2 manual E2E sync verified; Cash linkage v2 pending request table/RPC/UI implemented; teacher-wage all-scope School requests support eligible JPY/CNY accounts and rejected retry attempts are whitelist-tested | Real 2026-05 wage trial and income all-scope Cash linkage remain separate phases |
 
 ## Final System Boundary
 
@@ -64,7 +64,7 @@ Current role:
 - `home_create_external_cny_transaction(...)` is the CNY idempotent transaction creation primitive.
 - The zsh sync executor that calls it directly is a verification/operations tool, not the final daily business entry point.
 - In Cash linkage v2, these transaction primitives should be called only after a Cash user approves a pending external request from the Cash page.
-- Cash request/approval infrastructure now supports JPY and CNY. School-side teacher-wage payment requests are broadened to all pending `teacher_wage` rows with eligible Cash accounts; income pages/functions are still historically narrowed and must be broadened later.
+- Cash request/approval infrastructure now supports JPY and CNY. School-side teacher-wage payment requests are broadened to all pending `teacher_wage` rows with eligible Cash accounts, regardless of personal business / 青空塾 / mixed attribution. Income pages/functions are still historically narrowed and must be broadened later.
 
 Allowed external events:
 
@@ -183,15 +183,20 @@ Current implementation boundary:
   reports that School writeback should be retried later.
 - The browser does not write School DB directly and does not receive
   service-role keys.
-- The SQL has been applied and rollback-verified; all-scope teacher-wage
-  whitelist E2E is the next required gate before a real 2026-05 wage trial.
+- Rejected Cash requests are terminal, cannot be approved later, and can be
+  retried only by creating a new School attempt / Cash request. Old rejected
+  attempts remain history, and only one active attempt is allowed for the same
+  payment request at the same time.
+- School rollback, Cash JPY/CNY request rollback, and rejected -> retry ->
+  approved backend E2E have passed. Cleanup is complete with School/Cash target
+  residue 0. Real 2026-05 wage data was not used.
 
 Planned 2026-05 teacher wage trial:
 
-- Paused until School/Cash all-scope teacher-wage request implementation is
-  applied, configured, and whitelist-tested.
-- The old two-row personal-business `teacher_wage` JPY trial plan remains only as
-  historical planning context.
+- Not executed yet.
+- The old two-row personal-business `teacher_wage` JPY trial plan remains only
+  as historical planning context; the implemented path now covers all pending
+  `teacher_wage` payment requests with eligible JPY/CNY Cash accounts.
 - Real data should not be cleaned up; cleanup applies only to clearly marked whitelist test data.
 
 ## Hard Stops
