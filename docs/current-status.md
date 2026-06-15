@@ -20,6 +20,15 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
+2026-06-16 finalized canonical School/Cash flow:
+
+- Canonical income and expense flows have passed smoke/regression from the School side. Cash currently has no pending aozora school external requests.
+- Smoke baseline HEADs: School `ce3ff67`, Cash `cdfb8a1`.
+- New Cash request creation is limited to canonical School records only: `school_income_records / income_received` or compatible historical `tuition_income_received`, and `school_expense_records / expense_paid`.
+- Legacy direct business-module request types are historical reads only and cannot be newly created: `school_payment_requests / teacher_wage_payment_confirm`, `school_payment_requests / teacher_wage_payment_reverse`, and `school_part_time_work_income_requests / part_time_work_income_received`.
+- Cash UI display is converged: canonical income rows show `收入确认 / School 收入记录`, canonical expense rows show `支出确认 / School 支出记录`, and legacy direct rows show `旧链路记录 / 历史业务请求`.
+- Cash does not judge School business type. Business category, business month, source module, locked snapshot, and original business amount belong to School income/expense records. Cash records only actual account movement date, account, currency, amount, and external reference payload.
+
 2026-06-16 canonical external request restriction:
 
 - Cash new request creation is now restricted to canonical School records: `school_income_records` with `income_received` / compatible `tuition_income_received`, and `school_expense_records` with `expense_paid`.
@@ -39,7 +48,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - Cash now accepts canonical School expense requests: `external_reference_type = school_expense_records`, `request_type = expense_paid`, `transaction_type = expense`.
 - This flow creates only a pending external request; Cash transaction and balance changes happen only after Cash UI approve.
 - Cash UI `外部待确认` labels this request as `支出确认` and displays the School expense category, payee, month, original amount, actual payment amount/currency, and note from `payload_snapshot`.
-- This is the target path for future School expense records, including teacher wage after migration to `school_expense_records`. Legacy `school_payment_requests` teacher-wage requests remain supported only for existing legacy flow.
+- This is the target path for School expense records, including teacher wage after migration to `school_expense_records`. Legacy `school_payment_requests` teacher-wage requests are now historical read-only and are not supported for new creation.
 
 2026-06-15 part-time work income Cash pending request (legacy path, now deprecated):
 
@@ -58,14 +67,14 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - Whitelist E2E used only 2026-06 codex-test teacher-wage data: attempt 1 rejected, attempt 2 approved, duplicate active creation returned the existing pending request, and the approved JPY expense was cleaned. Cleanup removed 2 Cash requests and 1 JPY transaction; target residue is 0 and `日元现金` returned to `202500.00`.
 - Rejected Cash requests are terminal and cannot be approved later. School keeps the payment request pending, shows the rejection reason, and can submit a new attempt / Cash request. Old rejected attempts remain as history, and a single School payment request can have only one active attempt at a time.
 
-2026-06-14 teacher-wage all-scope Cash request integration:
+2026-06-14 teacher-wage all-scope Cash request integration (historical, superseded by canonical expense records):
 
-- School now submits all pending `teacher_wage` payment requests through the external request flow when the actual payment account is Cash-eligible.
+- This phase temporarily submitted pending `teacher_wage` payment requests through the external request flow when the actual payment account was Cash-eligible. It has been superseded by the canonical `teacher_wage -> school_expense_records -> Cash request` flow.
 - Cash continues to accept external requests only; it does not create School business requests or School business records.
 - Supported teacher-wage payment currencies:
   - `JPY` expense -> approved into `home_jpy_transactions`
   - `CNY` expense -> approved into `home_cny_transactions`
-- Cash request creation still requires:
+- Historical request creation in that superseded phase required:
   - `external_source = aozora_school`
   - `external_reference_type = school_payment_requests`
   - `request_type = teacher_wage_payment_confirm`
@@ -92,7 +101,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
   - `CNY` -> `home_cny_transactions`
 - `home_reject_external_transaction_request(...)` remains unchanged: rejection creates no transaction and changes no balance.
 - Added read-only RPC `home_list_school_eligible_cash_accounts()` and JS helper `listSchoolEligibleCashAccounts()` for future School-side account selection.
-- Event/reference guards remain white-listed: `school_payment_requests` teacher wage payment events and `school_income_records` tuition/income received events only. Arbitrary external events are still rejected.
+- Historical note: at this checkpoint the event/reference guards still included `school_payment_requests` teacher wage payment events. Current guards have since been narrowed to canonical `school_income_records` / `school_expense_records` creation only; arbitrary external events remain rejected.
 
 2026-06-14 unified School/Cash flow policy:
 
@@ -128,7 +137,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
   - Cash-to-corporate transfer, corporate reimbursement, CNY/JPY exchange, user-account transfer, entrusted-funds clearing, and wage-advance recovery are internal clearing/allocation and should not be treated as operating profit.
 - Current School code may still be personal-only / JPY-only. Those are School-side implementation gaps to fix later. The real 2026-05 wage trial remains paused until School and Cash implementation match the corrected policy.
 
-2026-06-13 Cash linkage v2 stage 1 implementation:
+2026-06-13 Cash linkage v2 stage 1 implementation (historical implementation note):
 
 - Added formal SQL file `supabase-update-20260613-external-requests.sql`.
 - Added Cash-owned table `home_external_transaction_requests` for aozora school external transaction requests.
@@ -141,12 +150,13 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - Pending requests do not create `home_jpy_transactions` and do not change balances.
 - Approve is the only path that calls existing `home_create_external_jpy_transaction(...)`; idempotent duplicate behavior remains owned by that RPC.
 - Reject records `rejected` state/reason and does not create a transaction or change balance.
-- Supported request families remain narrow:
+- The supported request families at that historical checkpoint were:
   - `school_payment_requests` + `teacher_wage_payment_confirm` -> JPY/CNY `expense`
   - `school_payment_requests` + `teacher_wage_payment_reverse` -> JPY/CNY `income`
   - `school_income_records` + `tuition_income_received` / `income_received` -> JPY/CNY `income`
   - `school_part_time_work_income_requests` + `part_time_work_income_received` -> JPY/CNY `income`
 - School -> Cash request entry belongs inside the School income/payment business pages, not a standalone School sync page. The intended bridge is still a Supabase Edge Function behind those business actions, not direct School-browser writes to Cash DB.
+- Current canonical policy has since narrowed new creation to `school_income_records` and `school_expense_records`; legacy direct families from this checkpoint are readable history only.
 - This checkpoint adds code/SQL/docs; the SQL was applied and rollback-verified in a later guarded DB apply phase.
 
 2026-06-13 Cash linkage v2 approve/reject School writeback code:
@@ -159,11 +169,11 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - The School callback Function URL is configured in `js/config.js`; no School key is committed. The School Function is expected to validate the Cash bearer token internally.
 - If callback fails, Cash request remains approved/rejected and the UI shows: Cash has been processed, but School writeback failed; retry later.
 
-2026-06-13 Cash linkage v2 UI/business direction correction:
+2026-06-13 Cash linkage v2 UI/business direction correction (historical implementation note):
 
 - Corrected the product direction for School-originated requests:
   - personal-business tuition JPY income starts from the School income record page with a Cash 收款账户 selection
-  - personal-business teacher_wage JPY payment starts from the School teacher wage payment page with a Cash 支付账户 selection
+  - historical personal-business teacher_wage JPY payment started from the School teacher wage payment page; current teacher wage payments must start from `school_expense_records`
   - School should not add a separate sync entry for ordinary users
   - School should use business labels such as `提交到 Cash 确认`, `Cash待确认`, `Cash已确认`, and `Cash已拒绝`
 - Cash System still owns the separate `外部待确认` page. This is the ledger-side confirmation entry where the Cash user approves or rejects.
@@ -189,7 +199,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - Do not make the Cash frontend directly read the School DB.
 - Historical implementation continued excluding 青空塾, CNY, non-target linkage, reimbursement, company account spending, and arbitrary school events. Under the corrected 2026-06-14 business policy, 青空塾 and CNY/RMB should enter Cash when actual money moves through a user-controlled account; arbitrary school events without real account movement still must not enter Cash.
 
-2026-06-13 Phase 2 tuition income E2E checkpoint:
+2026-06-13 Phase 2 tuition income E2E checkpoint (historical implementation note):
 
 - Executed incremental SQL file `supabase-update-20260613-external-jpy-2.sql`.
 - It preserves existing Phase 1 support:
@@ -253,7 +263,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Boundaries
 
-- Current teacher-wage Cash confirmation supports School-submitted JPY/CNY requests for all pending `teacher_wage` payment requests, including personal business, 青空塾, and mixed-attribution wages, when the selected account is active, currency-matched, and `allow_school_requests = true`.
+- Historical note: this older teacher-wage direct Cash confirmation path has been superseded. Current teacher-wage Cash payment must start from `school_expense_records`; old `school_payment_requests` request types are legacy read-only and cannot be newly created.
 - Current income implementation may still exclude 青空塾 and CNY/RMB income linkage.
 - These are implementation limits, not the corrected business policy. The policy is: real movement through user-controlled accounts enters Cash; School keeps business ownership.
 - Historical personal tuition income support is limited to personal-business `tuition` JPY income through the school outbox and manual sync executor; the new Cash-side CNY support is infrastructure for the next School implementation phase.

@@ -1,6 +1,6 @@
 # System Map
 
-Status date: 2026-06-15
+Status date: 2026-06-16
 
 ## Core Tables
 
@@ -149,11 +149,11 @@ Profit and clearing boundary:
   `收入 / 法人账户报销 / 青空塾工资垫付报销`.
 
 The current school zsh sync executor is a verification/operations tool. The
-target daily business flow is page-driven and embedded in the real School
-business pages, not a separate School sync page:
+target daily business flow is page-driven from canonical School income/expense
+records, not a separate School sync page:
 
-1. School income/payment business page submits an external Cash request when
-   actual money will move through a user-controlled Cash account.
+1. School income record or expense record page submits an external Cash request
+   when actual money will move through a user-controlled Cash account.
 2. Cash System creates a pending external transaction request.
 3. Cash page approves or rejects.
 4. Approval creates the matching JPY/CNY Cash transaction and changes Cash balance.
@@ -180,16 +180,21 @@ Cash approve/reject callback boundary:
   transaction are not rolled back. The UI instructs the operator to retry the
   School writeback later.
 
-Teacher-wage request payload convention:
+Canonical request payload convention:
 
-- `teacher_wage_payment_confirm` requests are Cash `expense` requests.
-- `currency = JPY` approves into `home_jpy_transactions`.
-- `currency = CNY` approves into `home_cny_transactions`.
-- School keeps the teacher wage business cost in JPY and sends the Cash actual
-  payment currency/amount separately.
-- When `currency = CNY`, `payload_snapshot` should include School JPY wage cost,
-  exchange rate, and actual CNY payment amount so the Cash operator can confirm
-  the conversion before approval.
+- `school_income_records / income_received` and compatible
+  `tuition_income_received` requests are Cash `income` requests.
+- `school_expense_records / expense_paid` requests are Cash `expense` requests.
+- `currency = JPY` approves into `home_jpy_transactions`; `currency = CNY`
+  approves into `home_cny_transactions`.
+- School keeps business category, business month, locked snapshot, source
+  module, original business amount/currency, and any exchange/adjustment note in
+  the income/expense record and payload snapshot.
+- Cash uses only the actual account, actual Cash date, actual currency, and
+  actual amount for ledger movement.
+- Legacy `teacher_wage_payment_confirm`, `teacher_wage_payment_reverse`, and
+  `part_time_work_income_received` request types are readable history only and
+  must not be newly created.
 
 Cash-side v2 stage 1 implemented objects:
 
@@ -199,12 +204,11 @@ Cash-side v2 stage 1 implemented objects:
 - Create/approve/reject/read RPCs listed above, plus School-eligible account reader
 - UI view: `外部待确认`
 
-Important boundary: the code path now includes the School request Edge Function
-and the Cash-result callback Edge Function. Teacher-wage all-scope JPY/CNY
-request creation, Cash approve/reject behavior, and rejected -> retry ->
-approved backend E2E have been whitelist-tested and cleaned to target residue 0.
-Browser automation remains unstable, so the implemented page path can be
-operated manually and verified through DB checks.
+Important boundary: the code path now includes School request Edge Functions for
+canonical income/expense records and the Cash-result callback Edge Function.
+Canonical income approve/reject and canonical expense approve/reject have passed
+rollback smoke with residue 0. Browser automation remains unstable, so page
+paths can be operated manually and verified through DB checks.
 
 Historical Phase 1 completed scope:
 
@@ -223,15 +227,15 @@ Verified Phase 1 E2E test, later cleaned:
 
 Remaining out of historical Phase 1 included 青空塾, 青空塾 teacher wages, 青空塾 reimbursements, company account spending, CNY, non-`teacher_wage`, personal tuition income, part-time wage income, reversal sync, automatic background retry, Cash UI changes for external rows, and cross-DB strong transactions. Under the corrected policy, 青空塾 and CNY/RMB should be added later when they represent real user-controlled-account movement.
 
-Phase 2 Cash guard extension is prepared for personal-business tuition income -> Cash System JPY income transaction. It is limited in current code to `school_income_records` + `tuition_income_received` and must create a positive JPY `income` transaction. It currently excludes 青空塾, CNY, reimbursement, company account spending, and arbitrary school events. This is an implementation limit; only arbitrary school events without real account movement should remain excluded as policy.
+Phase 2 Cash guard extension is historical context. Current new request creation is canonical-record based: `school_income_records` for income and `school_expense_records` for expense. Arbitrary School events without real account movement remain excluded.
 
-Cash linkage v2 implementation order:
+Cash linkage v2 implementation order and current status:
 
 1. Cash DB: add pending external transaction request table and approve/reject RPCs. Implemented, applied, and rollback-verified.
 2. Cash UI: add pending request list, detail, approve, reject, and approve confirmation. Implemented in code.
-3. Edge Function: School income/payment page action -> Cash pending request. Implemented for all pending School `teacher_wage` payment requests with eligible JPY/CNY Cash accounts; income remains historical personal/Jpy only.
-4. School DB/UI: extend payment linkage lifecycle and embed Cash account selection in the business pages. Teacher-wage payment now reads Cash eligible accounts and supports JPY/CNY. Income must still broaden to all School money movement that passes through user-controlled accounts, including 青空塾 and CNY/RMB.
+3. Edge Function: School canonical income/expense record action -> Cash pending request. Implemented for `school_income_records` and `school_expense_records`.
+4. School DB/UI: Cash account selection is embedded in income/expense record pages. Teacher wage now reaches Cash through `school_expense_records`; external part-time work income reaches Cash through `school_income_records`.
 5. Cash approve/reject -> School result callback. Code added through School `sync-cash-request-result` Edge Function and Cash UI wrapper.
 6. ROLLBACK whitelist tests. Completed for School and Cash JPY/CNY request paths.
-7. COMMIT whitelist E2E approve/reject tests. Completed for teacher-wage rejected -> retry -> approved flow; cleanup confirmed School/Cash target residue 0 and did not use real 2026-05 wage data.
-8. Real 2026-05 teacher wage trial remains not executed. Real data should not be cleaned up; whitelist test data should be cleaned up.
+7. Smoke/regression tests. Canonical income approve/reject and canonical expense approve/reject rollback smoke passed with residue 0.
+8. Legacy direct request families are retained only as historical reads and cannot be newly created.

@@ -6,10 +6,10 @@ Status date: 2026-06-16
 | --- | --- | --- |
 | JPY accounts | Existing UI/RPC behavior unchanged; `allow_school_requests` marks School-eligible accounts | Keep ordinary account management stable |
 | JPY transactions | Existing ordinary flows unchanged; external JPY DB/RPC insert support added and now requires School-eligible active JPY accounts | Keep `home_create_external_jpy_transaction` as approval-time primitive while aligning policy coverage |
-| CNY transactions | Existing ordinary flows unchanged; external CNY approval primitive added for School-eligible active CNY accounts | Wire School income/payment requests to CNY/RMB later |
+| CNY transactions | Existing ordinary flows unchanged; external CNY approval primitive supports canonical School income/expense requests for School-eligible active CNY accounts | Keep ordinary CNY flows stable |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
 | FX linkage | Unchanged | Keep FX linkage separate |
-| External school linkage | Cash linkage v2 pending request table/RPC/UI implemented. New request creation is restricted to canonical School income/expense records: `school_income_records / income_received` and `school_expense_records / expense_paid`; compatible `tuition_income_received` income-record history remains supported. Legacy teacher-wage payment requests and direct part-time-work income requests are historical read-only paths only. | Continue final Cash-side cleanup by removing obsolete legacy display/sync branches after historical compatibility is no longer needed |
+| External school linkage | Cash linkage v2 pending request table/RPC/UI implemented. New request creation is restricted to canonical School income/expense records: `school_income_records / income_received` and `school_expense_records / expense_paid`; compatible `tuition_income_received` income-record history remains supported. Legacy teacher-wage payment requests and direct part-time-work income requests are historical read-only paths only. | Keep canonical flow stable; any legacy removal requires separate historical audit |
 
 ## Final System Boundary
 
@@ -178,12 +178,12 @@ Current implementation boundary:
 - Pending request creation does not change Cash balance.
 - Approve is the only path that creates/reuses a JPY/CNY external transaction.
 - Reject records status/reason and leaves Cash balance unchanged.
-- `teacher_wage_payment_confirm` requests may be JPY or CNY. When School sends
-  CNY, the payload should include School JPY wage cost, exchange rate, and actual
-  CNY payment amount for operator confirmation.
-- `part_time_work_income_received` requests may be JPY or CNY. Payload should
-  show workplace, month, original JPY wage, actual received amount/currency,
-  exchange rate, and note; approve creates the actual Cash income transaction.
+- Canonical income requests use `school_income_records` with
+  `income_received` or compatible historical `tuition_income_received`.
+- Canonical expense requests use `school_expense_records` with `expense_paid`.
+- `teacher_wage_payment_confirm`, `teacher_wage_payment_reverse`, and
+  `part_time_work_income_received` are legacy historical request types only and
+  must not be newly created.
 - After local approve/reject succeeds, the Cash UI calls the School-owned
   `sync-cash-request-result` Edge Function through API wrapper
   `syncCashRequestResultToSchool(...)`.
@@ -199,13 +199,13 @@ Current implementation boundary:
   approved backend E2E have passed. Cleanup is complete with School/Cash target
   residue 0. Real 2026-05 wage data was not used.
 
-Planned 2026-05 teacher wage trial:
+Historical teacher-wage direct-request trial:
 
-- Not executed yet.
-- The old two-row personal-business `teacher_wage` JPY trial plan remains only
-  as historical planning context; the implemented path now covers all pending
-  `teacher_wage` payment requests with eligible JPY/CNY Cash accounts.
-- Real data should not be cleaned up; cleanup applies only to clearly marked whitelist test data.
+- The old two-row personal-business `teacher_wage` JPY plan remains only as
+  historical planning context.
+- Current teacher wage payments use `school_expense_records`.
+- Real data should not be cleaned up from Cash without a separate historical
+  audit and dry-run.
 
 ## Hard Stops
 
