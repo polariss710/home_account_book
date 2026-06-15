@@ -20,6 +20,12 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
+2026-06-16 transaction delete confirmation guard:
+
+- CNY/JPY transaction delete actions now require a full confirmation message that includes date, amount, currency, account, transaction type, and memo/description. FX-linked and fixed-transfer deletes also state the linked-row impact before deletion.
+- School-originated Cash transactions, detected through external/source metadata, now require a second risk confirmation explaining that deletion may leave School and Cash out of sync. Cash remains manually editable/deletable; this is an accidental-delete guard, not a hard lock.
+- Read-only investigation of the accidental 2026-06 `厦门吕同学` CNY income deletion found that School income record `ac685f46-e924-435f-99e9-6797cca7e922` still exists as `received / Cash已确认` for `7,740 CNY`, while Cash request `93c36048-754a-491b-8a52-8e987b4efc07` remains `approved` with `created_transaction_id = 1d89c880-afd3-484a-ba73-3f158fef44de`. The matching Cash CNY/JPY transaction no longer exists, so the Cash balance no longer includes that row. No restore/rebuild was performed in this phase.
+
 2026-06-16 School request display and transaction visibility cleanup:
 
 - Cash UI renamed the former `外部待确认` entry to `收支确认`; the page title is now `School 收支确认请求`.

@@ -270,8 +270,29 @@ function isFixedTransfer(transaction) {
 }
 
 function confirmDeleteJpyTransaction(transaction) {
-  if (!isFixedTransfer(transaction)) return true;
-  return window.confirm("删除这笔固定调拨会同步删除固定收支中的对应记录，并可能让已付固定支出恢复为未付。确定删除吗？");
+  if (!transaction) {
+    return window.confirm("确认删除这笔日元流水？");
+  }
+
+  const linkedMessages = [];
+  if (isFixedTransfer(transaction)) {
+    linkedMessages.push("这笔固定调拨会同步删除固定收支中的对应记录，并可能让已付固定支出恢复为未付。");
+  }
+  if (transaction.transaction_type === "fx_out") {
+    linkedMessages.push("这笔换汇转出会同步删除关联的人民币入金流水。");
+  }
+
+  const linkedText = linkedMessages.length ? `\n\n${linkedMessages.join("\n")}` : "";
+  const confirmed = window.confirm(`${deleteTransactionSummary(transaction, "JPY")}${linkedText}\n\n确认删除吗？`);
+  if (!confirmed) {
+    return false;
+  }
+
+  if (!isSchoolSyncedTransaction(transaction)) {
+    return true;
+  }
+
+  return window.confirm("这条流水由 School 收入/支出记录同步生成。删除后可能导致 School 与 Cash 状态不一致。请再次确认：我理解这可能造成 School/Cash 状态不一致，仍要删除。");
 }
 
 async function refreshAfterJpyMutation(message, type) {
@@ -301,4 +322,39 @@ function labelTransactionType(type) {
     fixed_out: "固定赤字补充",
   };
   return labels[type] || type;
+}
+
+function deleteTransactionSummary(transaction, currency) {
+  return [
+    "准备删除这笔 Cash 流水：",
+    `日期：${transaction.transacted_at || "-"}`,
+    `金额：${formatDeleteAmount(transaction.amount, currency)}`,
+    `币种：${currency}`,
+    `账户：${deleteTransactionAccountLabel(transaction)}`,
+    `类型：${labelTransactionType(transaction.transaction_type)}`,
+    `备注：${deleteTransactionMemo(transaction)}`,
+  ].join("\n");
+}
+
+function deleteTransactionAccountLabel(transaction) {
+  const fromAccount = transaction.account_name || "-";
+  const targetAccount = transaction.linked_cny_account_name || transaction.transfer_account_name || "";
+  return targetAccount ? `${fromAccount} -> ${targetAccount}` : fromAccount;
+}
+
+function deleteTransactionMemo(transaction) {
+  return [transaction.description, transaction.note].filter(Boolean).join(" / ") || "-";
+}
+
+function formatDeleteAmount(amount, currency) {
+  return currency === "CNY" ? `${amount} CNY` : `${money(amount)} JPY`;
+}
+
+function isSchoolSyncedTransaction(transaction) {
+  return Boolean(
+    transaction?.created_by_external ||
+    transaction?.external_source_id ||
+    transaction?.external_reference_type ||
+    transaction?.external_reference_id
+  );
 }
