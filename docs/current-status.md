@@ -1,6 +1,6 @@
 # Current Status
 
-Status date: 2026-06-15
+Status date: 2026-06-16
 
 This document keeps the current Cash System implementation checkpoint, safety notes, and active backlog.
 
@@ -20,10 +20,17 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
+2026-06-16 expense-record Cash approval:
+
+- Approval-time JPY/CNY external transaction primitives now accept canonical School expense requests: `external_reference_type = school_expense_records`, `request_type = expense_paid`, `transaction_type = expense`.
+- External-created JPY/CNY transaction table guards were updated for the same canonical expense request family.
+- Cash approve can now create the actual expense transaction for approved `school_expense_records` requests, and School `school_expense_records` writeback RPCs were rollback-tested for approved/rejected sync.
+- Legacy teacher-wage and part-time-work request families were not removed in this phase; final Cash-side whitelist contraction remains separate.
+
 2026-06-15 expense-record Cash pending request:
 
 - Cash now accepts canonical School expense requests: `external_reference_type = school_expense_records`, `request_type = expense_paid`, `transaction_type = expense`.
-- This flow creates only a pending external request; Cash transaction and balance changes still happen only after Cash UI approve.
+- This flow creates only a pending external request; Cash transaction and balance changes happen only after Cash UI approve.
 - Cash UI `外部待确认` labels this request as `支出确认` and displays the School expense category, payee, month, original amount, actual payment amount/currency, and note from `payload_snapshot`.
 - This is the target path for future School expense records, including teacher wage after migration to `school_expense_records`. Legacy `school_payment_requests` teacher-wage requests remain supported only for existing legacy flow.
 
