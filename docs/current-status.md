@@ -20,6 +20,13 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
+2026-06-15 expense-record Cash pending request:
+
+- Cash now accepts canonical School expense requests: `external_reference_type = school_expense_records`, `request_type = expense_paid`, `transaction_type = expense`.
+- This flow creates only a pending external request; Cash transaction and balance changes still happen only after Cash UI approve.
+- Cash UI `外部待确认` labels this request as `支出确认` and displays the School expense category, payee, month, original amount, actual payment amount/currency, and note from `payload_snapshot`.
+- This is the target path for future School expense records, including teacher wage after migration to `school_expense_records`. Legacy `school_payment_requests` teacher-wage requests remain supported only for existing legacy flow.
+
 2026-06-15 part-time work income Cash pending request:
 
 - Cash now accepts `external_reference_type = school_part_time_work_income_requests`, `request_type = part_time_work_income_received`, `transaction_type = income`.

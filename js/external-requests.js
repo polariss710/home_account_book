@@ -73,6 +73,29 @@ function renderReferenceSummary(request) {
     `;
   }
 
+  if (request.request_type === "expense_paid") {
+    const title = [
+      payload.expense_category_label || payload.expense_category || "支出确认",
+      payload.payee_name_snapshot,
+      payload.year_month,
+    ].filter(Boolean).join(" / ");
+    const details = [
+      payload.original_amount && payload.original_currency
+        ? `原始金额 ${money(payload.original_amount)} ${payload.original_currency}`
+        : "",
+      payload.actual_payment_amount && payload.actual_payment_currency
+        ? `实际支付 ${money(payload.actual_payment_amount)} ${payload.actual_payment_currency}`
+        : "",
+    ].filter(Boolean).join(" / ");
+
+    return `
+      <strong>${escapeHtml(title)}</strong>
+      ${details ? `<span>${escapeHtml(details)}</span>` : ""}
+      <span>技术信息：${escapeHtml(referenceLabel(request.external_reference_type))} ${escapeHtml(request.external_reference_id || "-")}</span>
+      <span>event ${escapeHtml(request.external_event_id || "-")}</span>
+    `;
+  }
+
   return `
     <strong>${escapeHtml(referenceLabel(request.external_reference_type))}</strong>
     <span>${escapeHtml(request.external_reference_id || "-")}</span>
@@ -97,6 +120,15 @@ function renderPayloadDetails(request) {
   if (request.request_type === "part_time_work_income_received") {
     const parts = [
       payload.exchange_rate_cny_per_jpy ? `汇率 ${payload.exchange_rate_cny_per_jpy}` : "",
+      payload.note || "",
+    ].filter(Boolean);
+
+    return parts.map((part) => `<span>${escapeHtml(part)}</span>`).join("");
+  }
+
+  if (request.request_type === "expense_paid") {
+    const parts = [
+      payload.description || "",
       payload.note || "",
     ].filter(Boolean);
 
@@ -196,6 +228,7 @@ function requestTypeLabel(type) {
     teacher_wage_payment_reverse: "老师工资撤销",
     tuition_income_received: "个人学费收入",
     part_time_work_income_received: "外部塾打工收入",
+    expense_paid: "支出确认",
   };
   return labels[type] || type || "-";
 }
@@ -213,6 +246,7 @@ function referenceLabel(type) {
     school_payment_requests: "School 支付请求",
     school_income_records: "School 收入记录",
     school_part_time_work_income_requests: "私塾打工收入请求",
+    school_expense_records: "School 支出记录",
   };
   return labels[type] || type || "-";
 }
