@@ -1,6 +1,6 @@
 # Module Status
 
-Status date: 2026-06-14
+Status date: 2026-06-15
 
 | Module | Current State | Next Priority |
 | --- | --- | --- |
@@ -9,7 +9,7 @@ Status date: 2026-06-14
 | CNY transactions | Existing ordinary flows unchanged; external CNY approval primitive added for School-eligible active CNY accounts | Wire School income/payment requests to CNY/RMB later |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
 | FX linkage | Unchanged | Keep FX linkage separate |
-| External school linkage | Historical Phase 1/2 manual E2E sync verified; Cash linkage v2 pending request table/RPC/UI implemented; teacher-wage all-scope School requests support eligible JPY/CNY accounts and rejected retry attempts are whitelist-tested | Real 2026-05 wage trial and income all-scope Cash linkage remain separate phases |
+| External school linkage | Cash linkage v2 pending request table/RPC/UI implemented; teacher-wage, ordinary income, and external part-time work income requests support eligible JPY/CNY accounts | Confirm pending 2026-05 诺应教育 part-time income request in Cash UI, then verify School writeback |
 
 ## Final System Boundary
 
@@ -64,13 +64,14 @@ Current role:
 - `home_create_external_cny_transaction(...)` is the CNY idempotent transaction creation primitive.
 - The zsh sync executor that calls it directly is a verification/operations tool, not the final daily business entry point.
 - In Cash linkage v2, these transaction primitives should be called only after a Cash user approves a pending external request from the Cash page.
-- Cash request/approval infrastructure now supports JPY and CNY. School-side teacher-wage payment requests are broadened to all pending `teacher_wage` rows with eligible Cash accounts, regardless of personal business / 青空塾 / mixed attribution. Income pages/functions are still historically narrowed and must be broadened later.
+- Cash request/approval infrastructure now supports JPY and CNY. School-side teacher-wage payment requests are broadened to all pending `teacher_wage` rows with eligible Cash accounts, regardless of personal business / 青空塾 / mixed attribution. Ordinary School income and dedicated external part-time work income requests can also enter Cash through whitelisted request types.
 
 Allowed external events:
 
 - `school_payment_requests` + `teacher_wage_payment_confirm` -> `transaction_type = expense`
 - `school_payment_requests` + `teacher_wage_payment_reverse` -> `transaction_type = income`
 - `school_income_records` + `tuition_income_received` / `income_received` -> `transaction_type = income`
+- `school_part_time_work_income_requests` + `part_time_work_income_received` -> `transaction_type = income`
 
 Required source metadata:
 
@@ -176,6 +177,9 @@ Current implementation boundary:
 - `teacher_wage_payment_confirm` requests may be JPY or CNY. When School sends
   CNY, the payload should include School JPY wage cost, exchange rate, and actual
   CNY payment amount for operator confirmation.
+- `part_time_work_income_received` requests may be JPY or CNY. Payload should
+  show workplace, month, original JPY wage, actual received amount/currency,
+  exchange rate, and note; approve creates the actual Cash income transaction.
 - After local approve/reject succeeds, the Cash UI calls the School-owned
   `sync-cash-request-result` Edge Function through API wrapper
   `syncCashRequestResultToSchool(...)`.

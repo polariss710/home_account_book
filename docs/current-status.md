@@ -1,6 +1,6 @@
 # Current Status
 
-Status date: 2026-06-14
+Status date: 2026-06-15
 
 This document keeps the current Cash System implementation checkpoint, safety notes, and active backlog.
 
@@ -8,7 +8,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 - Cash System is a static Supabase-backed household ledger using `home_` tables.
 - Normal JPY/CNY account and transaction UI remains unchanged.
-- External JPY/CNY transaction request infrastructure for aozora school now supports the teacher-wage all-scope School request path: all pending School `teacher_wage` payment requests may submit a Cash confirmation request when the selected account is active, currency-matched, and `allow_school_requests = true`.
+- External JPY/CNY transaction request infrastructure for aozora school now supports teacher-wage all-scope requests, ordinary School income requests, and the dedicated external part-time work income request path.
 - Teacher-wage Cash confirmation is complete for personal business, 青空塾, and mixed-attribution School payment requests. Business ownership no longer decides whether a teacher-wage request can enter Cash; the selected Cash account and actual user-controlled account movement do.
 - A school-side manual sync executor successfully called the Cash RPC for both supported flows, verified idempotent duplicate execution, and later cleaned the whitelist test transaction/account residue.
 - The manual sync executor is now classified as a verification/operations tool, not the final daily business entry point.
@@ -19,6 +19,13 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - No direct School DB writes, School-side Edge Function deployment, background worker, or automatic scheduler is implemented in this repository.
 
 ## Latest Update
+
+2026-06-15 part-time work income Cash pending request:
+
+- Cash now accepts `external_reference_type = school_part_time_work_income_requests`, `request_type = part_time_work_income_received`, `transaction_type = income`.
+- This flow records the actual Cash receipt amount/currency supplied by School and does not infer Cash amount from the locked School JPY wage total.
+- Cash UI `外部待确认` now labels this request as `外部塾打工收入` and displays workplace, month, original JPY wage, actual received amount/currency, exchange rate, and note from `payload_snapshot`.
+- Real 2026-05 诺应教育 pending request is awaiting user confirmation: request `19ba6cbd-9588-486b-8b2a-b4b7c573f252`, amount `3,670 CNY`, original School wage `86,760 JPY`, exchange rate `0.0423006`. No Cash transaction is created until Cash UI approve.
 
 2026-06-14 external request retry attempts:
 
@@ -116,6 +123,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
   - `school_payment_requests` + `teacher_wage_payment_confirm` -> JPY/CNY `expense`
   - `school_payment_requests` + `teacher_wage_payment_reverse` -> JPY/CNY `income`
   - `school_income_records` + `tuition_income_received` / `income_received` -> JPY/CNY `income`
+  - `school_part_time_work_income_requests` + `part_time_work_income_received` -> JPY/CNY `income`
 - School -> Cash request entry belongs inside the School income/payment business pages, not a standalone School sync page. The intended bridge is still a Supabase Edge Function behind those business actions, not direct School-browser writes to Cash DB.
 - This checkpoint adds code/SQL/docs; the SQL was applied and rollback-verified in a later guarded DB apply phase.
 

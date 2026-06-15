@@ -58,19 +58,33 @@ function requestRow(request) {
 
 function renderPayloadDetails(request) {
   const payload = request.payload_snapshot || {};
-  if (request.request_type !== "teacher_wage_payment_confirm" || !payload.school_amount_jpy) {
-    return "";
+  if (request.request_type === "teacher_wage_payment_confirm" && payload.school_amount_jpy) {
+    const parts = [
+      `School成本 ${money(payload.school_amount_jpy)} JPY`,
+      payload.payment_exchange_rate ? `汇率 ${payload.payment_exchange_rate}` : "",
+      payload.payment_amount && payload.payment_currency
+        ? `实付 ${money(payload.payment_amount)} ${payload.payment_currency}`
+        : "",
+    ].filter(Boolean);
+
+    return parts.map((part) => `<span>${escapeHtml(part)}</span>`).join("");
   }
 
-  const parts = [
-    `School成本 ${money(payload.school_amount_jpy)} JPY`,
-    payload.payment_exchange_rate ? `汇率 ${payload.payment_exchange_rate}` : "",
-    payload.payment_amount && payload.payment_currency
-      ? `实付 ${money(payload.payment_amount)} ${payload.payment_currency}`
-      : "",
-  ].filter(Boolean);
+  if (request.request_type === "part_time_work_income_received") {
+    const parts = [
+      payload.workplace_name && payload.year_month ? `${payload.workplace_name} ${payload.year_month}` : "",
+      payload.original_amount_jpy ? `JPY工资 ${money(payload.original_amount_jpy)} JPY` : "",
+      payload.actual_received_amount && payload.actual_received_currency
+        ? `实际到账 ${money(payload.actual_received_amount)} ${payload.actual_received_currency}`
+        : "",
+      payload.exchange_rate_cny_per_jpy ? `汇率 ${payload.exchange_rate_cny_per_jpy}` : "",
+      payload.note || "",
+    ].filter(Boolean);
 
-  return parts.map((part) => `<span>${escapeHtml(part)}</span>`).join("");
+    return parts.map((part) => `<span>${escapeHtml(part)}</span>`).join("");
+  }
+
+  return "";
 }
 
 function requestActions(request) {
@@ -162,6 +176,7 @@ function requestTypeLabel(type) {
     teacher_wage_payment_confirm: "老师工资支付",
     teacher_wage_payment_reverse: "老师工资撤销",
     tuition_income_received: "个人学费收入",
+    part_time_work_income_received: "外部塾打工收入",
   };
   return labels[type] || type || "-";
 }
@@ -178,6 +193,7 @@ function referenceLabel(type) {
   const labels = {
     school_payment_requests: "School payment request",
     school_income_records: "School income record",
+    school_part_time_work_income_requests: "School part-time income request",
   };
   return labels[type] || type || "-";
 }

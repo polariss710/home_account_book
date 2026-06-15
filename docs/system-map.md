@@ -1,6 +1,6 @@
 # System Map
 
-Status date: 2026-06-14
+Status date: 2026-06-15
 
 ## Core Tables
 
@@ -67,14 +67,15 @@ Currently allowed school event families:
 - `school_payment_requests` + `teacher_wage_payment_confirm` -> JPY/CNY `expense`
 - `school_payment_requests` + `teacher_wage_payment_reverse` -> JPY/CNY `income`
 - `school_income_records` + `tuition_income_received` / `income_received` -> JPY/CNY `income`
+- `school_part_time_work_income_requests` + `part_time_work_income_received` -> JPY/CNY `income`
 
 This is current implementation scope only. The corrected 2026-06-14 business
 policy is broader: any School-related money movement that actually passes
 through a user-controlled account should enter Cash, including 青空塾 and
 CNY/RMB movements. School-side teacher-wage requests are now broadened to all
-pending `teacher_wage` rows with eligible JPY/CNY Cash accounts. School-side
-income guards remain historically personal/Jpy narrowed and must be broadened in
-a later guarded phase.
+pending `teacher_wage` rows with eligible JPY/CNY Cash accounts. Ordinary School
+income and external part-time work income now have whitelisted pending request
+families; arbitrary School events without real account movement remain excluded.
 
 ## Balance Rule
 
