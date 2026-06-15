@@ -202,7 +202,7 @@ Cash-side v2 stage 1 implemented objects:
   `supabase-update-20260613-school-account-eligibility-and-multicurrency.sql`
 - Request table: `home_external_transaction_requests`
 - Create/approve/reject/read RPCs listed above, plus School-eligible account reader
-- UI view: `外部待确认`
+- UI view: `收支确认`
 
 Important boundary: the code path now includes School request Edge Functions for
 canonical income/expense records and the Cash-result callback Edge Function.

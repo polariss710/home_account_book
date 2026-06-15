@@ -137,6 +137,7 @@ function renderJpyTransactions() {
 function transactionRow(item) {
   const fixedTransfer = isFixedTransfer(item);
   const fxLinked = Boolean(item.linked_cny_transaction_id);
+  const schoolSynced = Boolean(item.created_by_external);
   const sourceFx = fxLinked && item.transaction_type === "fx_out";
   const generatedFx = fxLinked && item.transaction_type === "fx_in";
   const locked = fixedTransfer || generatedFx || sourceFx;
@@ -167,6 +168,7 @@ function transactionRow(item) {
         <button class="danger-button compact-button" data-delete-jpy="${item.id}" type="button">删除</button>
       </div>
     `;
+  const sourceBadge = schoolSynced ? `<span class="badge settled" title="School 收支确认请求同步生成">School同步生成</span>` : "";
   return `
     <tr>
       <td>${escapeHtml(item.transacted_at)}</td>
@@ -176,7 +178,7 @@ function transactionRow(item) {
       <td>${amountCell}</td>
       <td>${descriptionCell}</td>
       <td>${noteCell}</td>
-      <td>${controls}</td>
+      <td>${sourceBadge}${controls}</td>
     </tr>
   `;
 }

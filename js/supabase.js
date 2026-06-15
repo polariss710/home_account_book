@@ -118,7 +118,7 @@ export async function loadExternalTransactionRequests(status = appState.external
     p_limit: 100,
   });
   if (error) {
-    setActionMessage(`外部待确认请求读取失败：${error.message}`, "error");
+    setActionMessage(`School 收支确认请求读取失败：${error.message}`, "error");
     appState.externalRequests = [];
     return;
   }
@@ -500,10 +500,10 @@ export async function approveExternalTransactionRequest(id) {
     p_request_id: id,
   });
   if (error) {
-    setActionMessage(`外部请求确认失败：${error.message}`, "error");
+    setActionMessage(`收支确认请求确认失败：${error.message}`, "error");
     return null;
   }
-  return handleRpcResult(data, "外部请求确认失败。");
+  return handleRpcResult(data, "收支确认请求确认失败。");
 }
 
 export async function rejectExternalTransactionRequest(id, reason) {
@@ -512,10 +512,10 @@ export async function rejectExternalTransactionRequest(id, reason) {
     p_reason: reason,
   });
   if (error) {
-    setActionMessage(`外部请求拒绝失败：${error.message}`, "error");
+    setActionMessage(`收支确认请求拒绝失败：${error.message}`, "error");
     return null;
   }
-  return handleRpcResult(data, "外部请求拒绝失败。");
+  return handleRpcResult(data, "收支确认请求拒绝失败。");
 }
 
 export async function syncCashRequestResultToSchool(id, action) {

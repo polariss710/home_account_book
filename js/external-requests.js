@@ -183,7 +183,7 @@ function bindRequestActions() {
     button.addEventListener("click", async () => {
       const request = findRequest(button.dataset.approveExternalRequest);
       if (!request) return;
-      const confirmed = window.confirm(`确认这笔外部请求并生成 Cash ${transactionTypeLabel(request.transaction_type)}流水？`);
+      const confirmed = window.confirm(`确认这笔 School 收支确认请求并生成 Cash ${transactionTypeLabel(request.transaction_type)}流水？`);
       if (!confirmed) return;
       const result = await approveExternalTransactionRequest(request.id);
       if (!result) return;

@@ -438,10 +438,12 @@ function filteredTransactions() {
 function transactionRow(item) {
   const fixedLocked = Boolean(item.linked_fixed_month_item_id);
   const fxLinked = Boolean(item.linked_jpy_transaction_id);
+  const schoolSynced = Boolean(item.created_by_external);
   const sourceFx = fxLinked && item.transaction_type === "fx_out";
   const generatedFx = fxLinked && item.transaction_type === "fx_in";
   const locked = fixedLocked || fxLinked;
   const targetAccountName = fxLinked ? item.linked_jpy_account_name : item.transfer_account_name;
+  const sourceBadge = schoolSynced ? `<span class="badge settled" title="School 收支确认请求同步生成">School同步生成</span>` : "";
   const controls = fixedLocked
     ? `<span class="badge settled">固定项生成</span>`
     : generatedFx
@@ -469,7 +471,7 @@ function transactionRow(item) {
       <td><input class="table-input amount-input" data-cny-amount="${item.id}" type="number" step="0.01" value="${Number(item.amount || 0)}"${locked ? " disabled" : ""} /></td>
       <td><input class="table-input" data-cny-description="${item.id}" value="${escapeHtml(item.description || "")}"${locked ? " disabled" : ""} /></td>
       <td><input class="table-input" data-cny-note="${item.id}" value="${escapeHtml(item.note || "")}"${locked ? " disabled" : ""} /></td>
-      <td>${controls}</td>
+      <td>${sourceBadge}${controls}</td>
     </tr>
   `;
 }

@@ -9,7 +9,7 @@ Status date: 2026-06-16
 | CNY transactions | Existing ordinary flows unchanged; external CNY approval primitive supports canonical School income/expense requests for School-eligible active CNY accounts | Keep ordinary CNY flows stable |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
 | FX linkage | Unchanged | Keep FX linkage separate |
-| External school linkage | Cash linkage v2 pending request table/RPC/UI implemented. New request creation is restricted to canonical School income/expense records: `school_income_records / income_received` and `school_expense_records / expense_paid`; compatible `tuition_income_received` income-record history remains supported. Legacy teacher-wage payment requests and direct part-time-work income requests are historical read-only paths only. | Keep canonical flow stable; any legacy removal requires separate historical audit |
+| School 收支确认 | Cash linkage v2 pending request table/RPC/UI implemented. New request creation is restricted to canonical School income/expense records: `school_income_records / income_received` and `school_expense_records / expense_paid`; compatible `tuition_income_received` income-record history remains supported. Legacy teacher-wage payment requests and direct part-time-work income requests are historical read-only paths only. | Keep canonical flow stable; any legacy removal requires separate historical audit |
 
 ## Final System Boundary
 
@@ -28,6 +28,10 @@ Status date: 2026-06-16
   reject creates no transaction and changes no balance.
 - Cash System must not proactively create School business records or initiate
   School business requests.
+- The Cash UI entry for School-originated confirmation requests is `收支确认`.
+  Canonical income rows are displayed as `收入确认 / School 收入记录`,
+  canonical expense rows as `支出确认 / School 支出记录`, and deprecated direct
+  module rows as `旧链路记录`.
 - Internal clearing is not operating profit: Cash-to-corporate transfer,
   corporate reimbursement to Cash, CNY/JPY exchange, user-account transfer,
   entrusted tuition clearing, and wage-advance recovery are excluded from
@@ -165,7 +169,7 @@ Likely Cash objects:
 - `home_reject_external_transaction_request(...)`: implemented; only pending requests can reject and no Cash transaction is created
 - `home_get_external_transaction_requests(...)`: implemented for the Cash UI
 - `home_list_school_eligible_cash_accounts()`: implemented for reading active School-eligible accounts
-- Cash UI view `外部待确认`: implemented for list/filter/approve/reject
+- Cash UI view `收支确认`: implemented for list/filter/approve/reject
 
 Recommended bridge:
 
