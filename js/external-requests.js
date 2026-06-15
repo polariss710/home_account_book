@@ -43,9 +43,7 @@ function requestRow(request) {
       <td>${escapeHtml(formatDateTime(request.requested_at))}</td>
       <td>
         <div class="compact-stack">
-          <strong>${escapeHtml(referenceLabel(request.external_reference_type))}</strong>
-          <span>${escapeHtml(request.external_reference_id || "-")}</span>
-          <span>event ${escapeHtml(request.external_event_id || "-")}</span>
+          ${renderReferenceSummary(request)}
           ${renderPayloadDetails(request)}
           ${request.created_transaction_id ? `<span>transaction ${escapeHtml(request.created_transaction_id)}</span>` : ""}
           ${request.rejected_reason ? `<span>拒绝理由：${escapeHtml(request.rejected_reason)}</span>` : ""}
@@ -53,6 +51,32 @@ function requestRow(request) {
       </td>
       <td>${requestActions(request)}</td>
     </tr>
+  `;
+}
+
+function renderReferenceSummary(request) {
+  const payload = request.payload_snapshot || {};
+  if (request.request_type === "part_time_work_income_received") {
+    const title = [payload.workplace_name, payload.year_month].filter(Boolean).join(" / ") || "外部塾打工收入";
+    const details = [
+      payload.original_amount_jpy ? `JPY工资总额 ${money(payload.original_amount_jpy)}` : "",
+      payload.actual_received_amount && payload.actual_received_currency
+        ? `实际到账 ${money(payload.actual_received_amount)} ${payload.actual_received_currency}`
+        : "",
+    ].filter(Boolean).join(" / ");
+
+    return `
+      <strong>${escapeHtml(title)}</strong>
+      ${details ? `<span>${escapeHtml(details)}</span>` : ""}
+      <span>技术信息：${escapeHtml(referenceLabel(request.external_reference_type))} ${escapeHtml(request.external_reference_id || "-")}</span>
+      <span>event ${escapeHtml(request.external_event_id || "-")}</span>
+    `;
+  }
+
+  return `
+    <strong>${escapeHtml(referenceLabel(request.external_reference_type))}</strong>
+    <span>${escapeHtml(request.external_reference_id || "-")}</span>
+    <span>event ${escapeHtml(request.external_event_id || "-")}</span>
   `;
 }
 
@@ -72,11 +96,6 @@ function renderPayloadDetails(request) {
 
   if (request.request_type === "part_time_work_income_received") {
     const parts = [
-      payload.workplace_name && payload.year_month ? `${payload.workplace_name} ${payload.year_month}` : "",
-      payload.original_amount_jpy ? `JPY工资 ${money(payload.original_amount_jpy)} JPY` : "",
-      payload.actual_received_amount && payload.actual_received_currency
-        ? `实际到账 ${money(payload.actual_received_amount)} ${payload.actual_received_currency}`
-        : "",
       payload.exchange_rate_cny_per_jpy ? `汇率 ${payload.exchange_rate_cny_per_jpy}` : "",
       payload.note || "",
     ].filter(Boolean);
@@ -191,9 +210,9 @@ function transactionTypeLabel(type) {
 
 function referenceLabel(type) {
   const labels = {
-    school_payment_requests: "School payment request",
-    school_income_records: "School income record",
-    school_part_time_work_income_requests: "School part-time income request",
+    school_payment_requests: "School 支付请求",
+    school_income_records: "School 收入记录",
+    school_part_time_work_income_requests: "私塾打工收入请求",
   };
   return labels[type] || type || "-";
 }

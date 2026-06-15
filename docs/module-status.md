@@ -9,7 +9,7 @@ Status date: 2026-06-15
 | CNY transactions | Existing ordinary flows unchanged; external CNY approval primitive added for School-eligible active CNY accounts | Wire School income/payment requests to CNY/RMB later |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
 | FX linkage | Unchanged | Keep FX linkage separate |
-| External school linkage | Cash linkage v2 pending request table/RPC/UI implemented; teacher-wage, ordinary income, and external part-time work income requests support eligible JPY/CNY accounts | Confirm pending 2026-05 诺应教育 part-time income request in Cash UI, then verify School writeback |
+| External school linkage | Cash linkage v2 pending request table/RPC/UI implemented; teacher-wage, ordinary income, and external part-time work income requests support eligible JPY/CNY accounts through request creation and approval-time transaction primitives | Confirm pending 2026-05 诺应教育 part-time income request in Cash UI, then verify School writeback |
 
 ## Final System Boundary
 

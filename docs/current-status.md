@@ -25,6 +25,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - Cash now accepts `external_reference_type = school_part_time_work_income_requests`, `request_type = part_time_work_income_received`, `transaction_type = income`.
 - This flow records the actual Cash receipt amount/currency supplied by School and does not infer Cash amount from the locked School JPY wage total.
 - Cash UI `外部待确认` now labels this request as `外部塾打工收入` and displays workplace, month, original JPY wage, actual received amount/currency, exchange rate, and note from `payload_snapshot`.
+- Approval-time JPY/CNY external transaction primitives also accept this request family, so Cash approve can create the actual income transaction instead of returning `unsupported external_reference_type`.
 - Real 2026-05 诺应教育 pending request is awaiting user confirmation: request `19ba6cbd-9588-486b-8b2a-b4b7c573f252`, amount `3,670 CNY`, original School wage `86,760 JPY`, exchange rate `0.0423006`. No Cash transaction is created until Cash UI approve.
 
 2026-06-14 external request retry attempts:
