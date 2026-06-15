@@ -66,7 +66,7 @@ function renderReferenceSummary(request) {
     ].filter(Boolean).join(" / ");
 
     return `
-      <strong>${escapeHtml(title)}</strong>
+      <strong>旧链路记录：${escapeHtml(title)}</strong>
       ${details ? `<span>${escapeHtml(details)}</span>` : ""}
       <span>技术信息：${escapeHtml(referenceLabel(request.external_reference_type))} ${escapeHtml(request.external_reference_id || "-")}</span>
       <span>event ${escapeHtml(request.external_event_id || "-")}</span>
@@ -224,10 +224,11 @@ function sourceLabel(source) {
 
 function requestTypeLabel(type) {
   const labels = {
-    teacher_wage_payment_confirm: "老师工资支付",
-    teacher_wage_payment_reverse: "老师工资撤销",
+    teacher_wage_payment_confirm: "旧链路记录（老师工资支付）",
+    teacher_wage_payment_reverse: "旧链路记录（老师工资撤销）",
     tuition_income_received: "个人学费收入",
-    part_time_work_income_received: "外部塾打工收入",
+    income_received: "收入确认",
+    part_time_work_income_received: "旧链路记录（外部塾打工收入）",
     expense_paid: "支出确认",
   };
   return labels[type] || type || "-";
@@ -243,9 +244,9 @@ function transactionTypeLabel(type) {
 
 function referenceLabel(type) {
   const labels = {
-    school_payment_requests: "School 支付请求",
+    school_payment_requests: "旧链路记录（School 支付请求）",
     school_income_records: "School 收入记录",
-    school_part_time_work_income_requests: "私塾打工收入请求",
+    school_part_time_work_income_requests: "旧链路记录（私塾打工收入请求）",
     school_expense_records: "School 支出记录",
   };
   return labels[type] || type || "-";

@@ -62,20 +62,23 @@ These transaction primitives do not write:
 They require an active `home_accounts` row matching the request currency,
 `allow_school_requests = true`, and a positive amount.
 
-Currently allowed school event families:
+Currently allowed school event families for new creation:
 
-- `school_payment_requests` + `teacher_wage_payment_confirm` -> JPY/CNY `expense`
-- `school_payment_requests` + `teacher_wage_payment_reverse` -> JPY/CNY `income`
 - `school_income_records` + `tuition_income_received` / `income_received` -> JPY/CNY `income`
-- `school_part_time_work_income_requests` + `part_time_work_income_received` -> JPY/CNY `income`
+- `school_expense_records` + `expense_paid` -> JPY/CNY `expense`
 
-This is current implementation scope only. The corrected 2026-06-14 business
-policy is broader: any School-related money movement that actually passes
-through a user-controlled account should enter Cash, including 青空塾 and
-CNY/RMB movements. School-side teacher-wage requests are now broadened to all
-pending `teacher_wage` rows with eligible JPY/CNY Cash accounts. Ordinary School
-income and external part-time work income now have whitelisted pending request
-families; arbitrary School events without real account movement remain excluded.
+Legacy direct request families retained only for historical reads:
+
+- `school_payment_requests` + `teacher_wage_payment_confirm`
+- `school_payment_requests` + `teacher_wage_payment_reverse`
+- `school_part_time_work_income_requests` + `part_time_work_income_received`
+
+The corrected 2026-06 business policy is canonical-record based: any
+School-related money movement that actually passes through a user-controlled
+account should enter Cash through a School income record or expense record.
+Cash does not accept new business-module direct requests for teacher wage or
+external part-time work. Arbitrary School events without real account movement
+remain excluded.
 
 ## Balance Rule
 

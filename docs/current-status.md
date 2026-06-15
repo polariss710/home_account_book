@@ -8,8 +8,8 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 - Cash System is a static Supabase-backed household ledger using `home_` tables.
 - Normal JPY/CNY account and transaction UI remains unchanged.
-- External JPY/CNY transaction request infrastructure for aozora school now supports teacher-wage all-scope requests, ordinary School income requests, and the dedicated external part-time work income request path.
-- Teacher-wage Cash confirmation is complete for personal business, 青空塾, and mixed-attribution School payment requests. Business ownership no longer decides whether a teacher-wage request can enter Cash; the selected Cash account and actual user-controlled account movement do.
+- External JPY/CNY transaction request infrastructure for aozora school now accepts new requests only from canonical School income and expense records: `school_income_records / income_received` and `school_expense_records / expense_paid`. Historical `tuition_income_received` income-record requests remain compatible.
+- Legacy business-module direct request families are deprecated for new creation: `school_payment_requests / teacher_wage_payment_confirm`, `school_payment_requests / teacher_wage_payment_reverse`, and `school_part_time_work_income_requests / part_time_work_income_received`. Existing historical rows remain readable for audit.
 - A school-side manual sync executor successfully called the Cash RPC for both supported flows, verified idempotent duplicate execution, and later cleaned the whitelist test transaction/account residue.
 - The manual sync executor is now classified as a verification/operations tool, not the final daily business entry point.
 - Cash linkage v1 business policy is unified as of 2026-06-14: School is the business ledger and stores business ownership; Cash System's original position remains the user's household/private account ledger, and it records real user-controlled account movement. Any money that passes through a user-controlled account should enter Cash, regardless of whether School ownership is personal business or 青空塾. Business ownership no longer decides Cash eligibility. Cash System only accepts external requests; it does not proactively create School business records or initiate School business requests. Cash keeps the separate `外部待确认` page as the ledger-side approve/reject entry, and only approval creates a Cash transaction and changes Cash balance.
@@ -20,12 +20,19 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
+2026-06-16 canonical external request restriction:
+
+- Cash new request creation is now restricted to canonical School records: `school_income_records` with `income_received` / compatible `tuition_income_received`, and `school_expense_records` with `expense_paid`.
+- `home_create_external_transaction_request(...)`, approval-time JPY/CNY transaction primitives, and external-created transaction table guards now reject legacy business-module direct request families with a clear deprecation message.
+- The Cash request table constraint still preserves non-pending legacy request rows for historical audit; no request or transaction data was deleted.
+- Cash UI keeps legacy request rows readable and labels old teacher-wage / direct part-time-work request types as `旧链路记录`.
+
 2026-06-16 expense-record Cash approval:
 
 - Approval-time JPY/CNY external transaction primitives now accept canonical School expense requests: `external_reference_type = school_expense_records`, `request_type = expense_paid`, `transaction_type = expense`.
 - External-created JPY/CNY transaction table guards were updated for the same canonical expense request family.
 - Cash approve can now create the actual expense transaction for approved `school_expense_records` requests, and School `school_expense_records` writeback RPCs were rollback-tested for approved/rejected sync.
-- Legacy teacher-wage and part-time-work request families were not removed in this phase; final Cash-side whitelist contraction remains separate.
+- Legacy teacher-wage and part-time-work request families were still present in this phase; they were restricted for new creation in the later 2026-06-16 canonical external request restriction step.
 
 2026-06-15 expense-record Cash pending request:
 
@@ -34,13 +41,13 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - Cash UI `外部待确认` labels this request as `支出确认` and displays the School expense category, payee, month, original amount, actual payment amount/currency, and note from `payload_snapshot`.
 - This is the target path for future School expense records, including teacher wage after migration to `school_expense_records`. Legacy `school_payment_requests` teacher-wage requests remain supported only for existing legacy flow.
 
-2026-06-15 part-time work income Cash pending request:
+2026-06-15 part-time work income Cash pending request (legacy path, now deprecated):
 
-- Cash now accepts `external_reference_type = school_part_time_work_income_requests`, `request_type = part_time_work_income_received`, `transaction_type = income`.
+- Cash previously accepted `external_reference_type = school_part_time_work_income_requests`, `request_type = part_time_work_income_received`, `transaction_type = income`; this direct business-module path is now deprecated for new request creation.
 - This flow records the actual Cash receipt amount/currency supplied by School and does not infer Cash amount from the locked School JPY wage total.
 - Cash UI `外部待确认` now labels this request as `外部塾打工收入` and displays workplace, month, original JPY wage, actual received amount/currency, exchange rate, and note from `payload_snapshot`.
 - Approval-time JPY/CNY external transaction primitives also accept this request family, so Cash approve can create the actual income transaction instead of returning `unsupported external_reference_type`.
-- Real 2026-05 诺应教育 pending request is awaiting user confirmation: request `19ba6cbd-9588-486b-8b2a-b4b7c573f252`, amount `3,670 CNY`, original School wage `86,760 JPY`, exchange rate `0.0423006`. No Cash transaction is created until Cash UI approve.
+- Real 2026-05 诺应教育 direct-path request `19ba6cbd-9588-486b-8b2a-b4b7c573f252`, amount `3,670 CNY`, original School wage `86,760 JPY`, exchange rate `0.0423006`, was rejected and is retained only as historical wrong-path evidence.
 
 2026-06-14 external request retry attempts:
 
