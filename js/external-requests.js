@@ -36,7 +36,7 @@ function requestRow(request) {
     <tr>
       <td>${statusBadge(request.status)}</td>
       <td>${escapeHtml(sourceLabel(request.external_source))}</td>
-      <td>${escapeHtml(requestTypeLabel(request.request_type))}</td>
+      <td>${escapeHtml(requestTypeLabel(request))}</td>
       <td>${escapeHtml(transactionTypeLabel(request.transaction_type))}</td>
       <td>${money(request.amount || 0)} ${escapeHtml(request.currency || "JPY")}</td>
       <td>${escapeHtml(request.account_name || request.account_id || "-")}</td>
@@ -56,24 +56,53 @@ function requestRow(request) {
 
 function renderReferenceSummary(request) {
   const payload = request.payload_snapshot || {};
-  if (request.request_type === "part_time_work_income_received") {
-    const title = [payload.workplace_name, payload.year_month].filter(Boolean).join(" / ") || "外部塾打工收入";
+  if (isLegacyRequest(request)) {
+    const legacyTitle = legacySummaryTitle(request, payload);
     const details = [
+      legacyTitle,
       payload.original_amount_jpy ? `JPY工资总额 ${money(payload.original_amount_jpy)}` : "",
       payload.actual_received_amount && payload.actual_received_currency
         ? `实际到账 ${money(payload.actual_received_amount)} ${payload.actual_received_currency}`
         : "",
+      payload.school_amount_jpy ? `School成本 ${money(payload.school_amount_jpy)} JPY` : "",
+      payload.payment_amount && payload.payment_currency
+        ? `实际支付 ${money(payload.payment_amount)} ${payload.payment_currency}`
+        : "",
     ].filter(Boolean).join(" / ");
 
     return `
-      <strong>旧链路记录：${escapeHtml(title)}</strong>
+      <strong>旧链路 / Legacy</strong>
+      <span>仅保留历史查看，不能新建</span>
       ${details ? `<span>${escapeHtml(details)}</span>` : ""}
-      <span>技术信息：${escapeHtml(referenceLabel(request.external_reference_type))} ${escapeHtml(request.external_reference_id || "-")}</span>
-      <span>event ${escapeHtml(request.external_event_id || "-")}</span>
+      ${renderTechnicalInfo(request)}
     `;
   }
 
-  if (request.request_type === "expense_paid") {
+  if (isIncomeRequest(request)) {
+    const title = [
+      incomeCategoryLabel(payload.income_category),
+      firstValue(payload.source_label, payload.student_name, payload.student_display_name, payload.payer_name, payload.description),
+    ].filter(Boolean).join(" / ") || "收入确认";
+    const details = [
+      firstValue(payload.settlement_month, payload.business_month, payload.year_month)
+        ? `业务归属月 ${firstValue(payload.settlement_month, payload.business_month, payload.year_month)}`
+        : "",
+      firstValue(payload.income_date, payload.received_date)
+        ? `收款日期 ${firstValue(payload.income_date, payload.received_date)}`
+        : "",
+      originalAmountLabel(payload),
+      actualIncomeAmountLabel(payload),
+      payload.note || "",
+    ].filter(Boolean);
+
+    return `
+      <strong>${escapeHtml(title)}</strong>
+      ${details.map((part) => `<span>${escapeHtml(part)}</span>`).join("")}
+      ${renderTechnicalInfo(request)}
+    `;
+  }
+
+  if (isExpenseRequest(request)) {
     const title = [
       payload.expense_category_label || payload.expense_category || "支出确认",
       payload.payee_name_snapshot,
@@ -87,38 +116,31 @@ function renderReferenceSummary(request) {
         ? `实际支付 ${money(payload.actual_payment_amount)} ${payload.actual_payment_currency}`
         : "",
     ].filter(Boolean).join(" / ");
+    const meta = [
+      payload.year_month ? `业务归属月 ${payload.year_month}` : "",
+      payload.expense_date || payload.paid_date ? `支付日期 ${payload.expense_date || payload.paid_date}` : "",
+      payload.note || "",
+    ].filter(Boolean);
 
     return `
       <strong>${escapeHtml(title)}</strong>
       ${details ? `<span>${escapeHtml(details)}</span>` : ""}
-      <span>技术信息：${escapeHtml(referenceLabel(request.external_reference_type))} ${escapeHtml(request.external_reference_id || "-")}</span>
-      <span>event ${escapeHtml(request.external_event_id || "-")}</span>
+      ${meta.map((part) => `<span>${escapeHtml(part)}</span>`).join("")}
+      ${renderTechnicalInfo(request)}
     `;
   }
 
   return `
     <strong>${escapeHtml(referenceLabel(request.external_reference_type))}</strong>
-    <span>${escapeHtml(request.external_reference_id || "-")}</span>
-    <span>event ${escapeHtml(request.external_event_id || "-")}</span>
+    ${renderTechnicalInfo(request)}
   `;
 }
 
 function renderPayloadDetails(request) {
   const payload = request.payload_snapshot || {};
-  if (request.request_type === "teacher_wage_payment_confirm" && payload.school_amount_jpy) {
+  if (isLegacyRequest(request)) {
     const parts = [
-      `School成本 ${money(payload.school_amount_jpy)} JPY`,
       payload.payment_exchange_rate ? `汇率 ${payload.payment_exchange_rate}` : "",
-      payload.payment_amount && payload.payment_currency
-        ? `实付 ${money(payload.payment_amount)} ${payload.payment_currency}`
-        : "",
-    ].filter(Boolean);
-
-    return parts.map((part) => `<span>${escapeHtml(part)}</span>`).join("");
-  }
-
-  if (request.request_type === "part_time_work_income_received") {
-    const parts = [
       payload.exchange_rate_cny_per_jpy ? `汇率 ${payload.exchange_rate_cny_per_jpy}` : "",
       payload.note || "",
     ].filter(Boolean);
@@ -139,6 +161,10 @@ function renderPayloadDetails(request) {
 }
 
 function requestActions(request) {
+  if (isLegacyRequest(request)) {
+    return `<span class="badge settled">仅历史查看</span>`;
+  }
+
   if (request.status !== "pending") {
     return request.created_transaction_id
       ? `<span class="badge settled">已生成流水</span>`
@@ -208,12 +234,16 @@ function statusBadge(status) {
   const labels = {
     pending: "待确认",
     approved: "已确认",
-    rejected: "已拒绝",
+    rejected: "已驳回",
+    cancelled: "已取消",
+    void: "已作废",
   };
   const classes = {
     pending: "unpaid",
     approved: "paid",
     rejected: "settled",
+    cancelled: "settled",
+    void: "settled",
   };
   return `<span class="badge ${classes[status] || "unpaid"}">${labels[status] || escapeHtml(status || "-")}</span>`;
 }
@@ -222,16 +252,11 @@ function sourceLabel(source) {
   return source === "aozora_school" ? "青空私塾" : source || "-";
 }
 
-function requestTypeLabel(type) {
-  const labels = {
-    teacher_wage_payment_confirm: "旧链路记录（老师工资支付）",
-    teacher_wage_payment_reverse: "旧链路记录（老师工资撤销）",
-    tuition_income_received: "个人学费收入",
-    income_received: "收入确认",
-    part_time_work_income_received: "旧链路记录（外部塾打工收入）",
-    expense_paid: "支出确认",
-  };
-  return labels[type] || type || "-";
+function requestTypeLabel(request) {
+  if (isLegacyRequest(request)) return "旧链路记录";
+  if (isIncomeRequest(request)) return "收入确认";
+  if (isExpenseRequest(request)) return "支出确认";
+  return request.request_type || "-";
 }
 
 function transactionTypeLabel(type) {
@@ -244,12 +269,80 @@ function transactionTypeLabel(type) {
 
 function referenceLabel(type) {
   const labels = {
-    school_payment_requests: "旧链路记录（School 支付请求）",
+    school_payment_requests: "历史业务请求",
     school_income_records: "School 收入记录",
-    school_part_time_work_income_requests: "旧链路记录（私塾打工收入请求）",
+    school_part_time_work_income_requests: "历史业务请求",
     school_expense_records: "School 支出记录",
   };
   return labels[type] || type || "-";
+}
+
+function isIncomeRequest(request) {
+  return request.external_reference_type === "school_income_records" &&
+    ["income_received", "tuition_income_received"].includes(request.request_type);
+}
+
+function isExpenseRequest(request) {
+  return request.external_reference_type === "school_expense_records" &&
+    request.request_type === "expense_paid";
+}
+
+function isLegacyRequest(request) {
+  return request.external_reference_type === "school_payment_requests" ||
+    request.external_reference_type === "school_part_time_work_income_requests" ||
+    [
+      "teacher_wage_payment_confirm",
+      "teacher_wage_payment_reverse",
+      "part_time_work_income_received",
+    ].includes(request.request_type);
+}
+
+function firstValue(...values) {
+  return values.find((value) => value !== null && value !== undefined && value !== "") || "";
+}
+
+function incomeCategoryLabel(category) {
+  const labels = {
+    tuition: "学费收入",
+    material_fee: "教材费收入",
+    registration_fee: "报名费收入",
+    other_fee: "其他收入",
+    part_time_work: "外部塾打工收入",
+  };
+  return labels[category] || category || "收入确认";
+}
+
+function originalAmountLabel(payload) {
+  const amount = firstValue(payload.original_amount, payload.amount);
+  const currency = firstValue(payload.original_currency, payload.currency);
+  return amount && currency ? `原始金额 ${money(amount)} ${currency}` : "";
+}
+
+function actualIncomeAmountLabel(payload) {
+  const amount = firstValue(payload.actual_received_amount, payload.payment_amount);
+  const currency = firstValue(payload.actual_received_currency, payload.payment_currency, payload.currency);
+  return amount && currency ? `实际到账 ${money(amount)} ${currency}` : "";
+}
+
+function legacySummaryTitle(request, payload) {
+  if (request.request_type === "part_time_work_income_received") {
+    return [payload.workplace_name, payload.year_month].filter(Boolean).join(" / ") || "外部塾打工收入";
+  }
+  if (request.request_type === "teacher_wage_payment_confirm") {
+    return "老师工资支付";
+  }
+  if (request.request_type === "teacher_wage_payment_reverse") {
+    return "老师工资撤销";
+  }
+  return "";
+}
+
+function renderTechnicalInfo(request) {
+  return `
+    <span>引用：${escapeHtml(referenceLabel(request.external_reference_type))} ${escapeHtml(request.external_reference_id || "-")}</span>
+    <span>技术信息：${escapeHtml(request.external_reference_type || "-")} / ${escapeHtml(request.request_type || "-")}</span>
+    <span>event ${escapeHtml(request.external_event_id || "-")}</span>
+  `;
 }
 
 function formatDateTime(value) {
