@@ -271,7 +271,7 @@ function isFixedTransfer(transaction) {
 
 function confirmDeleteJpyTransaction(transaction) {
   if (!transaction) {
-    return window.confirm("确认删除这笔日元流水？");
+    return window.confirm("确定删除这条日元支出记录吗？此操作无法撤销。");
   }
 
   const linkedMessages = [];
@@ -283,7 +283,10 @@ function confirmDeleteJpyTransaction(transaction) {
   }
 
   const linkedText = linkedMessages.length ? `\n\n${linkedMessages.join("\n")}` : "";
-  const confirmed = window.confirm(`${deleteTransactionSummary(transaction, "JPY")}${linkedText}\n\n确认删除吗？`);
+  const deletePrompt = transaction.transaction_type === "expense"
+    ? "确定删除这条日元支出记录吗？此操作无法撤销。"
+    : "确认删除这笔日元流水？";
+  const confirmed = window.confirm(`${deletePrompt}\n\n${deleteTransactionSummary(transaction, "JPY")}${linkedText}`);
   if (!confirmed) {
     return false;
   }

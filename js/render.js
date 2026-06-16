@@ -255,14 +255,16 @@ function findMonthItem(id) {
 
 function confirmDeleteMonthItem(item) {
   if (!item) {
-    return window.confirm("确认删除这笔日元固定项？");
+    return window.confirm("确定删除这条日元固定支出吗？此操作无法撤销。");
   }
 
   const linkedText = item.linked_jpy_transaction_id
     ? "\n\n这笔固定项已关联日元零散收支流水。删除会同步删除对应流水，并可能让已付固定支出恢复为未付。"
     : "";
   return window.confirm([
-    "准备删除这笔日元固定项：",
+    item.direction === "expense"
+      ? "确定删除这条日元固定支出吗？此操作无法撤销。"
+      : "准备删除这笔日元固定项：",
     `日期：${item.due_date || "-"}`,
     `金额：${money(item.amount)} JPY`,
     "币种：JPY",
