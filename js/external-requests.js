@@ -45,7 +45,7 @@ function requestRow(request) {
         <div class="compact-stack">
           ${renderReferenceSummary(request)}
           ${renderPayloadDetails(request)}
-          ${request.created_transaction_id ? `<span>transaction ${escapeHtml(request.created_transaction_id)}</span>` : ""}
+          ${renderTechnicalDetails(request)}
           ${request.rejected_reason ? `<span>拒绝理由：${escapeHtml(request.rejected_reason)}</span>` : ""}
         </div>
       </td>
@@ -74,31 +74,31 @@ function renderReferenceSummary(request) {
       <strong>旧链路 / Legacy</strong>
       <span>仅保留历史查看，不能新建</span>
       ${details ? `<span>${escapeHtml(details)}</span>` : ""}
-      ${renderTechnicalInfo(request)}
     `;
   }
 
   if (isIncomeRequest(request)) {
-    const title = [
-      incomeCategoryLabel(payload.income_category),
-      firstValue(payload.source_label, payload.student_name, payload.student_display_name, payload.payer_name, payload.description),
-    ].filter(Boolean).join(" / ") || "收入确认";
+    const incomePerson = firstValue(payload.student_name, payload.student_display_name, payload.payer_name, payload.source_label);
+    const description = firstValue(request.description, payload.description);
+    const title = incomeCategoryLabel(payload.income_category);
     const details = [
+      incomePerson ? `学生：${incomePerson}` : "",
+      !incomePerson && description ? `摘要：${description}` : "",
       firstValue(payload.settlement_month, payload.business_month, payload.year_month)
-        ? `业务归属月 ${firstValue(payload.settlement_month, payload.business_month, payload.year_month)}`
+        ? `业务归属月：${firstValue(payload.settlement_month, payload.business_month, payload.year_month)}`
         : "",
       firstValue(payload.income_date, payload.received_date)
-        ? `收款日期 ${firstValue(payload.income_date, payload.received_date)}`
+        ? `收款日期：${firstValue(payload.income_date, payload.received_date)}`
         : "",
       originalAmountLabel(payload),
       actualIncomeAmountLabel(payload),
+      incomeExchangeRateLabel(payload),
       payload.note || "",
     ].filter(Boolean);
 
     return `
       <strong>${escapeHtml(title)}</strong>
       ${details.map((part) => `<span>${escapeHtml(part)}</span>`).join("")}
-      ${renderTechnicalInfo(request)}
     `;
   }
 
@@ -126,13 +126,11 @@ function renderReferenceSummary(request) {
       <strong>${escapeHtml(title)}</strong>
       ${details ? `<span>${escapeHtml(details)}</span>` : ""}
       ${meta.map((part) => `<span>${escapeHtml(part)}</span>`).join("")}
-      ${renderTechnicalInfo(request)}
     `;
   }
 
   return `
     <strong>${escapeHtml(referenceLabel(request.external_reference_type))}</strong>
-    ${renderTechnicalInfo(request)}
   `;
 }
 
@@ -315,13 +313,21 @@ function incomeCategoryLabel(category) {
 function originalAmountLabel(payload) {
   const amount = firstValue(payload.original_amount, payload.amount);
   const currency = firstValue(payload.original_currency, payload.currency);
-  return amount && currency ? `原始金额 ${money(amount)} ${currency}` : "";
+  return amount && currency ? `School 原始金额：${currency} ${money(amount)}` : "";
 }
 
 function actualIncomeAmountLabel(payload) {
   const amount = firstValue(payload.actual_received_amount, payload.payment_amount);
   const currency = firstValue(payload.actual_received_currency, payload.payment_currency, payload.currency);
-  return amount && currency ? `实际到账 ${money(amount)} ${currency}` : "";
+  return amount && currency ? `实际到账：${currency} ${money(amount)}` : "";
+}
+
+function incomeExchangeRateLabel(payload) {
+  const rate = firstValue(payload.payment_exchange_rate, payload.exchange_rate, payload.exchange_rate_cny_per_jpy);
+  const originalCurrency = firstValue(payload.original_currency, payload.currency);
+  const actualCurrency = firstValue(payload.actual_received_currency, payload.payment_currency);
+  if (!rate || !originalCurrency || !actualCurrency || originalCurrency === actualCurrency) return "";
+  return `参考汇率：1 ${originalCurrency} = ${rate} ${actualCurrency}`;
 }
 
 function legacySummaryTitle(request, payload) {
@@ -338,10 +344,25 @@ function legacySummaryTitle(request, payload) {
 }
 
 function renderTechnicalInfo(request) {
+  const parts = [
+    `引用：${referenceLabel(request.external_reference_type)} ${request.external_reference_id || "-"}`,
+    `技术信息：${request.external_reference_type || "-"} / ${request.request_type || "-"}`,
+    `event ${request.external_event_id || "-"}`,
+    request.created_transaction_id ? `transaction ${request.created_transaction_id}` : "",
+  ].filter(Boolean);
+  return parts.map((part) => `<span>${escapeHtml(part)}</span>`).join("");
+}
+
+function renderTechnicalDetails(request) {
+  const technicalInfo = renderTechnicalInfo(request);
+  if (!technicalInfo) return "";
   return `
-    <span>引用：${escapeHtml(referenceLabel(request.external_reference_type))} ${escapeHtml(request.external_reference_id || "-")}</span>
-    <span>技术信息：${escapeHtml(request.external_reference_type || "-")} / ${escapeHtml(request.request_type || "-")}</span>
-    <span>event ${escapeHtml(request.external_event_id || "-")}</span>
+    <details>
+      <summary>系统信息 / 调试信息</summary>
+      <div class="compact-stack">
+        ${technicalInfo}
+      </div>
+    </details>
   `;
 }
 
