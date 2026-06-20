@@ -12,6 +12,8 @@ import {
 import { emptyRow, escapeHtml, money } from "#utils";
 
 let renderPage = () => {};
+let teacherWageGroupContainer = null;
+let isTeacherWageGroupActionRunning = false;
 
 export function bindExternalRequestEvents(renderCallback) {
   renderPage = renderCallback;
@@ -27,7 +29,9 @@ export function renderExternalRequestsPage() {
   if (!els.externalRequestRows) return;
   els.externalRequestStatusFilter.value = appState.externalRequestStatusFilter;
   const requests = appState.externalRequests || [];
+  renderTeacherWageGroups(requests);
   els.externalRequestRows.innerHTML = requests.length ? requests.map(requestRow).join("") : emptyRow(9);
+  bindTeacherWageGroupActions();
   bindRequestActions();
 }
 
@@ -183,14 +187,9 @@ function bindRequestActions() {
       if (!request) return;
       const confirmed = window.confirm(`确认这笔 School 收支确认请求并生成 Cash ${transactionTypeLabel(request.transaction_type)}流水？`);
       if (!confirmed) return;
-      const result = await approveExternalTransactionRequest(request.id);
-      if (!result) return;
-      const schoolSync = await syncCashRequestResultToSchool(request.id, "approved");
-      if (!schoolSync?.ok) {
-        await refreshAfterRequestMutation(
-          `Cash 已处理，但回写 School 失败，请稍后重试：${schoolSync?.message || "未知错误"}`,
-          "error",
-        );
+      const result = await approveRequestAndSync(request);
+      if (!result.ok) {
+        await refreshAfterRequestMutation(result.message, "error");
         return;
       }
       await refreshAfterRequestMutation("已确认并回写私塾系统。");
@@ -203,19 +202,277 @@ function bindRequestActions() {
       if (!request) return;
       const reason = window.prompt("请输入拒绝理由。", "");
       if (reason === null) return;
-      const result = await rejectExternalTransactionRequest(request.id, reason.trim());
-      if (!result) return;
-      const schoolSync = await syncCashRequestResultToSchool(request.id, "rejected");
-      if (!schoolSync?.ok) {
-        await refreshAfterRequestMutation(
-          `Cash 已处理，但回写 School 失败，请稍后重试：${schoolSync?.message || "未知错误"}`,
-          "error",
-        );
+      const result = await rejectRequestAndSync(request, reason.trim());
+      if (!result.ok) {
+        await refreshAfterRequestMutation(result.message, "error");
         return;
       }
       await refreshAfterRequestMutation("已拒绝并回写私塾系统。");
     });
   });
+}
+
+function renderTeacherWageGroups(requests) {
+  const container = ensureTeacherWageGroupContainer();
+  if (!container) return;
+
+  const groups = teacherWageRequestGroups(requests);
+  container.innerHTML = `
+    <div class="teacher-wage-group-heading">
+      <div>
+        <h3>老师工资合计待处理</h3>
+        <p>请先按合计金额完成实际转账，再点击一键确认。系统会逐条确认本组 Cash 请求。</p>
+      </div>
+      <span class="badge unpaid">辅助分组</span>
+    </div>
+    ${
+      groups.length
+        ? groups.map(teacherWageGroupCard).join("")
+        : '<div class="empty-state teacher-wage-group-empty">暂无可合并显示的老师工资请求。</div>'
+    }
+  `;
+}
+
+function ensureTeacherWageGroupContainer() {
+  if (teacherWageGroupContainer?.isConnected) return teacherWageGroupContainer;
+  const panel = els.externalRequestRows?.closest(".panel");
+  if (!panel) return null;
+  teacherWageGroupContainer = panel.querySelector(".teacher-wage-group-area");
+  if (!teacherWageGroupContainer) {
+    teacherWageGroupContainer = document.createElement("section");
+    teacherWageGroupContainer.className = "teacher-wage-group-area";
+    const tableWrap = panel.querySelector(".table-wrap");
+    panel.insertBefore(teacherWageGroupContainer, tableWrap);
+  }
+  return teacherWageGroupContainer;
+}
+
+function teacherWageRequestGroups(requests) {
+  const groupsByKey = new Map();
+  for (const request of requests) {
+    const item = teacherWageGroupItem(request);
+    if (!item) continue;
+    const group = groupsByKey.get(item.groupKey) || {
+      key: item.groupKey,
+      teacherName: item.teacherName,
+      teacherId: item.teacherId,
+      wageMonth: item.wageMonth,
+      currency: item.currency,
+      amount: 0,
+      requests: [],
+    };
+    group.amount += item.amount;
+    group.requests.push(item);
+    groupsByKey.set(item.groupKey, group);
+  }
+
+  return Array.from(groupsByKey.values()).sort((left, right) => (
+    left.wageMonth.localeCompare(right.wageMonth) ||
+    left.teacherName.localeCompare(right.teacherName, "zh-Hans") ||
+    left.currency.localeCompare(right.currency)
+  ));
+}
+
+function teacherWageGroupItem(request) {
+  if (!isPendingTeacherWageExpenseRequest(request)) return null;
+  const payload = request.payload_snapshot || {};
+  const teacherName = firstValue(payload.teacher_name, payload.teacher_display_name, payload.payee_name_snapshot);
+  const teacherId = firstValue(payload.teacher_id);
+  const wageMonth = firstValue(payload.wage_month, payload.settlement_month, payload.year_month, payload.business_month);
+  const currency = String(firstValue(request.currency, payload.actual_payment_currency, payload.payment_currency, payload.original_currency)).toUpperCase();
+  const amount = Number(firstValue(request.amount, payload.actual_payment_amount, payload.payment_amount, payload.original_amount));
+
+  if (!teacherName || !wageMonth || !currency || !Number.isFinite(amount)) {
+    return null;
+  }
+
+  const teacherKey = teacherId || teacherName;
+  return {
+    request,
+    groupKey: `${teacherKey}::${wageMonth}::${currency}`,
+    teacherName,
+    teacherId,
+    wageMonth,
+    currency,
+    amount,
+    businessName: firstValue(payload.business_name, payload.business_entity_name, payload.business_entity_label),
+    expenseId: firstValue(payload.expense_record_id, request.external_reference_id),
+    note: firstValue(payload.note, request.note, payload.description, request.description),
+  };
+}
+
+function isPendingTeacherWageExpenseRequest(request) {
+  const payload = request.payload_snapshot || {};
+  return request.status === "pending" &&
+    request.external_source === "aozora_school" &&
+    isExpenseRequest(request) &&
+    (
+      payload.expense_category === "teacher_wage" ||
+      payload.source_type === "teacher_wage" ||
+      payload.expense_category_label === "老师工资"
+    );
+}
+
+function teacherWageGroupCard(group) {
+  return `
+    <article class="teacher-wage-group-card">
+      <div class="teacher-wage-group-summary">
+        <div class="compact-stack">
+          <strong>${escapeHtml(group.teacherName)} / ${escapeHtml(group.wageMonth)} / ${escapeHtml(group.currency)}</strong>
+          <span>合计：${escapeHtml(group.currency)} ${money(group.amount)} · 明细：${group.requests.length} 条 · 当前状态：待确认</span>
+          ${renderBusinessSummary(group)}
+        </div>
+        <div class="button-row teacher-wage-group-actions">
+          <button class="primary-button compact-button" data-approve-teacher-wage-group="${escapeHtml(group.key)}" type="button">一键确认</button>
+          <button class="danger-button compact-button" data-reject-teacher-wage-group="${escapeHtml(group.key)}" type="button">一键拒绝</button>
+          <details class="teacher-wage-group-details">
+            <summary class="ghost-button compact-button">展开 / 收起明细</summary>
+            <div class="teacher-wage-group-detail-list">
+              ${group.requests.map(teacherWageGroupDetail).join("")}
+            </div>
+          </details>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderBusinessSummary(group) {
+  const parts = group.requests.map((item) => (
+    `${item.businessName || "业务归属未提供"}：${item.currency} ${money(item.amount)}`
+  ));
+  return `<span>${escapeHtml(parts.join(" / "))}</span>`;
+}
+
+function teacherWageGroupDetail(item) {
+  return `
+    <div class="teacher-wage-group-detail">
+      <strong>${escapeHtml(item.businessName || "业务归属未提供")}：${escapeHtml(item.currency)} ${money(item.amount)}</strong>
+      <span>School expense：${escapeHtml(item.expenseId || "-")}</span>
+      <span>Cash request：${escapeHtml(item.request.id || "-")} / ${escapeHtml(item.request.status || "-")}</span>
+      ${item.note ? `<span>${escapeHtml(item.note)}</span>` : ""}
+    </div>
+  `;
+}
+
+function bindTeacherWageGroupActions() {
+  document.querySelectorAll("[data-approve-teacher-wage-group]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (isTeacherWageGroupActionRunning) return;
+      const group = findTeacherWageGroup(button.dataset.approveTeacherWageGroup);
+      if (!group) return;
+      const confirmed = window.confirm(
+        `确认将 ${group.teacherName} ${group.wageMonth} 老师工资 ${group.currency} ${money(group.amount)} 的 ${group.requests.length} 条 Cash 请求全部标记为已确认？\n` +
+        "请仅在已经完成实际转账后继续。系统会逐条确认这些 Cash 请求。",
+      );
+      if (!confirmed) return;
+      await runTeacherWageGroupAction(group, "approved");
+    });
+  });
+
+  document.querySelectorAll("[data-reject-teacher-wage-group]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (isTeacherWageGroupActionRunning) return;
+      const group = findTeacherWageGroup(button.dataset.rejectTeacherWageGroup);
+      if (!group) return;
+      const reason = window.prompt("请输入拒绝理由，将用于本组所有 Cash 请求。", "");
+      if (reason === null) return;
+      const confirmed = window.confirm(
+        `确认将 ${group.teacherName} ${group.wageMonth} 老师工资 ${group.currency} ${money(group.amount)} 的 ${group.requests.length} 条 Cash 请求全部拒绝？\n` +
+        "系统会逐条拒绝这些 Cash 请求，并逐条回写 School。",
+      );
+      if (!confirmed) return;
+      await runTeacherWageGroupAction(group, "rejected", reason.trim());
+    });
+  });
+}
+
+function findTeacherWageGroup(key) {
+  return teacherWageRequestGroups(appState.externalRequests || []).find((group) => group.key === key) || null;
+}
+
+async function runTeacherWageGroupAction(group, action, reason = "") {
+  isTeacherWageGroupActionRunning = true;
+  setTeacherWageGroupButtonsDisabled(true);
+  const failures = [];
+  let successCount = 0;
+
+  try {
+    for (const item of group.requests) {
+      const result = action === "approved"
+        ? await approveRequestAndSync(item.request)
+        : await rejectRequestAndSync(item.request, reason);
+      if (result.ok) {
+        successCount += 1;
+      } else {
+        failures.push({
+          requestId: item.request.id,
+          expenseId: item.expenseId,
+          message: result.message,
+        });
+      }
+    }
+  } catch (error) {
+    const message = error?.message || "未知错误";
+    for (const item of group.requests.slice(successCount + failures.length)) {
+      failures.push({
+        requestId: item.request.id,
+        expenseId: item.expenseId,
+        message,
+      });
+    }
+  } finally {
+    isTeacherWageGroupActionRunning = false;
+    setTeacherWageGroupButtonsDisabled(false);
+  }
+
+  await refreshAfterRequestMutation(groupActionMessage(successCount, failures), failures.length ? "error" : "success");
+}
+
+function setTeacherWageGroupButtonsDisabled(disabled) {
+  document.querySelectorAll("[data-approve-teacher-wage-group], [data-reject-teacher-wage-group]").forEach((button) => {
+    button.disabled = disabled;
+  });
+}
+
+function groupActionMessage(successCount, failures) {
+  if (!failures.length) {
+    return `老师工资分组处理完成：成功 ${successCount} 条，失败 0 条。`;
+  }
+  const failureText = failures
+    .map((failure) => `${shortId(failure.requestId || failure.expenseId)}：${failure.message}`)
+    .join("；");
+  return `老师工资分组处理完成：成功 ${successCount} 条，失败 ${failures.length} 条。失败：${failureText}`;
+}
+
+async function approveRequestAndSync(request) {
+  const result = await approveExternalTransactionRequest(request.id);
+  if (!result) {
+    return { ok: false, message: "Cash 确认 RPC 未成功。" };
+  }
+  const schoolSync = await syncCashRequestResultToSchool(request.id, "approved");
+  if (!schoolSync?.ok) {
+    return {
+      ok: false,
+      message: `Cash 已处理，但回写 School 失败，请稍后重试：${schoolSync?.message || "未知错误"}`,
+    };
+  }
+  return { ok: true };
+}
+
+async function rejectRequestAndSync(request, reason) {
+  const result = await rejectExternalTransactionRequest(request.id, reason);
+  if (!result) {
+    return { ok: false, message: "Cash 拒绝 RPC 未成功。" };
+  }
+  const schoolSync = await syncCashRequestResultToSchool(request.id, "rejected");
+  if (!schoolSync?.ok) {
+    return {
+      ok: false,
+      message: `Cash 已处理，但回写 School 失败，请稍后重试：${schoolSync?.message || "未知错误"}`,
+    };
+  }
+  return { ok: true };
 }
 
 async function refreshAfterRequestMutation(message, type = "success") {
@@ -297,6 +554,11 @@ function isLegacyRequest(request) {
 
 function firstValue(...values) {
   return values.find((value) => value !== null && value !== undefined && value !== "") || "";
+}
+
+function shortId(value) {
+  const text = String(value || "");
+  return text.length > 8 ? text.slice(0, 8) : text || "-";
 }
 
 function incomeCategoryLabel(category) {

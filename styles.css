@@ -644,6 +644,97 @@ tbody tr:hover td {
   font-size: 12px;
 }
 
+.teacher-wage-group-area {
+  display: grid;
+  gap: 12px;
+  padding: 0 20px 16px;
+}
+
+.teacher-wage-group-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  padding-top: 2px;
+}
+
+.teacher-wage-group-heading h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.teacher-wage-group-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.teacher-wage-group-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.teacher-wage-group-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  padding: 14px;
+}
+
+.teacher-wage-group-actions {
+  justify-content: flex-end;
+}
+
+.teacher-wage-group-details {
+  position: relative;
+}
+
+.teacher-wage-group-details summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
+.teacher-wage-group-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.teacher-wage-group-detail-list {
+  position: absolute;
+  right: 0;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+  width: min(520px, calc(100vw - 48px));
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.teacher-wage-group-detail {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.teacher-wage-group-detail span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.teacher-wage-group-empty {
+  padding: 16px;
+}
+
 .settings-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -883,6 +974,37 @@ tbody tr:hover td {
   .settings-item {
     grid-template-columns: 1fr;
     align-items: start;
+  }
+
+  .teacher-wage-group-area {
+    padding: 0 14px 14px;
+  }
+
+  .teacher-wage-group-heading,
+  .teacher-wage-group-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-wage-group-heading {
+    display: grid;
+  }
+
+  .teacher-wage-group-actions {
+    justify-content: flex-start;
+  }
+
+  .teacher-wage-group-details {
+    width: 100%;
+  }
+
+  .teacher-wage-group-details summary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .teacher-wage-group-detail-list {
+    position: static;
+    width: 100%;
   }
 
   .settings-item > strong {
