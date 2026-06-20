@@ -300,7 +300,11 @@ async function saveFixedItemPatch(id, patch) {
 
 async function saveFixedItemStatus(id, status) {
   const result = await updateCnyFixedItemStatus(id, status);
-  if (!result) return;
+  if (!result) {
+    await loadAppData();
+    render();
+    return;
+  }
   await refreshAfterMutation(result.message || "人民币固定项状态已更新。", "success");
 }
 

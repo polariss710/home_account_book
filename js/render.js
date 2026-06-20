@@ -242,7 +242,11 @@ async function saveItemPatch(id, patch) {
 
 async function saveItemStatus(id, status) {
   const result = await updateMonthItemStatus(id, status);
-  if (!result) return;
+  if (!result) {
+    await loadFixedMonthPage();
+    render();
+    return;
+  }
   await loadFixedMonthPage();
   setActionMessage(result.message || "固定项状态已更新。", "success");
   render();
