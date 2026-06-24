@@ -500,6 +500,22 @@ table {
   font-size: 14px;
 }
 
+.annual-detail-table {
+  table-layout: fixed;
+  min-width: 1180px;
+}
+
+.annual-detail-table th,
+.annual-detail-table td {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.annual-detail-table th:first-child,
+.annual-detail-table td:first-child {
+  width: 86px;
+}
+
 th,
 td {
   border-bottom: 1px solid var(--line);
