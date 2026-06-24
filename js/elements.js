@@ -56,6 +56,8 @@ const elementIds = [
   "jpyTransferAccountSelect",
   "jpyFxCnyAccountSelect",
   "jpyFxCnyAmountInput",
+  "jpyFilterForm",
+  "jpyFilterAccountSelect",
   "jpyTransactionRows",
   "cnyBalanceRows",
   "cnyFixedTemplateForm",

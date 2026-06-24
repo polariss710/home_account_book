@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232d6a5f'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='34' fill='white' font-family='Arial, sans-serif'%3E%E5%AE%B6%3C/text%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=20260617-status-rollback" />
+    <link rel="stylesheet" href="styles.css?v=20260625-jpy-filter-1" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
@@ -401,6 +401,37 @@
             <div class="panel-heading">
               <h2>本月零散流水</h2>
             </div>
+            <form id="jpyFilterForm" class="filter-form">
+              <label>
+                开始日期
+                <input name="date_from" type="date" />
+              </label>
+              <label>
+                结束日期
+                <input name="date_to" type="date" />
+              </label>
+              <label>
+                类型
+                <select name="transaction_type">
+                  <option value="">全部类型</option>
+                  <option value="expense">零散支出</option>
+                  <option value="income">零散收入</option>
+                  <option value="transfer">账户间转账</option>
+                  <option value="fx_in">购汇入金</option>
+                  <option value="fx_out">换汇转出</option>
+                  <option value="fixed_in">固定盈余转入</option>
+                  <option value="fixed_out">固定赤字补充</option>
+                </select>
+              </label>
+              <label>
+                账户
+                <select id="jpyFilterAccountSelect" name="account_id"></select>
+              </label>
+              <div class="button-row form-submit">
+                <button class="ghost-button" type="submit">筛选</button>
+                <button class="ghost-button" name="reset_filter" type="button">清除</button>
+              </div>
+            </form>
             <div class="table-wrap">
               <table>
                 <thead>
@@ -747,20 +778,20 @@
     <script type="importmap">
       {
         "imports": {
-          "#annual": "./js/annual.js?v=20260617-status-rollback",
-          "#app": "./app.js?v=20260617-status-rollback",
-          "#cny": "./js/cny.js?v=20260617-status-rollback",
-          "#config": "./js/config.js?v=20260617-status-rollback",
-          "#elements": "./js/elements.js?v=20260617-status-rollback",
-          "#events": "./js/events.js?v=20260617-status-rollback",
-          "#external-requests": "./js/external-requests.js?v=20260617-status-rollback",
-          "#fixed-transfer": "./js/fixed-transfer.js?v=20260617-status-rollback",
-          "#jpy": "./js/jpy.js?v=20260617-status-rollback",
-          "#render": "./js/render.js?v=20260617-status-rollback",
-          "#state": "./js/state.js?v=20260617-status-rollback",
-          "#supabase": "./js/supabase.js?v=20260617-status-rollback",
-          "#ui": "./js/ui.js?v=20260617-status-rollback",
-          "#utils": "./js/utils.js?v=20260617-status-rollback"
+          "#annual": "./js/annual.js?v=20260625-jpy-filter-1",
+          "#app": "./app.js?v=20260625-jpy-filter-1",
+          "#cny": "./js/cny.js?v=20260625-jpy-filter-1",
+          "#config": "./js/config.js?v=20260625-jpy-filter-1",
+          "#elements": "./js/elements.js?v=20260625-jpy-filter-1",
+          "#events": "./js/events.js?v=20260625-jpy-filter-1",
+          "#external-requests": "./js/external-requests.js?v=20260625-jpy-filter-1",
+          "#fixed-transfer": "./js/fixed-transfer.js?v=20260625-jpy-filter-1",
+          "#jpy": "./js/jpy.js?v=20260625-jpy-filter-1",
+          "#render": "./js/render.js?v=20260625-jpy-filter-1",
+          "#state": "./js/state.js?v=20260625-jpy-filter-1",
+          "#supabase": "./js/supabase.js?v=20260625-jpy-filter-1",
+          "#ui": "./js/ui.js?v=20260625-jpy-filter-1",
+          "#utils": "./js/utils.js?v=20260625-jpy-filter-1"
         }
       }
     </script>

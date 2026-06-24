@@ -16,6 +16,12 @@ export const appState = {
   editingAccountId: null,
   editingCnyAccountId: null,
   editingCnyTemplateId: null,
+  jpyFilters: {
+    dateFrom: "",
+    dateTo: "",
+    transactionType: "",
+    accountId: "",
+  },
   cnyFilters: {
     dateFrom: "",
     dateTo: "",

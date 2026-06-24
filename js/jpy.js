@@ -16,6 +16,8 @@ import { emptyRow, escapeHtml, formData, money, toNumber } from "#utils";
 export function bindJpyEvents() {
   els.jpyTransactionForm.elements.transaction_type.addEventListener("change", updateTransferAccountControl);
   els.jpyTransactionCancelBtn.addEventListener("click", resetJpyTransactionForm);
+  els.jpyFilterForm.addEventListener("submit", applyFilters);
+  els.jpyFilterForm.elements.reset_filter.addEventListener("click", resetFilters);
   els.jpyTransactionForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!isCloudReady()) {
@@ -70,6 +72,7 @@ export function bindJpyEvents() {
 export function renderJpyPage() {
   renderJpyBalances();
   renderJpyAccountOptions();
+  renderJpyFilterControls();
   renderJpyTransactions();
   setJpyTransactionDate();
   updateTransferAccountControl();
@@ -105,7 +108,16 @@ function renderJpyAccountOptions() {
   els.jpyAccountSelect.innerHTML = options || `<option value="">请先新增账户</option>`;
   els.jpyTransferAccountSelect.innerHTML = `<option value="">不使用</option>${options}`;
   els.jpyFxCnyAccountSelect.innerHTML = cnyOptions || `<option value="">请先新增人民币账户</option>`;
+  els.jpyFilterAccountSelect.innerHTML = `<option value="">全部账户</option>${options}`;
   updateTransferAccountControl();
+}
+
+function renderJpyFilterControls() {
+  const filters = appState.jpyFilters;
+  els.jpyFilterForm.elements.date_from.value = filters.dateFrom || "";
+  els.jpyFilterForm.elements.date_to.value = filters.dateTo || "";
+  els.jpyFilterForm.elements.transaction_type.value = filters.transactionType || "";
+  els.jpyFilterAccountSelect.value = filters.accountId || "";
 }
 
 function updateTransferAccountControl() {
@@ -129,9 +141,44 @@ function updateTransferAccountControl() {
 }
 
 function renderJpyTransactions() {
-  const transactions = appState.jpyPage?.transactions || [];
+  const transactions = filteredTransactions();
   els.jpyTransactionRows.innerHTML = transactions.length ? transactions.map(transactionRow).join("") : emptyRow(8);
   bindTransactionControls();
+}
+
+function filteredTransactions() {
+  const filters = appState.jpyFilters;
+  return (appState.jpyPage?.transactions || []).filter((transaction) => {
+    if (filters.dateFrom && transaction.transacted_at < filters.dateFrom) return false;
+    if (filters.dateTo && transaction.transacted_at > filters.dateTo) return false;
+    if (filters.transactionType && transaction.transaction_type !== filters.transactionType) return false;
+    if (filters.accountId && transaction.account_id !== filters.accountId && transaction.transfer_account_id !== filters.accountId) return false;
+    return true;
+  });
+}
+
+function applyFilters(event) {
+  event.preventDefault();
+  const data = formData(event.currentTarget);
+  appState.jpyFilters = {
+    dateFrom: data.date_from,
+    dateTo: data.date_to,
+    transactionType: data.transaction_type,
+    accountId: data.account_id,
+  };
+  renderJpyTransactions();
+}
+
+function resetFilters() {
+  appState.jpyFilters = {
+    dateFrom: "",
+    dateTo: "",
+    transactionType: "",
+    accountId: "",
+  };
+  els.jpyFilterForm.reset();
+  renderJpyFilterControls();
+  renderJpyTransactions();
 }
 
 function transactionRow(item) {
