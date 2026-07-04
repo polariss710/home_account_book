@@ -3,8 +3,8 @@ import { appState, findCnyAccount, findCnyTemplate } from "#state";
 import {
   createCnyTemplate,
   createCnyToJpyFx,
+  deactivateAccount,
   deactivateTemplate,
-  deleteAccount,
   deleteCnyFixedItem,
   deleteCnyToJpyFx,
   deleteCnyTransaction,
@@ -564,7 +564,7 @@ function renderAccounts() {
               <div class="button-row">
                 <button class="ghost-button compact-button" data-edit-cny-account="${account.id}" type="button">编辑</button>
                 <button class="ghost-button compact-button" data-copy-cny-account="${account.id}" type="button">复制</button>
-                <button class="danger-button compact-button" data-delete-cny-account="${account.id}" type="button">删除</button>
+                <button class="danger-button compact-button" data-deactivate-cny-account="${account.id}" type="button">停用</button>
               </div>
             </div>
           `,
@@ -586,15 +586,15 @@ function renderAccounts() {
       setAccountForm({ ...account, name: `${account.name} 复制` }, "copy");
     });
   });
-  document.querySelectorAll("[data-delete-cny-account]").forEach((button) => {
+  document.querySelectorAll("[data-deactivate-cny-account]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const account = findCnyAccount(button.dataset.deleteCnyAccount);
+      const account = findCnyAccount(button.dataset.deactivateCnyAccount);
       if (!account) return;
-      const confirmed = window.confirm(`删除「${account.name}」？该账户关联的人民币流水也会被删除，余额会重新计算。`);
+      const confirmed = window.confirm(`停用「${account.name}」？历史人民币流水会保留，但新流水不再使用这个账户。`);
       if (!confirmed) return;
-      const ok = await deleteAccount(account.id);
+      const ok = await deactivateAccount(account.id);
       if (!ok) return;
-      await refreshAfterMutation("人民币账户已删除。", "success");
+      await refreshAfterMutation("人民币账户已停用，历史流水已保留。", "success");
     });
   });
 }

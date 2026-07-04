@@ -646,8 +646,8 @@ export async function deleteCnyFixedItem(id) {
   return handleRpcResult(data, "人民币固定项删除失败。");
 }
 
-export async function deleteAccount(id) {
-  return deleteById("home_accounts", id);
+export async function deactivateAccount(id) {
+  return updateById("home_accounts", id, { is_active: false });
 }
 
 async function upsert(table, record) {
@@ -675,16 +675,6 @@ async function updateById(table, id, patch) {
   }
   if (!data) {
     setActionMessage("Supabase 更新失败：没有找到可更新的数据。", "error");
-    return false;
-  }
-  return true;
-}
-
-async function deleteById(table, id) {
-  if (!isCloudReady()) return false;
-  const { error } = await appState.supabaseClient.from(table).delete().eq("id", id).eq("user_id", appState.currentUser.id);
-  if (error) {
-    setActionMessage(`Supabase 删除失败：${error.message}`, "error");
     return false;
   }
   return true;

@@ -9,8 +9,8 @@ import { renderShell, setActionMessage } from "#ui";
 import { emptyRow, escapeHtml, money } from "#utils";
 import {
   deactivatePaymentChannel,
+  deactivateAccount,
   deactivateTemplate,
-  deleteAccount,
   deleteMonthItem,
   loadAppData,
   loadFixedMonthPage,
@@ -484,7 +484,7 @@ function renderAccounts() {
               <div class="button-row">
                 <button class="ghost-button compact-button" data-edit-account="${item.id}" type="button">编辑</button>
                 <button class="ghost-button compact-button" data-copy-account="${item.id}" type="button">复制</button>
-                <button class="danger-button compact-button" data-delete-account="${item.id}" type="button">删除</button>
+                <button class="danger-button compact-button" data-deactivate-account="${item.id}" type="button">停用</button>
               </div>
             </div>
           `,
@@ -508,16 +508,16 @@ function renderAccounts() {
     });
   });
 
-  document.querySelectorAll("[data-delete-account]").forEach((button) => {
+  document.querySelectorAll("[data-deactivate-account]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const account = findJpyAccount(button.dataset.deleteAccount);
+      const account = findJpyAccount(button.dataset.deactivateAccount);
       if (!account) return;
-      const confirmed = window.confirm(`删除「${account.name}」？该账户关联的日元流水也会被删除，余额会重新计算。`);
+      const confirmed = window.confirm(`停用「${account.name}」？历史日元流水会保留，但新流水不再使用这个账户。`);
       if (!confirmed) return;
-      const ok = await deleteAccount(account.id);
+      const ok = await deactivateAccount(account.id);
       if (!ok) return;
       await loadAppData();
-      setActionMessage("日元账户已删除。", "success");
+      setActionMessage("日元账户已停用，历史流水已保留。", "success");
       render();
     });
   });
