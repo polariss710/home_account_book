@@ -553,17 +553,24 @@ export async function syncCashRequestResultToSchool(id, action) {
 
     const data = await response.json().catch(() => null);
     if (!response.ok || data?.ok === false) {
+      const responseMessage = Array.isArray(data?.message)
+        ? data.message.join("；")
+        : data?.message;
       return {
         ok: false,
-        message: data?.details || data?.message || `School 回写失败：HTTP ${response.status}`,
+        message: data?.details || responseMessage || `School 回写失败：HTTP ${response.status}`,
       };
     }
 
-    return data || { ok: true };
+    return data && typeof data === "object"
+      ? { ...data, ok: true }
+      : { ok: true };
   } catch (error) {
     return {
       ok: false,
-      message: error.message || "School 回写请求失败。",
+      message: error instanceof Error && error.message
+        ? error.message
+        : "School 回写请求失败。",
     };
   }
 }

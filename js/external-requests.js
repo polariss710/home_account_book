@@ -168,9 +168,16 @@ function requestActions(request) {
   }
 
   if (request.status !== "pending") {
-    return request.created_transaction_id
+    const resultBadge = request.created_transaction_id
       ? `<span class="badge settled">已生成流水</span>`
-      : `<span class="badge unpaid">无需操作</span>`;
+      : `<span class="badge unpaid">无需 Cash 流水</span>`;
+    if (!canRetrySchoolSync(request)) return resultBadge;
+    return `
+      <div class="button-row">
+        ${resultBadge}
+        <button class="ghost-button compact-button" data-resync-school-request="${request.id}" type="button">重新回写 School</button>
+      </div>
+    `;
   }
   return `
     <div class="button-row">
@@ -208,6 +215,35 @@ function bindRequestActions() {
         return;
       }
       await refreshAfterRequestMutation("已拒绝并回写私塾系统。");
+    });
+  });
+
+  document.querySelectorAll("[data-resync-school-request]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const request = findRequest(button.dataset.resyncSchoolRequest);
+      const action = schoolSyncAction(request);
+      if (!request || !action) return;
+      const confirmed = window.confirm(
+        `确认重新向 School 回写这笔 Cash ${request.status === "approved" ? "已确认" : "已拒绝"}结果？\n` +
+        "本操作只重放 School 回调，不会再次生成、删除或修改 Cash 流水。",
+      );
+      if (!confirmed) return;
+
+      button.disabled = true;
+      try {
+        const result = await syncCashRequestResultToSchool(request.id, action);
+        if (!result?.ok) {
+          await refreshAfterRequestMutation(
+            `School 重新回写失败：${result?.message || "未返回具体错误，请稍后重试。"}`,
+            "error",
+          );
+          return;
+        }
+        const suffix = result.idempotent ? "School 已存在相同结果，幂等校验通过。" : "School 状态已更新。";
+        await refreshAfterRequestMutation(`School 重新回写成功：${suffix}`);
+      } finally {
+        if (button.isConnected) button.disabled = false;
+      }
     });
   });
 }
@@ -550,6 +586,17 @@ function isLegacyRequest(request) {
       "teacher_wage_payment_reverse",
       "part_time_work_income_received",
     ].includes(request.request_type);
+}
+
+function canRetrySchoolSync(request) {
+  return request.external_source === "aozora_school" && Boolean(schoolSyncAction(request));
+}
+
+function schoolSyncAction(request) {
+  if (!request || isLegacyRequest(request)) return null;
+  if (request.status === "approved") return "approved";
+  if (request.status === "rejected") return "rejected";
+  return null;
 }
 
 function firstValue(...values) {
