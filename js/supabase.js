@@ -540,11 +540,14 @@ export async function syncCashRequestResultToSchool(id, action) {
     authorization: `Bearer ${sessionData.session.access_token}`,
     "content-type": "application/json",
   };
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 60_000);
 
   try {
     const response = await fetch(functionUrl, {
       method: "POST",
       headers,
+      signal: controller.signal,
       body: JSON.stringify({
         cash_request_id: id,
         action,
@@ -568,10 +571,14 @@ export async function syncCashRequestResultToSchool(id, action) {
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error && error.message
-        ? error.message
+      message: error instanceof Error && error.name === "AbortError"
+        ? "School 回写等待超过 60 秒，请确认 School API 状态后重试。"
+        : error instanceof Error && error.message
+          ? error.message
         : "School 回写请求失败。",
     };
+  } finally {
+    window.clearTimeout(timeoutId);
   }
 }
 
