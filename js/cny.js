@@ -454,15 +454,20 @@ function transactionRow(item) {
   const fixedLocked = Boolean(item.linked_fixed_month_item_id);
   const fxLinked = Boolean(item.linked_jpy_transaction_id);
   const schoolSynced = Boolean(item.created_by_external);
+  const teacherWageBatch = (appState.externalRequestBatches || []).find(
+    (batch) => batch.created_transaction_id === item.id,
+  );
   const sourceFx = fxLinked && item.transaction_type === "fx_out";
   const generatedFx = fxLinked && item.transaction_type === "fx_in";
-  const locked = fixedLocked || fxLinked;
+  const locked = fixedLocked || fxLinked || Boolean(teacherWageBatch);
   const targetAccountName = fxLinked ? item.linked_jpy_account_name : item.transfer_account_name;
   const sourceBadge = schoolSynced ? `<span class="badge settled" title="School 收支确认请求同步生成">School同步生成</span>` : "";
   const schoolFxSync = sourceFx
     ? appState.schoolFxSyncs.find((sync) => sync.cny_transaction_id === item.id)
     : null;
-  const controls = fixedLocked
+  const controls = teacherWageBatch
+    ? `<span class="badge settled">老师工资聚合 · 只读</span>`
+    : fixedLocked
     ? `<span class="badge settled">固定项生成</span>`
     : generatedFx
       ? `<span class="badge settled">换汇生成</span>`

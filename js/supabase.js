@@ -114,6 +114,7 @@ export async function loadAppData() {
     loadCnyAccountPage(),
     loadCnyFixedPage(),
     loadSchoolFxSyncs(),
+    loadExternalTransactionBatches(),
   ]);
 }
 
@@ -129,6 +130,38 @@ export async function loadSchoolFxSyncs() {
     return;
   }
   appState.schoolFxSyncs = Array.isArray(data) ? data : [];
+}
+
+export async function loadExternalTransactionBatches() {
+  if (!isCloudReady()) return;
+  const { data: batches, error: batchError } = await appState.supabaseClient
+    .from("home_external_transaction_batches")
+    .select("id,batch_type,currency,account_id,transacted_at,total_amount,status,created_transaction_id,teacher_id,teacher_name,year_month,request_count,school_payment_batch_id,school_synced_at,approved_at")
+    .order("approved_at", { ascending: false });
+  if (batchError) {
+    setActionMessage(`老师工资聚合批次读取失败：${batchError.message}`, "error");
+    appState.externalRequestBatches = [];
+    return;
+  }
+  const batchIds = (batches || []).map((batch) => batch.id);
+  if (!batchIds.length) {
+    appState.externalRequestBatches = [];
+    return;
+  }
+  const { data: items, error: itemError } = await appState.supabaseClient
+    .from("home_external_transaction_batch_items")
+    .select("id,batch_id,request_id,external_reference_id,amount,item_order")
+    .in("batch_id", batchIds)
+    .order("item_order", { ascending: true });
+  if (itemError) {
+    setActionMessage(`老师工资聚合明细读取失败：${itemError.message}`, "error");
+    appState.externalRequestBatches = [];
+    return;
+  }
+  appState.externalRequestBatches = (batches || []).map((batch) => ({
+    ...batch,
+    items: (items || []).filter((item) => item.batch_id === batch.id),
+  }));
 }
 
 export async function loadExternalTransactionRequests(status = appState.externalRequestStatusFilter) {
@@ -526,6 +559,18 @@ export async function approveExternalTransactionRequest(id) {
   return handleRpcResult(data, "收支确认请求确认失败。");
 }
 
+export async function approveTeacherWageRequestBatch(requestIds) {
+  const { data, error } = await appState.supabaseClient.rpc(
+    "home_approve_teacher_wage_request_batch",
+    { p_request_ids: requestIds },
+  );
+  if (error) {
+    setActionMessage(`老师工资聚合确认失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "老师工资聚合确认失败。");
+}
+
 export async function rejectExternalTransactionRequest(id, reason) {
   const { data, error } = await appState.supabaseClient.rpc("home_reject_external_transaction_request", {
     p_request_id: id,
@@ -600,6 +645,42 @@ export async function syncCashRequestResultToSchool(id, action) {
   } finally {
     window.clearTimeout(timeoutId);
   }
+}
+
+export async function syncTeacherWageBatchResultToSchool(batchId) {
+  const config = getConfig();
+  const schoolResult = await requestSchoolApi(
+    config.schoolCashRequestBatchResultFunctionUrl,
+    {
+      method: "POST",
+      body: JSON.stringify({ cash_batch_id: batchId }),
+    },
+  );
+  if (!schoolResult?.ok) return schoolResult;
+
+  const schoolPaymentBatchId = schoolResult.batch?.id;
+  if (!schoolPaymentBatchId) {
+    return {
+      ok: false,
+      schoolSynced: true,
+      message: "School 已处理聚合工资，但响应缺少 School 批次身份，请重试。",
+    };
+  }
+  const { data, error } = await appState.supabaseClient.rpc(
+    "home_mark_teacher_wage_batch_school_synced",
+    {
+      p_batch_id: batchId,
+      p_school_payment_batch_id: schoolPaymentBatchId,
+    },
+  );
+  if (error || data?.ok === false) {
+    return {
+      ok: false,
+      schoolSynced: true,
+      message: `School 已处理聚合工资，但 Cash 同步标记失败：${error?.message || data?.message || "未知错误"}。请重试。`,
+    };
+  }
+  return { ...schoolResult, ok: true, cashSync: data };
 }
 
 export async function getSchoolFxInboundOptions(cnyTransactionId) {

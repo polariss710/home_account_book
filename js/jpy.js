@@ -185,9 +185,12 @@ function transactionRow(item) {
   const fixedTransfer = isFixedTransfer(item);
   const fxLinked = Boolean(item.linked_cny_transaction_id);
   const schoolSynced = Boolean(item.created_by_external);
+  const teacherWageBatch = (appState.externalRequestBatches || []).find(
+    (batch) => batch.created_transaction_id === item.id,
+  );
   const sourceFx = fxLinked && item.transaction_type === "fx_out";
   const generatedFx = fxLinked && item.transaction_type === "fx_in";
-  const locked = fixedTransfer || generatedFx || sourceFx;
+  const locked = fixedTransfer || generatedFx || sourceFx || Boolean(teacherWageBatch);
   const targetAccountName = sourceFx || generatedFx ? item.linked_cny_account_name : item.transfer_account_name;
   const amountCell = locked
     ? money(item.amount || 0)
@@ -198,7 +201,9 @@ function transactionRow(item) {
   const noteCell = locked
     ? escapeHtml(item.note || "")
     : `<input class="table-input" data-jpy-note="${item.id}" value="${escapeHtml(item.note || "")}" />`;
-  const controls = generatedFx
+  const controls = teacherWageBatch
+    ? `<span class="badge settled">老师工资聚合 · 只读</span>`
+    : generatedFx
     ? `<span class="badge settled">购汇生成</span>`
     : `
       <div class="button-row">

@@ -9,6 +9,7 @@ export const appState = {
   cnyPage: null,
   cnyFixedPage: null,
   externalRequests: [],
+  externalRequestBatches: [],
   schoolFxSyncs: [],
   externalRequestStatusFilter: "pending",
   yearSummary: null,

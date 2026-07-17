@@ -2,12 +2,14 @@ import { els } from "#elements";
 import { appState } from "#state";
 import { setActionMessage } from "#ui";
 import {
+  approveTeacherWageRequestBatch,
   approveExternalTransactionRequest,
   isCloudReady,
   loadAppData,
   loadExternalTransactionRequests,
   rejectExternalTransactionRequest,
   syncCashRequestResultToSchool,
+  syncTeacherWageBatchResultToSchool,
 } from "#supabase";
 import { emptyRow, escapeHtml, money } from "#utils";
 
@@ -168,6 +170,10 @@ function requestActions(request) {
   }
 
   if (request.status !== "pending") {
+    const aggregateBatch = findBatchByRequestId(request.id);
+    if (aggregateBatch) {
+      return `<span class="badge settled">聚合批次 · ${aggregateBatch.school_payment_batch_id ? "School已同步" : "待回写School"}</span>`;
+    }
     const resultBadge = request.created_transaction_id
       ? `<span class="badge settled">已生成流水</span>`
       : `<span class="badge unpaid">无需 Cash 流水</span>`;
@@ -253,11 +259,12 @@ function renderTeacherWageGroups(requests) {
   if (!container) return;
 
   const groups = teacherWageRequestGroups(requests);
+  const batches = appState.externalRequestBatches || [];
   container.innerHTML = `
     <div class="teacher-wage-group-heading">
       <div>
         <h3>老师工资合计待处理</h3>
-        <p>请先按合计金额完成实际转账，再点击一键确认。系统会逐条确认本组 Cash 请求。</p>
+        <p>确认后系统只生成一笔 Cash 支出流水，并将批次明细逐条回写 School。</p>
       </div>
       <span class="badge unpaid">辅助分组</span>
     </div>
@@ -266,6 +273,16 @@ function renderTeacherWageGroups(requests) {
         ? groups.map(teacherWageGroupCard).join("")
         : '<div class="empty-state teacher-wage-group-empty">暂无可合并显示的老师工资请求。</div>'
     }
+    <div class="teacher-wage-group-heading teacher-wage-batch-history-heading">
+      <div>
+        <h3>老师工资聚合付款记录</h3>
+        <p>已确认批次保持一笔 Cash 流水和多条 School 支出映射；回写失败时从这里重试。</p>
+      </div>
+      <span class="badge settled">批次台账</span>
+    </div>
+    ${batches.length
+      ? batches.map(teacherWageBatchCard).join("")
+      : '<div class="empty-state teacher-wage-group-empty">暂无老师工资聚合付款记录。</div>'}
   `;
 }
 
@@ -359,12 +376,44 @@ function teacherWageGroupCard(group) {
           ${renderBusinessSummary(group)}
         </div>
         <div class="button-row teacher-wage-group-actions">
-          <button class="primary-button compact-button" data-approve-teacher-wage-group="${escapeHtml(group.key)}" type="button">一键确认</button>
+          <button class="primary-button compact-button" data-approve-teacher-wage-group="${escapeHtml(group.key)}" type="button">聚合确认</button>
           <button class="danger-button compact-button" data-reject-teacher-wage-group="${escapeHtml(group.key)}" type="button">一键拒绝</button>
           <details class="teacher-wage-group-details">
             <summary class="ghost-button compact-button">展开 / 收起明细</summary>
             <div class="teacher-wage-group-detail-list">
               ${group.requests.map(teacherWageGroupDetail).join("")}
+            </div>
+          </details>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function teacherWageBatchCard(batch) {
+  const synced = Boolean(batch.school_payment_batch_id);
+  return `
+    <article class="teacher-wage-group-card teacher-wage-batch-card">
+      <div class="teacher-wage-group-summary">
+        <div class="compact-stack">
+          <strong>${escapeHtml(batch.teacher_name)} / ${escapeHtml(batch.year_month)} / ${escapeHtml(batch.currency)}</strong>
+          <span>合计：${escapeHtml(batch.currency)} ${money(batch.total_amount)} · 明细：${batch.request_count} 条 · Cash 流水：${shortId(batch.created_transaction_id)}</span>
+          <span>批次：${escapeHtml(batch.id)} · ${synced ? `School 批次：${escapeHtml(batch.school_payment_batch_id)}` : "School 回写待完成"}</span>
+        </div>
+        <div class="button-row teacher-wage-group-actions">
+          ${synced
+            ? '<span class="badge settled">School已同步 · 只读</span>'
+            : `<button class="ghost-button compact-button" data-resync-teacher-wage-batch="${batch.id}" type="button">重新回写 School</button>`}
+          <details class="teacher-wage-group-details">
+            <summary class="ghost-button compact-button">展开 / 收起明细</summary>
+            <div class="teacher-wage-group-detail-list">
+              ${(batch.items || []).map((item) => `
+                <div class="teacher-wage-group-detail">
+                  <strong>${escapeHtml(batch.currency)} ${money(item.amount)}</strong>
+                  <span>Cash request：${escapeHtml(item.request_id)}</span>
+                  <span>School expense：${escapeHtml(item.external_reference_id)}</span>
+                </div>
+              `).join("")}
             </div>
           </details>
         </div>
@@ -398,11 +447,11 @@ function bindTeacherWageGroupActions() {
       const group = findTeacherWageGroup(button.dataset.approveTeacherWageGroup);
       if (!group) return;
       const confirmed = window.confirm(
-        `确认将 ${group.teacherName} ${group.wageMonth} 老师工资 ${group.currency} ${money(group.amount)} 的 ${group.requests.length} 条 Cash 请求全部标记为已确认？\n` +
-        "请仅在已经完成实际转账后继续。系统会逐条确认这些 Cash 请求。",
+        `确认将 ${group.teacherName} ${group.wageMonth} 老师工资 ${group.currency} ${money(group.amount)} 的 ${group.requests.length} 条请求合并为一笔 Cash 支出？\n` +
+        "请仅在已经完成该笔实际转账后继续。确认后明细身份保持不变，但 Cash 只生成一笔流水。",
       );
       if (!confirmed) return;
-      await runTeacherWageGroupAction(group, "approved");
+      await approveTeacherWageGroup(group);
     });
   });
 
@@ -419,6 +468,31 @@ function bindTeacherWageGroupActions() {
       );
       if (!confirmed) return;
       await runTeacherWageGroupAction(group, "rejected", reason.trim());
+    });
+  });
+
+  document.querySelectorAll("[data-resync-teacher-wage-batch]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (isTeacherWageGroupActionRunning) return;
+      const batchId = button.dataset.resyncTeacherWageBatch;
+      const confirmed = window.confirm(
+        "确认重新向 School 回写该老师工资聚合批次？本操作不会再次生成或修改 Cash 流水。",
+      );
+      if (!confirmed) return;
+      isTeacherWageGroupActionRunning = true;
+      setTeacherWageGroupButtonsDisabled(true);
+      try {
+        const result = await syncTeacherWageBatchResultToSchool(batchId);
+        await refreshAfterRequestMutation(
+          result?.ok
+            ? `老师工资聚合批次回写成功${result.idempotent ? "，School 幂等校验通过" : ""}。`
+            : `老师工资聚合批次回写失败：${result?.message || "未知错误"}`,
+          result?.ok ? "success" : "error",
+        );
+      } finally {
+        isTeacherWageGroupActionRunning = false;
+        setTeacherWageGroupButtonsDisabled(false);
+      }
     });
   });
 }
@@ -465,8 +539,40 @@ async function runTeacherWageGroupAction(group, action, reason = "") {
   await refreshAfterRequestMutation(groupActionMessage(successCount, failures), failures.length ? "error" : "success");
 }
 
+async function approveTeacherWageGroup(group) {
+  isTeacherWageGroupActionRunning = true;
+  setTeacherWageGroupButtonsDisabled(true);
+  try {
+    const cashResult = await approveTeacherWageRequestBatch(
+      group.requests.map((item) => item.request.id),
+    );
+    if (!cashResult?.ok) {
+      await refreshAfterRequestMutation(
+        cashResult?.message || "老师工资聚合 Cash 确认失败。",
+        "error",
+      );
+      return;
+    }
+    const schoolResult = await syncTeacherWageBatchResultToSchool(cashResult.batch_id);
+    if (!schoolResult?.ok) {
+      await refreshAfterRequestMutation(
+        `Cash 已生成一笔聚合流水，但回写 School 失败：${schoolResult?.message || "未知错误"}。请从批次台账重试。`,
+        "error",
+      );
+      return;
+    }
+    await refreshAfterRequestMutation(
+      `老师工资聚合确认完成：${group.requests.length} 条 School 支出对应 1 笔 Cash ${group.currency} ${money(group.amount)} 流水。`,
+      "success",
+    );
+  } finally {
+    isTeacherWageGroupActionRunning = false;
+    setTeacherWageGroupButtonsDisabled(false);
+  }
+}
+
 function setTeacherWageGroupButtonsDisabled(disabled) {
-  document.querySelectorAll("[data-approve-teacher-wage-group], [data-reject-teacher-wage-group]").forEach((button) => {
+  document.querySelectorAll("[data-approve-teacher-wage-group], [data-reject-teacher-wage-group], [data-resync-teacher-wage-batch]").forEach((button) => {
     button.disabled = disabled;
   });
 }
@@ -519,6 +625,12 @@ async function refreshAfterRequestMutation(message, type = "success") {
 
 function findRequest(id) {
   return (appState.externalRequests || []).find((request) => request.id === id) || null;
+}
+
+function findBatchByRequestId(requestId) {
+  return (appState.externalRequestBatches || []).find((batch) =>
+    (batch.items || []).some((item) => item.request_id === requestId),
+  ) || null;
 }
 
 function statusBadge(status) {
