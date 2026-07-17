@@ -9,6 +9,7 @@ Status date: 2026-07-18
 | CNY transactions | Existing ordinary flows unchanged; external CNY approval primitive supports canonical School income/expense requests for School-eligible active CNY accounts | Keep ordinary CNY flows stable |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
 | FX linkage | CNY→JPY pair can be verified by School and recorded in `home_school_fx_syncs`; synced pairs are DB-locked against update/delete, Cash dev exposes guarded School writeback, and the 2026-07-18 dev E2E passed | Keep the verified dev chain immutable; reproduce migration, credentials and E2E only during staging/prod rollout |
+| Teacher wage aggregate | Same-teacher/month/currency/account/date canonical wage requests can be approved as one Cash transaction with batch/item audit mappings; School-synced batches are immutable, retry-idempotent, and the 2026-07-18 JPY 59,100 dev E2E passed | Keep School canonical expense granularity; reproduce schema, callback config and E2E during staging/prod rollout |
 | School 收支确认 | Cash linkage v2 pending request table/RPC/UI implemented. New request creation is restricted to canonical School income/expense records: `school_income_records / income_received` and `school_expense_records / expense_paid`; compatible `tuition_income_received` income-record history remains supported. Legacy teacher-wage payment requests and direct part-time-work income requests are historical read-only paths only. | Keep canonical flow stable; any legacy removal requires separate historical audit |
 
 ## Final System Boundary
@@ -28,6 +29,9 @@ Status date: 2026-07-18
   reject creates no transaction and changes no balance.
 - Cash System must not proactively create School business records or initiate
   School business requests.
+- A teacher-wage aggregate is a Cash payment optimization only. School keeps one
+  canonical expense per wage snapshot/business attribution, while Cash keeps one
+  aggregate transaction plus an immutable item mapping back to every expense.
 - The Cash UI entry for School-originated confirmation requests is `收支确认`.
   Canonical income rows are displayed as `收入确认 / School 收入记录`,
   canonical expense rows as `支出确认 / School 支出记录`, and deprecated direct

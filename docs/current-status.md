@@ -20,6 +20,14 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
+2026-07-18 canonical teacher-wage aggregate payment:
+
+- Cash dev UI version `20260718-cash-dev-v3-5` groups two or more pending canonical `school_expense_records / expense_paid` teacher-wage requests only when teacher, business month, currency, Cash account and payment date are identical.
+- `home_approve_teacher_wage_request_batch(uuid[])` creates one JPY/CNY expense transaction for the group, stores a batch header plus one item per Cash request / School expense, and returns the original batch and transaction on an exact retry.
+- After School verifies and writes back the full batch, Cash stores the School batch ID and sync time. The aggregate transaction is then read-only; database triggers reject update/delete, while callback recovery only replays the original School batch callback.
+- Real dev E2E passed with `勤务表跨业务测试老师 / 2026-11`: JPY 24,600 personal plus JPY 34,500 青空进学塾 produced one JPY 59,100 transaction `8e219366-db11-4afc-a150-8e6df7d93ae7`. Cash batch `42a92327-23b1-42a0-b892-f1a0480872c3` has two items and is linked to School batch `65be52d5-c7f6-4318-be73-a757c4cb9ae0`; both School expenses are `cash_confirmed`.
+- Rollback verification passed for exact approval retry, exact School marker retry, conflicting marker rejection, unique transaction count, and aggregate transaction update/delete guards. This remains dev-only until separately migrated and tested in staging/prod.
+
 2026-07-18 School FX inbound recovery and immutable linkage:
 
 - Added `home_school_fx_syncs` as the Cash-owned audit marker for a verified CNY `fx_out` / JPY `fx_in` pair that has produced a School corporate-account inbound event.
