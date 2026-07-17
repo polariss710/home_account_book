@@ -27,6 +27,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - Database triggers reject update/delete of both Cash FX rows after the marker exists; the marker table is direct-read only for authenticated users and can be written only through the guarded RPC.
 - Cash dev UI version `20260718-cash-dev-v3-4` adds `回写 School` on unsynced CNY→JPY FX rows, reads eligible School CNY-confirmed incomes with the Cash bearer token, requires the selected CNY total to equal the FX amount, then marks the successful School event in Cash.
 - If School succeeds but the Cash marker fails, the UI preserves a retry path. Repeating the action reuses the School idempotent event and only completes the Cash lock marker.
+- Dev E2E passed on 2026-07-18 with `DEV-SCHOOL-FX-20260718`: Cash created a paired CNY 88.00 `fx_out` / JPY 1,800 `fx_in`, School created one JPY corporate-account inbound event and account transaction, the linked School income advanced to `account_transaction_created`, and Cash displayed the pair as `已回写 School · 只读`. Same-payload marker retry was idempotent, conflicting marker reuse was rejected, and database guards rejected update/delete on both FX rows.
 - This flow is dev-only until the same schema migration, credentials, callback URL and E2E checks are applied to the future staging/prod environment.
 
 2026-06-16 transaction delete confirmation guard:

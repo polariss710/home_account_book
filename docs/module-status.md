@@ -8,7 +8,7 @@ Status date: 2026-07-18
 | JPY transactions | Existing ordinary flows unchanged; external JPY DB/RPC insert support added and now requires School-eligible active JPY accounts | Keep `home_create_external_jpy_transaction` as approval-time primitive while aligning policy coverage |
 | CNY transactions | Existing ordinary flows unchanged; external CNY approval primitive supports canonical School income/expense requests for School-eligible active CNY accounts | Keep ordinary CNY flows stable |
 | Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
-| FX linkage | CNY→JPY pair can be verified by School and recorded in `home_school_fx_syncs`; synced pairs are DB-locked against update/delete and Cash dev exposes guarded School writeback | Complete dev E2E, then reproduce the migration and credentials only in staging/prod rollout |
+| FX linkage | CNY→JPY pair can be verified by School and recorded in `home_school_fx_syncs`; synced pairs are DB-locked against update/delete, Cash dev exposes guarded School writeback, and the 2026-07-18 dev E2E passed | Keep the verified dev chain immutable; reproduce migration, credentials and E2E only during staging/prod rollout |
 | School 收支确认 | Cash linkage v2 pending request table/RPC/UI implemented. New request creation is restricted to canonical School income/expense records: `school_income_records / income_received` and `school_expense_records / expense_paid`; compatible `tuition_income_received` income-record history remains supported. Legacy teacher-wage payment requests and direct part-time-work income requests are historical read-only paths only. | Keep canonical flow stable; any legacy removal requires separate historical audit |
 
 ## Final System Boundary
