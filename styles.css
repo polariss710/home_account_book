@@ -17,6 +17,77 @@
   --shadow-soft: 0 8px 20px rgba(28, 37, 36, 0.045);
 }
 
+.school-fx-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  border: 0;
+  border-radius: 16px;
+  padding: 0;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+}
+
+.school-fx-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.school-fx-form {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  overflow: auto;
+}
+
+.school-fx-form .panel-heading {
+  align-items: flex-start;
+}
+
+.school-fx-form .panel-heading p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.school-fx-summary,
+.school-fx-selected-total {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f5f8fb;
+  color: var(--text);
+}
+
+.school-fx-income-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.school-fx-income-options {
+  display: grid;
+  gap: 10px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.school-fx-income-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.school-fx-income-option span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.school-fx-income-option strong {
+  white-space: nowrap;
+}
+
 * {
   box-sizing: border-box;
 }

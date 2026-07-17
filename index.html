@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232d6a5f'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='34' fill='white' font-family='Arial, sans-serif'%3E%E5%AE%B6%3C/text%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=20260717-cash-dev-v3-3" />
+    <link rel="stylesheet" href="styles.css?v=20260718-cash-dev-v3-4" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
@@ -779,23 +779,50 @@
       </main>
     </div>
 
+    <dialog id="schoolFxDialog" class="school-fx-dialog">
+      <form id="schoolFxForm" class="school-fx-form">
+        <div class="panel-heading">
+          <div>
+            <h2>回写 School 法人账户</h2>
+            <p>根据 Cash 购汇流水生成 School 法人账户入金，并锁定这组购汇流水。</p>
+          </div>
+          <button id="schoolFxCloseBtn" class="ghost-button compact-button" type="button">关闭</button>
+        </div>
+        <div id="schoolFxSummary" class="school-fx-summary"></div>
+        <label>
+          School 法人账户
+          <select id="schoolFxCorporateAccountSelect" required></select>
+        </label>
+        <fieldset class="school-fx-income-fieldset">
+          <legend>关联的 School CNY 已确认收入</legend>
+          <div id="schoolFxIncomeOptions" class="school-fx-income-options"></div>
+        </fieldset>
+        <div id="schoolFxSelectedTotal" class="school-fx-selected-total"></div>
+        <p id="schoolFxDialogMessage" class="form-message"></p>
+        <div class="button-row form-submit">
+          <button id="schoolFxCancelBtn" class="ghost-button" type="button">取消</button>
+          <button id="schoolFxSubmitBtn" class="primary-button" type="submit">回写并锁定</button>
+        </div>
+      </form>
+    </dialog>
+
     <script type="importmap">
       {
         "imports": {
-          "#annual": "./js/annual.js?v=20260717-cash-dev-v3-3",
-          "#app": "./app.js?v=20260717-cash-dev-v3-3",
-          "#cny": "./js/cny.js?v=20260717-cash-dev-v3-3",
-          "#config": "./js/config.js?v=20260717-cash-dev-v3-3",
-          "#elements": "./js/elements.js?v=20260717-cash-dev-v3-3",
-          "#events": "./js/events.js?v=20260717-cash-dev-v3-3",
-          "#external-requests": "./js/external-requests.js?v=20260717-cash-dev-v3-3",
-          "#fixed-transfer": "./js/fixed-transfer.js?v=20260717-cash-dev-v3-3",
-          "#jpy": "./js/jpy.js?v=20260717-cash-dev-v3-3",
-          "#render": "./js/render.js?v=20260717-cash-dev-v3-3",
-          "#state": "./js/state.js?v=20260717-cash-dev-v3-3",
-          "#supabase": "./js/supabase.js?v=20260717-cash-dev-v3-3",
-          "#ui": "./js/ui.js?v=20260717-cash-dev-v3-3",
-          "#utils": "./js/utils.js?v=20260717-cash-dev-v3-3"
+          "#annual": "./js/annual.js?v=20260718-cash-dev-v3-4",
+          "#app": "./app.js?v=20260718-cash-dev-v3-4",
+          "#cny": "./js/cny.js?v=20260718-cash-dev-v3-4",
+          "#config": "./js/config.js?v=20260718-cash-dev-v3-4",
+          "#elements": "./js/elements.js?v=20260718-cash-dev-v3-4",
+          "#events": "./js/events.js?v=20260718-cash-dev-v3-4",
+          "#external-requests": "./js/external-requests.js?v=20260718-cash-dev-v3-4",
+          "#fixed-transfer": "./js/fixed-transfer.js?v=20260718-cash-dev-v3-4",
+          "#jpy": "./js/jpy.js?v=20260718-cash-dev-v3-4",
+          "#render": "./js/render.js?v=20260718-cash-dev-v3-4",
+          "#state": "./js/state.js?v=20260718-cash-dev-v3-4",
+          "#supabase": "./js/supabase.js?v=20260718-cash-dev-v3-4",
+          "#ui": "./js/ui.js?v=20260718-cash-dev-v3-4",
+          "#utils": "./js/utils.js?v=20260718-cash-dev-v3-4"
         }
       }
     </script>

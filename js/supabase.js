@@ -108,7 +108,27 @@ function queuePageLoad() {
 }
 
 export async function loadAppData() {
-  await Promise.all([loadFixedMonthPage(), loadJpyAccountPage(), loadCnyAccountPage(), loadCnyFixedPage()]);
+  await Promise.all([
+    loadFixedMonthPage(),
+    loadJpyAccountPage(),
+    loadCnyAccountPage(),
+    loadCnyFixedPage(),
+    loadSchoolFxSyncs(),
+  ]);
+}
+
+export async function loadSchoolFxSyncs() {
+  if (!isCloudReady()) return;
+  const { data, error } = await appState.supabaseClient
+    .from("home_school_fx_syncs")
+    .select("id,cny_transaction_id,jpy_transaction_id,school_inbound_event_id,school_account_transaction_id,synced_at")
+    .order("synced_at", { ascending: false });
+  if (error) {
+    setActionMessage(`School 购汇同步状态读取失败：${error.message}`, "error");
+    appState.schoolFxSyncs = [];
+    return;
+  }
+  appState.schoolFxSyncs = Array.isArray(data) ? data : [];
 }
 
 export async function loadExternalTransactionRequests(status = appState.externalRequestStatusFilter) {
@@ -576,6 +596,99 @@ export async function syncCashRequestResultToSchool(id, action) {
         : error instanceof Error && error.message
           ? error.message
         : "School 回写请求失败。",
+    };
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+export async function getSchoolFxInboundOptions(cnyTransactionId) {
+  const config = getConfig();
+  const url = `${config.schoolFxInboundFunctionUrl}/options?cash_cny_transaction_id=${encodeURIComponent(cnyTransactionId)}`;
+  return requestSchoolApi(url, { method: "GET" });
+}
+
+export async function syncSchoolFxInbound({
+  cnyTransactionId,
+  corporateAccountId,
+  linkedIncomeRecordIds,
+}) {
+  const config = getConfig();
+  const schoolResult = await requestSchoolApi(config.schoolFxInboundFunctionUrl, {
+    method: "POST",
+    body: JSON.stringify({
+      cash_cny_transaction_id: cnyTransactionId,
+      corporate_account_id: corporateAccountId,
+      linked_income_record_ids: linkedIncomeRecordIds,
+    }),
+  });
+  if (!schoolResult?.ok) return schoolResult;
+
+  const schoolEventId = schoolResult.event?.id;
+  const schoolAccountTransactionId = schoolResult.event?.accountTransactionId;
+  if (!schoolEventId || !schoolAccountTransactionId) {
+    return {
+      ok: false,
+      schoolSynced: true,
+      message: "School 已完成入站，但响应缺少同步身份；请勿修改购汇流水并重试。",
+    };
+  }
+
+  const { data, error } = await appState.supabaseClient.rpc(
+    "home_mark_cny_to_jpy_fx_school_synced",
+    {
+      p_cny_transaction_id: cnyTransactionId,
+      p_school_inbound_event_id: schoolEventId,
+      p_school_account_transaction_id: schoolAccountTransactionId,
+    },
+  );
+  if (error || data?.ok === false) {
+    return {
+      ok: false,
+      schoolSynced: true,
+      message: `School 已完成入站，但 Cash 锁定标记失败：${error?.message || data?.message || "未知错误"}。请重试本操作。`,
+    };
+  }
+
+  return { ...schoolResult, ok: true, cashSync: data };
+}
+
+async function requestSchoolApi(url, init) {
+  if (!url) return { ok: false, message: "School FX 入站 URL 未配置。" };
+  const { data: sessionData, error: sessionError } = await appState.supabaseClient.auth.getSession();
+  if (sessionError || !sessionData.session?.access_token) {
+    return {
+      ok: false,
+      message: `Cash 登录状态读取失败：${sessionError?.message || "没有可用 session"}`,
+    };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 60_000);
+  try {
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        authorization: `Bearer ${sessionData.session.access_token}`,
+        "content-type": "application/json",
+        ...init.headers,
+      },
+      signal: controller.signal,
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || data?.ok === false) {
+      const message = Array.isArray(data?.message) ? data.message.join("；") : data?.message;
+      return { ok: false, message: data?.details || message || `School 请求失败：HTTP ${response.status}` };
+    }
+    return data && typeof data === "object" ? { ...data, ok: true } : { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error && error.name === "AbortError"
+        ? "School 请求等待超过 60 秒，请确认状态后重试。"
+        : error instanceof Error && error.message
+          ? error.message
+          : "School 请求失败。",
     };
   } finally {
     window.clearTimeout(timeoutId);

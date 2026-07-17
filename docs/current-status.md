@@ -1,6 +1,6 @@
 # Current Status
 
-Status date: 2026-06-16
+Status date: 2026-07-18
 
 This document keeps the current Cash System implementation checkpoint, safety notes, and active backlog.
 
@@ -19,6 +19,15 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - No direct School DB writes, School-side Edge Function deployment, background worker, or automatic scheduler is implemented in this repository.
 
 ## Latest Update
+
+2026-07-18 School FX inbound recovery and immutable linkage:
+
+- Added `home_school_fx_syncs` as the Cash-owned audit marker for a verified CNY `fx_out` / JPY `fx_in` pair that has produced a School corporate-account inbound event.
+- The authenticated marking RPC is idempotent and rejects reuse of either Cash transaction or either School inbound identity.
+- Database triggers reject update/delete of both Cash FX rows after the marker exists; the marker table is direct-read only for authenticated users and can be written only through the guarded RPC.
+- Cash dev UI version `20260718-cash-dev-v3-4` adds `回写 School` on unsynced CNY→JPY FX rows, reads eligible School CNY-confirmed incomes with the Cash bearer token, requires the selected CNY total to equal the FX amount, then marks the successful School event in Cash.
+- If School succeeds but the Cash marker fails, the UI preserves a retry path. Repeating the action reuses the School idempotent event and only completes the Cash lock marker.
+- This flow is dev-only until the same schema migration, credentials, callback URL and E2E checks are applied to the future staging/prod environment.
 
 2026-06-16 transaction delete confirmation guard:
 

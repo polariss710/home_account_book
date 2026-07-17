@@ -10,10 +10,12 @@ import {
   deleteCnyTransaction,
   generateCnyFixedMonth,
   isCloudReady,
+  getSchoolFxInboundOptions,
   loadAppData,
   reactivateTemplate,
   saveCnyAccount,
   saveCnyTransaction,
+  syncSchoolFxInbound,
   updateAccount,
   updateCnyFixedItem,
   updateCnyFixedItemsStatus,
@@ -24,6 +26,8 @@ import {
 } from "#supabase";
 import { setActionMessage } from "#ui";
 import { emptyRow, escapeHtml, formData, moneyCny, toNumber } from "#utils";
+
+let schoolFxOptions = null;
 
 export function bindCnyEvents() {
   els.cnyTransactionForm.elements.transaction_type.addEventListener("change", updateTransferAccountControl);
@@ -36,6 +40,11 @@ export function bindCnyEvents() {
   els.generateCnyFixedMonthBtn.addEventListener("click", generateFixedItems);
   els.cnyAccountForm.addEventListener("submit", saveAccount);
   els.cnyAccountCancelBtn.addEventListener("click", resetAccountForm);
+  els.schoolFxCloseBtn.addEventListener("click", closeSchoolFxDialog);
+  els.schoolFxCancelBtn.addEventListener("click", closeSchoolFxDialog);
+  els.schoolFxForm.addEventListener("submit", submitSchoolFxSync);
+  els.schoolFxIncomeOptions.addEventListener("change", updateSchoolFxSelectedTotal);
+  els.schoolFxCorporateAccountSelect.addEventListener("change", updateSchoolFxSelectedTotal);
 }
 
 export function renderCnyPage() {
@@ -450,6 +459,9 @@ function transactionRow(item) {
   const locked = fixedLocked || fxLinked;
   const targetAccountName = fxLinked ? item.linked_jpy_account_name : item.transfer_account_name;
   const sourceBadge = schoolSynced ? `<span class="badge settled" title="School 收支确认请求同步生成">School同步生成</span>` : "";
+  const schoolFxSync = sourceFx
+    ? appState.schoolFxSyncs.find((sync) => sync.cny_transaction_id === item.id)
+    : null;
   const controls = fixedLocked
     ? `<span class="badge settled">固定项生成</span>`
     : generatedFx
@@ -457,8 +469,13 @@ function transactionRow(item) {
     : sourceFx
       ? `
         <div class="button-row">
-          <button class="ghost-button compact-button" data-edit-cny="${item.id}" type="button">编辑</button>
-          <button class="danger-button compact-button" data-delete-cny="${item.id}" type="button">删除</button>
+          ${schoolFxSync
+            ? `<span class="badge settled">已回写 School · 只读</span>`
+            : `
+              <button class="primary-button compact-button" data-sync-school-fx="${item.id}" type="button">回写 School</button>
+              <button class="ghost-button compact-button" data-edit-cny="${item.id}" type="button">编辑</button>
+              <button class="danger-button compact-button" data-delete-cny="${item.id}" type="button">删除</button>
+            `}
         </div>
       `
     : `
@@ -517,6 +534,128 @@ function bindTransactionControls() {
       await refreshAfterMutation(result.message || "人民币流水已删除。", "success");
     });
   });
+  document.querySelectorAll("[data-sync-school-fx]").forEach((button) => {
+    button.addEventListener("click", () => openSchoolFxDialog(button.dataset.syncSchoolFx));
+  });
+}
+
+async function openSchoolFxDialog(cnyTransactionId) {
+  schoolFxOptions = null;
+  els.schoolFxSummary.textContent = "正在读取 Cash 购汇事实和 School 可关联收入…";
+  els.schoolFxCorporateAccountSelect.innerHTML = "";
+  els.schoolFxIncomeOptions.innerHTML = "";
+  els.schoolFxSelectedTotal.textContent = "";
+  els.schoolFxDialogMessage.textContent = "";
+  els.schoolFxSubmitBtn.disabled = true;
+  els.schoolFxDialog.showModal();
+
+  const options = await getSchoolFxInboundOptions(cnyTransactionId);
+  if (!options?.ok) {
+    els.schoolFxDialogMessage.textContent = options?.message || "School 入站候选读取失败。";
+    els.schoolFxDialogMessage.className = "form-message error";
+    return;
+  }
+  schoolFxOptions = options;
+  renderSchoolFxDialog();
+}
+
+function renderSchoolFxDialog() {
+  const { fx, corporateAccounts = [], incomeCandidates = [], existingEvent } = schoolFxOptions;
+  els.schoolFxSummary.textContent =
+    `${fx.transactedAt} · CNY ${moneyCny(fx.cnyAmount)} → JPY ${Number(fx.jpyAmount).toLocaleString("ja-JP")}`;
+  els.schoolFxCorporateAccountSelect.innerHTML = corporateAccounts.length
+    ? corporateAccounts.map((account) =>
+        `<option value="${account.id}"${existingEvent?.corporateAccountId === account.id ? " selected" : ""}>${escapeHtml(account.name)}（${escapeHtml(account.code)}）</option>`,
+      ).join("")
+    : `<option value="">没有可用的 School JPY 法人账户</option>`;
+
+  if (existingEvent) {
+    els.schoolFxIncomeOptions.innerHTML = `
+      <div class="school-fx-income-option">
+        <span>School 已存在入站事件 ${escapeHtml(existingEvent.id)}，本次仅重放幂等回写并补齐 Cash 锁定标记。</span>
+      </div>
+    `;
+    els.schoolFxSelectedTotal.textContent = `既有事件关联 ${existingEvent.linkedIncomeRecordIds.length} 条收入`;
+    els.schoolFxSubmitBtn.textContent = "重新回写并补齐锁定";
+    els.schoolFxSubmitBtn.disabled = !corporateAccounts.some(
+      (account) => account.id === existingEvent.corporateAccountId,
+    );
+    return;
+  }
+
+  els.schoolFxIncomeOptions.innerHTML = incomeCandidates.length
+    ? incomeCandidates.map((candidate) => `
+        <label class="school-fx-income-option">
+          <input type="checkbox" name="linked_income_record_id" value="${candidate.incomeRecordId}" data-amount-cny="${Number(candidate.amountCny || 0)}" />
+          <span>${escapeHtml(candidate.student?.name || "无学生归属")} · ${escapeHtml(candidate.title)} · ${escapeHtml(candidate.yearMonth || "-")}</span>
+          <strong>CNY ${moneyCny(candidate.amountCny || 0)}</strong>
+        </label>
+      `).join("")
+    : `<div class="empty-state">该 Cash 人民币账户暂无可归集的 School CNY 已确认收入。</div>`;
+
+  const candidateTotal = incomeCandidates.reduce((sum, candidate) => sum + Number(candidate.amountCny || 0), 0);
+  if (incomeCandidates.length && Math.abs(candidateTotal - Number(fx.cnyAmount)) < 0.005) {
+    els.schoolFxIncomeOptions.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+      input.checked = true;
+    });
+  }
+  els.schoolFxSubmitBtn.textContent = "回写并锁定";
+  updateSchoolFxSelectedTotal();
+}
+
+function updateSchoolFxSelectedTotal() {
+  if (!schoolFxOptions || schoolFxOptions.existingEvent) return;
+  const selected = [...els.schoolFxIncomeOptions.querySelectorAll('input[type="checkbox"]:checked')];
+  const total = selected.reduce((sum, input) => sum + Number(input.dataset.amountCny || 0), 0);
+  const expected = Number(schoolFxOptions.fx.cnyAmount || 0);
+  const matched = Math.abs(total - expected) < 0.005;
+  els.schoolFxSelectedTotal.textContent =
+    `已选择 CNY ${moneyCny(total)} / 购汇 CNY ${moneyCny(expected)}${matched ? " · 金额一致" : " · 金额不一致"}`;
+  els.schoolFxSubmitBtn.disabled = !matched || !els.schoolFxCorporateAccountSelect.value;
+}
+
+async function submitSchoolFxSync(event) {
+  event.preventDefault();
+  if (!schoolFxOptions) return;
+  const existingEvent = schoolFxOptions.existingEvent;
+  const linkedIncomeRecordIds = existingEvent
+    ? existingEvent.linkedIncomeRecordIds
+    : [...els.schoolFxIncomeOptions.querySelectorAll('input[type="checkbox"]:checked')]
+        .map((input) => input.value);
+  const corporateAccountId = existingEvent?.corporateAccountId || els.schoolFxCorporateAccountSelect.value;
+  if (!corporateAccountId || linkedIncomeRecordIds.length === 0) {
+    els.schoolFxDialogMessage.textContent = "请选择法人账户和至少一条 School 收入。";
+    els.schoolFxDialogMessage.className = "form-message error";
+    return;
+  }
+
+  els.schoolFxSubmitBtn.disabled = true;
+  els.schoolFxDialogMessage.textContent = "正在回写 School 并锁定 Cash 购汇流水…";
+  els.schoolFxDialogMessage.className = "form-message";
+  const result = await syncSchoolFxInbound({
+    cnyTransactionId: schoolFxOptions.fx.cnyTransactionId,
+    corporateAccountId,
+    linkedIncomeRecordIds,
+  });
+  if (!result?.ok) {
+    els.schoolFxDialogMessage.textContent = result?.message || "School 回写失败，请重试。";
+    els.schoolFxDialogMessage.className = "form-message error";
+    els.schoolFxSubmitBtn.disabled = false;
+    return;
+  }
+
+  closeSchoolFxDialog();
+  await refreshAfterMutation(
+    result.idempotent
+      ? "School 入站幂等校验通过，Cash 购汇锁定标记已确认。"
+      : "School 法人账户入站已生成，Cash 购汇流水已进入只读保护。",
+    "success",
+  );
+}
+
+function closeSchoolFxDialog() {
+  schoolFxOptions = null;
+  if (els.schoolFxDialog.open) els.schoolFxDialog.close();
 }
 
 function applyFilters(event) {

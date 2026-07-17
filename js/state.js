@@ -9,6 +9,7 @@ export const appState = {
   cnyPage: null,
   cnyFixedPage: null,
   externalRequests: [],
+  schoolFxSyncs: [],
   externalRequestStatusFilter: "pending",
   yearSummary: null,
   editingJpyTransactionId: null,
