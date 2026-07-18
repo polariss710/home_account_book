@@ -158,9 +158,24 @@ export async function loadExternalTransactionBatches() {
     appState.externalRequestBatches = [];
     return;
   }
+  const requestIds = (items || []).map((item) => item.request_id);
+  const { data: requests, error: requestError } = requestIds.length
+    ? await appState.supabaseClient
+        .from("home_external_transaction_requests")
+        .select("id,status,currency,amount,account_id,transacted_at,requested_at,approved_at,rejected_at,rejected_reason,created_transaction_id,payload_snapshot")
+        .in("id", requestIds)
+    : { data: [], error: null };
+  if (requestError) {
+    setActionMessage(`老师工资聚合请求快照读取失败：${requestError.message}`, "error");
+    appState.externalRequestBatches = [];
+    return;
+  }
+  const requestById = new Map((requests || []).map((request) => [request.id, request]));
   appState.externalRequestBatches = (batches || []).map((batch) => ({
     ...batch,
-    items: (items || []).filter((item) => item.batch_id === batch.id),
+    items: (items || [])
+      .filter((item) => item.batch_id === batch.id)
+      .map((item) => ({ ...item, request: requestById.get(item.request_id) || null })),
   }));
 }
 
@@ -569,6 +584,18 @@ export async function approveTeacherWageRequestBatch(requestIds) {
     return null;
   }
   return handleRpcResult(data, "老师工资聚合确认失败。");
+}
+
+export async function rejectTeacherWageRequestGroup(requestIds, reason) {
+  const { data, error } = await appState.supabaseClient.rpc(
+    "home_reject_teacher_wage_request_group",
+    { p_request_ids: requestIds, p_reason: reason || null },
+  );
+  if (error) {
+    setActionMessage(`老师工资分组拒绝失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "老师工资分组拒绝失败。");
 }
 
 export async function rejectExternalTransactionRequest(id, reason) {
