@@ -1,9 +1,11 @@
-export const APP_VERSION = "20260718-cash-dev-v3-6";
-export const DEFAULT_SUPABASE_URL = "https://nwgursbgobdmngjlnibd.supabase.co";
-export const DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_UE5Z40p6JetQIlG3XPhzjQ_zg_4gihD";
+export const APP_VERSION = "20260718-cash-staging-v3-1";
+export const DEFAULT_SUPABASE_URL = "https://bxnxdkbjlxkcqwzzeyds.supabase.co";
+// Render replaces this staging-only placeholder during the static-site build.
+// Never commit a production key or point this branch at production data.
+export const DEFAULT_SUPABASE_ANON_KEY = "__STAGING_SUPABASE_ANON_KEY__";
 export const DEFAULT_SCHOOL_CASH_REQUEST_RESULT_FUNCTION_URL =
-  "https://aozora-school-system-v3-api-dev.onrender.com/api/cash/callbacks/request-result";
+  "https://aozora-school-system-v3-api-staging.onrender.com/api/cash/callbacks/request-result";
 export const DEFAULT_SCHOOL_CASH_REQUEST_BATCH_RESULT_FUNCTION_URL =
-  "https://aozora-school-system-v3-api-dev.onrender.com/api/cash/callbacks/request-batch-result";
+  "https://aozora-school-system-v3-api-staging.onrender.com/api/cash/callbacks/request-batch-result";
 export const DEFAULT_SCHOOL_FX_INBOUND_FUNCTION_URL =
-  "https://aozora-school-system-v3-api-dev.onrender.com/api/cash/callbacks/fx-inbound";
+  "https://aozora-school-system-v3-api-staging.onrender.com/api/cash/callbacks/fx-inbound";
