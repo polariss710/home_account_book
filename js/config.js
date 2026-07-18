@@ -1,4 +1,4 @@
-export const APP_VERSION = "20260719-cash-dev-v3-6";
+export const APP_VERSION = "20260718-cash-dev-v3-6";
 export const DEFAULT_SUPABASE_URL = "https://nwgursbgobdmngjlnibd.supabase.co";
 export const DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_UE5Z40p6JetQIlG3XPhzjQ_zg_4gihD";
 export const DEFAULT_SCHOOL_CASH_REQUEST_RESULT_FUNCTION_URL =
