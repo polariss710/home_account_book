@@ -1,4 +1,4 @@
-export const APP_VERSION = "20260718-cash-staging-v3-1";
+export const APP_VERSION = "20260718-cash-staging-v3-2";
 export const DEFAULT_SUPABASE_URL = "https://bxnxdkbjlxkcqwzzeyds.supabase.co";
 // Render replaces this staging-only placeholder during the static-site build.
 // Never commit a production key or point this branch at production data.
