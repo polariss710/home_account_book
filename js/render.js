@@ -11,11 +11,13 @@ import {
   deactivatePaymentChannel,
   deactivateAccount,
   deactivateTemplate,
+  createFixedAdvancePayment,
   deleteMonthItem,
   loadAppData,
   loadFixedMonthPage,
   reactivateTemplate,
   saveMonthItem,
+  settleFixedAdvanceRepayment,
   updateMonthItemsStatus,
   updateMonthItemStatus,
 } from "#supabase";
@@ -113,7 +115,7 @@ function incomeItemRow(item) {
       <td>${monthItemStatusCell(item)}</td>
       <td>${termLabel(item)}</td>
       <td>${monthItemNoteCell(item)}</td>
-      <td><button class="danger-button compact-button" data-delete-item="${item.id}" type="button">删除</button></td>
+      <td>${monthItemDeleteCell(item)}</td>
     </tr>
   `;
 }
@@ -128,24 +130,29 @@ function expenseItemRow(item) {
       <td>${monthItemStatusCell(item)}</td>
       <td>${termLabel(item)}</td>
       <td>${monthItemNoteCell(item)}</td>
-      <td><button class="danger-button compact-button" data-delete-item="${item.id}" type="button">删除</button></td>
+      <td>${monthItemDeleteCell(item)}</td>
     </tr>
   `;
 }
 
 function monthItemAmountCell(item) {
-  if (item.linked_jpy_transaction_id) return money(item.amount || 0);
+  if (item.linked_jpy_transaction_id || item.advance_id) return money(item.amount || 0);
   return `<input class="table-input amount-input" data-item-amount="${item.id}" type="number" step="1" value="${Number(item.amount || 0)}" />`;
 }
 
 function monthItemStatusCell(item) {
-  if (item.linked_jpy_transaction_id) return labelStatus("paid");
+  if (item.linked_jpy_transaction_id || item.advance_id) return labelStatus("paid");
   return statusSelect(item);
 }
 
 function monthItemNoteCell(item) {
-  if (item.linked_jpy_transaction_id) return escapeHtml(item.note || "");
+  if (item.linked_jpy_transaction_id || item.advance_id) return escapeHtml(item.note || "");
   return `<input class="table-input" data-item-note="${item.id}" value="${escapeHtml(item.note || "")}" />`;
+}
+
+function monthItemDeleteCell(item) {
+  if (item.advance_id) return `<span class="badge settled">垫付锁定</span>`;
+  return `<button class="danger-button compact-button" data-delete-item="${item.id}" type="button">删除</button>`;
 }
 
 function expenseSectionRows(section) {
@@ -162,11 +169,53 @@ function expenseSectionRows(section) {
             <span>已付 <strong>${money(section.paid || 0)}</strong></span>
             <span>未付 <strong>${money(section.unpaid || 0)}</strong></span>
           </div>
+          ${fixedAdvanceControls(section)}
         </div>
       </td>
     </tr>
     ${(section.items || []).map(expenseItemRow).join("")}
   `;
+}
+
+function fixedAdvanceControls(section) {
+  const status = section.advance_status || "";
+  if (status === "repaid") {
+    return `
+      <div class="fixed-advance-controls">
+        <span class="badge settled">已补回</span>
+        <span>${escapeHtml(section.advance_account_name || "-")} · ${money(section.advance_amount || 0)}</span>
+      </div>
+    `;
+  }
+
+  if (status === "pending") {
+    return `
+      <div class="fixed-advance-controls" data-advance-controls>
+        <span class="badge">待补回</span>
+        <span>${escapeHtml(section.advance_account_name || "-")} · ${money(section.advance_amount || 0)}</span>
+        <input class="table-input compact-date-input" data-fixed-advance-date type="date" value="${escapeHtml(section.advance_paid_at || `${appState.activeMonth}-01`)}" />
+        <button class="primary-button compact-button" data-settle-fixed-advance="${section.advance_id}" type="button">补回垫付</button>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="fixed-advance-controls" data-advance-controls>
+      <span class="badge">可垫付</span>
+      <select class="table-input compact-select" data-fixed-advance-account>
+        ${fixedAdvanceAccountOptions()}
+      </select>
+      <input class="table-input compact-date-input" data-fixed-advance-date type="date" value="${escapeHtml(section.first_due_date || `${appState.activeMonth}-01`)}" />
+      <button class="ghost-button compact-button" data-create-fixed-advance="${escapeHtml(encodeURIComponent(section.payment_group || "未分组"))}" type="button">垫付支付</button>
+    </div>
+  `;
+}
+
+function fixedAdvanceAccountOptions() {
+  const accounts = appState.jpyPage?.accounts || [];
+  return accounts.length
+    ? accounts.map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`).join("")
+    : `<option value="">请先新增日元账户</option>`;
 }
 
 function statusSelect(item) {
@@ -216,6 +265,46 @@ function bindMonthItemControls() {
       if (!result) return;
       await loadAppData();
       setActionMessage(result.message || "固定项已删除。", result.reset_expense_status ? "error" : "success");
+      render();
+    });
+  });
+  document.querySelectorAll("[data-create-fixed-advance]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const controls = button.closest("[data-advance-controls]");
+      const accountId = controls?.querySelector("[data-fixed-advance-account]")?.value || "";
+      const transactedAt = controls?.querySelector("[data-fixed-advance-date]")?.value || "";
+      if (!accountId || !transactedAt) {
+        setActionMessage("请先选择垫付账户和垫付日期。", "error");
+        return;
+      }
+      const result = await createFixedAdvancePayment({
+        payment_group: decodeURIComponent(button.dataset.createFixedAdvance || ""),
+        account_id: accountId,
+        transacted_at: transactedAt,
+        note: "",
+      });
+      if (!result) return;
+      await loadAppData();
+      setActionMessage(result.message || "固定支出垫付已生成。", "success");
+      render();
+    });
+  });
+  document.querySelectorAll("[data-settle-fixed-advance]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const controls = button.closest("[data-advance-controls]");
+      const repaidAt = controls?.querySelector("[data-fixed-advance-date]")?.value || "";
+      if (!repaidAt) {
+        setActionMessage("请先选择补回日期。", "error");
+        return;
+      }
+      const result = await settleFixedAdvanceRepayment({
+        advance_id: button.dataset.settleFixedAdvance,
+        repaid_at: repaidAt,
+        note: "",
+      });
+      if (!result) return;
+      await loadAppData();
+      setActionMessage(result.message || "固定垫付已补回。", "success");
       render();
     });
   });
@@ -544,5 +633,10 @@ function labelFixedType(type) {
 }
 
 function labelAccountType(type) {
-  return type === "bank" ? "银行卡" : "现金";
+  const labels = {
+    cash: "现金",
+    bank: "银行卡",
+    investment: "投资账户",
+  };
+  return labels[type] || type;
 }

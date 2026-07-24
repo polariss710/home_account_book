@@ -258,6 +258,35 @@ export async function createFixedTransfer(record) {
   return handleRpcResult(data, "固定资金调拨失败。");
 }
 
+export async function createFixedAdvancePayment(record) {
+  const { data, error } = await appState.supabaseClient.rpc("home_create_fixed_advance_payment", {
+    p_month_key: appState.activeMonth,
+    p_currency: "JPY",
+    p_payment_group: record.payment_group,
+    p_account_id: record.account_id,
+    p_transacted_at: record.transacted_at,
+    p_note: record.note,
+  });
+  if (error) {
+    setActionMessage(`固定支出垫付失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "固定支出垫付失败。");
+}
+
+export async function settleFixedAdvanceRepayment(record) {
+  const { data, error } = await appState.supabaseClient.rpc("home_settle_fixed_advance_repayment", {
+    p_advance_id: record.advance_id,
+    p_repaid_at: record.repaid_at,
+    p_note: record.note,
+  });
+  if (error) {
+    setActionMessage(`固定垫付补回失败：${error.message}`, "error");
+    return null;
+  }
+  return handleRpcResult(data, "固定垫付补回失败。");
+}
+
 export async function createCnyToJpyFx(record) {
   const { data, error } = await appState.supabaseClient.rpc("home_create_cny_to_jpy_fx", {
     p_cny_account_id: record.account_id,
@@ -361,7 +390,26 @@ export async function updatePaymentChannel(id, patch) {
 }
 
 export async function saveMonthItem(record) {
-  return upsert("home_fixed_month_items", withUser(record));
+  const allowedRecord = {
+    id: record.id,
+    template_id: record.template_id,
+    month_key: record.month_key,
+    currency: record.currency,
+    direction: record.direction,
+    name: record.name,
+    amount: record.amount,
+    status: record.status,
+    account_id: record.account_id,
+    payment_group: record.payment_group,
+    due_date: record.due_date,
+    term_no: record.term_no,
+    total_terms: record.total_terms,
+    note: record.note,
+    linked_jpy_transaction_id: record.linked_jpy_transaction_id,
+    linked_cny_transaction_id: record.linked_cny_transaction_id,
+    created_at: record.created_at,
+  };
+  return upsert("home_fixed_month_items", withUser(allowedRecord));
 }
 
 export async function updateMonthItemStatus(id, status) {

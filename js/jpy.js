@@ -183,11 +183,12 @@ function resetFilters() {
 
 function transactionRow(item) {
   const fixedTransfer = isFixedTransfer(item);
+  const fixedAdvance = isFixedAdvance(item);
   const fxLinked = Boolean(item.linked_cny_transaction_id);
   const schoolSynced = Boolean(item.created_by_external);
   const sourceFx = fxLinked && item.transaction_type === "fx_out";
   const generatedFx = fxLinked && item.transaction_type === "fx_in";
-  const locked = fixedTransfer || generatedFx || sourceFx;
+  const locked = fixedTransfer || fixedAdvance || generatedFx || sourceFx;
   const targetAccountName = sourceFx || generatedFx ? item.linked_cny_account_name : item.transfer_account_name;
   const amountCell = locked
     ? money(item.amount || 0)
@@ -200,6 +201,8 @@ function transactionRow(item) {
     : `<input class="table-input" data-jpy-note="${item.id}" value="${escapeHtml(item.note || "")}" />`;
   const controls = generatedFx
     ? `<span class="badge settled">购汇生成</span>`
+    : fixedAdvance
+      ? `<span class="badge settled">固定垫付生成</span>`
     : `
       <div class="button-row">
         ${
@@ -316,6 +319,11 @@ function isFixedTransfer(transaction) {
   return type === "fixed_in" || type === "fixed_out";
 }
 
+function isFixedAdvance(transaction) {
+  const type = typeof transaction === "string" ? transaction : transaction?.transaction_type;
+  return type === "fixed_advance_out" || type === "fixed_advance_in";
+}
+
 function confirmDeleteJpyTransaction(transaction) {
   if (!transaction) {
     return window.confirm("确定删除这条日元支出记录吗？此操作无法撤销。");
@@ -358,7 +366,12 @@ function setJpyTransactionDate() {
 }
 
 function labelAccountType(type) {
-  return type === "bank" ? "银行卡" : "现金";
+  const labels = {
+    cash: "现金",
+    bank: "银行卡",
+    investment: "投资账户",
+  };
+  return labels[type] || type;
 }
 
 function labelTransactionType(type) {
@@ -370,6 +383,8 @@ function labelTransactionType(type) {
     fx_out: "换汇转出",
     fixed_in: "固定盈余转入",
     fixed_out: "固定赤字补充",
+    fixed_advance_out: "固定支出垫付",
+    fixed_advance_in: "固定垫付补回",
   };
   return labels[type] || type;
 }

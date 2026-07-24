@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232d6a5f'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='34' fill='white' font-family='Arial, sans-serif'%3E%E5%AE%B6%3C/text%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=20260705-account-archive-1" />
+    <link rel="stylesheet" href="styles.css?v=20260724-fixed-advance-1" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
@@ -425,6 +425,8 @@
                   <option value="fx_out">换汇转出</option>
                   <option value="fixed_in">固定盈余转入</option>
                   <option value="fixed_out">固定赤字补充</option>
+                  <option value="fixed_advance_out">固定支出垫付</option>
+                  <option value="fixed_advance_in">固定垫付补回</option>
                 </select>
               </label>
               <label>
@@ -737,6 +739,7 @@
               <select name="account_type" required>
                 <option value="cash">现金</option>
                 <option value="bank">银行卡</option>
+                <option value="investment">投资账户</option>
               </select>
               <input name="opening_balance" type="number" step="1" placeholder="期初余额" required />
               <button id="accountSubmitBtn" class="primary-button" type="submit">添加</button>
@@ -782,20 +785,20 @@
     <script type="importmap">
       {
         "imports": {
-          "#annual": "./js/annual.js?v=20260705-account-archive-1",
-          "#app": "./app.js?v=20260705-account-archive-1",
-          "#cny": "./js/cny.js?v=20260705-account-archive-1",
-          "#config": "./js/config.js?v=20260705-account-archive-1",
-          "#elements": "./js/elements.js?v=20260705-account-archive-1",
-          "#events": "./js/events.js?v=20260705-account-archive-1",
-          "#external-requests": "./js/external-requests.js?v=20260705-account-archive-1",
-          "#fixed-transfer": "./js/fixed-transfer.js?v=20260705-account-archive-1",
-          "#jpy": "./js/jpy.js?v=20260705-account-archive-1",
-          "#render": "./js/render.js?v=20260705-account-archive-1",
-          "#state": "./js/state.js?v=20260705-account-archive-1",
-          "#supabase": "./js/supabase.js?v=20260705-account-archive-1",
-          "#ui": "./js/ui.js?v=20260705-account-archive-1",
-          "#utils": "./js/utils.js?v=20260705-account-archive-1"
+          "#annual": "./js/annual.js?v=20260724-fixed-advance-1",
+          "#app": "./app.js?v=20260724-fixed-advance-1",
+          "#cny": "./js/cny.js?v=20260724-fixed-advance-1",
+          "#config": "./js/config.js?v=20260724-fixed-advance-1",
+          "#elements": "./js/elements.js?v=20260724-fixed-advance-1",
+          "#events": "./js/events.js?v=20260724-fixed-advance-1",
+          "#external-requests": "./js/external-requests.js?v=20260724-fixed-advance-1",
+          "#fixed-transfer": "./js/fixed-transfer.js?v=20260724-fixed-advance-1",
+          "#jpy": "./js/jpy.js?v=20260724-fixed-advance-1",
+          "#render": "./js/render.js?v=20260724-fixed-advance-1",
+          "#state": "./js/state.js?v=20260724-fixed-advance-1",
+          "#supabase": "./js/supabase.js?v=20260724-fixed-advance-1",
+          "#ui": "./js/ui.js?v=20260724-fixed-advance-1",
+          "#utils": "./js/utils.js?v=20260724-fixed-advance-1"
         }
       }
     </script>

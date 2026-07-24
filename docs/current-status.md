@@ -1,6 +1,6 @@
 # Current Status
 
-Status date: 2026-06-16
+Status date: 2026-07-24
 
 This document keeps the current Cash System implementation checkpoint, safety notes, and active backlog.
 
@@ -19,6 +19,14 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - No direct School DB writes, School-side Edge Function deployment, background worker, or automatic scheduler is implemented in this repository.
 
 ## Latest Update
+
+2026-07-24 JPY fixed expense advance-payment flow:
+
+- Added a grouped fixed-expense advance-payment design for cases where a JPY casual account pays a fixed expense group before the monthly fixed income date.
+- The advance unit is the fixed expense payment group, not a single fixed item. The RPC sums all ordinary expense items in that group and rounds the group total up to the nearest 1,000 JPY.
+- Advance and repayment amounts must match exactly. Extra account allocation should use ordinary account transfer, not the advance flow.
+- Advance outflow and repayment inflow affect JPY account balances only. They are excluded from JPY casual income/expense statistics so fixed expenses are not double-counted.
+- Fixed items inside an advanced group are locked from single-row edit/delete/status changes in the UI; the linked JPY transactions are also locked from casual-ledger edit/delete.
 
 2026-06-16 transaction delete confirmation guard:
 
