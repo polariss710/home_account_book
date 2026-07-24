@@ -385,7 +385,7 @@ function labelTransactionType(type) {
     fixed_out: "固定赤字补充",
     fixed_advance_out: "固定支出垫付",
     fixed_advance_in: "固定垫付补回",
-    investment_pnl: "投资损益",
+    investment_pnl: "投资增减",
   };
   return labels[type] || type;
 }

@@ -22,8 +22,8 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 2026-07-24 JPY investment profit/loss support:
 
-- JPY casual transactions now include `投资损益` for stock/investment account valuation changes.
-- `投资损益` is the only JPY transaction type that may store a signed amount: positive values increase the selected JPY account balance, negative values decrease it.
+- JPY casual transactions now include `投资增减` for stock/investment account valuation changes.
+- `投资增减` is the only JPY transaction type that may store a signed amount: positive values increase the selected JPY account balance, negative values decrease it.
 - Ordinary income/expense/transfer/FX/fixed-linked JPY transactions still keep positive amount semantics; their balance direction is determined by `transaction_type`.
 - Investment P/L affects account balances and annual account-balance totals, but it is not included in ordinary JPY casual income/expense statistics.
 
