@@ -164,12 +164,14 @@ function expenseSectionRows(section) {
             <strong>${escapeHtml(section.payment_group || "未分组")}</strong>
             <span>期限 ${escapeHtml(section.first_due_date || "-")}</span>
           </div>
-          <div class="fixed-expense-section-amounts">
-            <span>合计 <strong>${money(section.total || 0)}</strong></span>
-            <span>已付 <strong>${money(section.paid || 0)}</strong></span>
-            <span>未付 <strong>${money(section.unpaid || 0)}</strong></span>
+          <div class="fixed-expense-section-side">
+            <div class="fixed-expense-section-amounts">
+              <span>合计 <strong>${money(section.total || 0)}</strong></span>
+              <span>已付 <strong>${money(section.paid || 0)}</strong></span>
+              <span>未付 <strong>${money(section.unpaid || 0)}</strong></span>
+            </div>
+            ${fixedAdvanceControls(section)}
           </div>
-          ${fixedAdvanceControls(section)}
         </div>
       </td>
     </tr>

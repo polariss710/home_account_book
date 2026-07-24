@@ -576,7 +576,8 @@ tbody tr:hover td {
   align-items: center;
 }
 
-.fixed-expense-section-summary > div {
+.fixed-expense-section-summary > div,
+.fixed-expense-section-side {
   display: flex;
   gap: 10px;
   align-items: baseline;
@@ -589,6 +590,11 @@ tbody tr:hover td {
 
 .fixed-expense-section-amounts {
   flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.fixed-expense-section-side {
+  margin-left: auto;
   justify-content: flex-end;
 }
 
