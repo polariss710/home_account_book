@@ -1,6 +1,6 @@
 # Current Status
 
-Status date: 2026-07-24
+Status date: 2026-08-02
 
 This document keeps the current Cash System implementation checkpoint, safety notes, and active backlog.
 
@@ -14,11 +14,21 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - The manual sync executor is now classified as a verification/operations tool, not the final daily business entry point.
 - Cash linkage v1 business policy is unified as of 2026-06-14: School is the business ledger and stores business ownership; Cash System's original position remains the user's household/private account ledger, and it records real user-controlled account movement. Any money that passes through a user-controlled account should enter Cash, regardless of whether School ownership is personal business or 青空塾. Business ownership no longer decides Cash eligibility. Cash System only accepts external requests; it does not proactively create School business records or initiate School business requests. Cash keeps the separate `收支确认` page as the ledger-side approve/reject entry, and only approval creates a Cash transaction and changes Cash balance.
 - Cash-side pending request table, create/approve/reject RPCs, and Cash approval UI are implemented in this repository.
+- CNY/JPY external transactions are now immutable after creation. Database triggers are the final UPDATE/DELETE defense; RLS rejects authenticated external mutation and forged external inserts; ordinary update/delete RPCs fail closed with `EXTERNAL_TRANSACTION_IMMUTABLE`; anon/PUBLIC execute and table write privileges are removed. Ordinary manual CNY/JPY CRUD remains available.
+- Cash UI version `20260802-external-transaction-immutable-1` renders canonical external rows as read-only, keeps the `School同步生成` badge, and exposes no edit/copy/delete controls. CNY display uses two decimal places (`1120.50` -> `1,120.50 CNY`); JPY remains zero-decimal.
 - Cash accounts now include `allow_school_requests`. School-facing account selection must use active accounts with this flag enabled. Current School-eligible accounts are `余额宝`, `日元现金`, `日元三菱卡`, and `日元乐天卡`; `余利宝` and `医生处兑换日元先行支付` are explicitly excluded.
 - Cash approval UI now calls a School-owned Edge Function after local approve/reject: approve creates the Cash transaction first, then requests School writeback; reject records Cash rejection first, then requests School writeback. If School writeback fails, Cash state is not rolled back and the UI tells the operator to retry later.
 - No direct School DB writes, School-side Edge Function deployment, background worker, or automatic scheduler is implemented in this repository.
 
 ## Latest Update
+
+2026-08-02 external transaction immutability hardening:
+
+- Deployed `supabase-update-20260802-external-transaction-immutability.sql`; installed enabled CNY/JPY immutable triggers, split each ledger into four minimum RLS policies, tightened table/function ACL, fixed function owner/search path, and hardened the four ordinary update/delete RPCs.
+- Backend rollback matrix passed 24/24 and rolled back every `f3f10000-*` fixture; residue is 0. Local browser UI contract passed 7/7, covering external-control suppression, ordinary controls, CNY precision, and unchanged JPY display.
+- Postdeploy protected baseline passed: accounts `7 / 89b057e2cdeb7324ef73f73e252174f1`, requests `35 / 4a7319eb294222cb5057ecfe262a885f`, CNY transactions `64 / 8e5f62d1e256228b956ca7155bed65db`, JPY transactions `31 / 95ab7cf8a8d167e9b052d3fc6b64614b`.
+- 袁振轩 transaction `2feb333c-6228-4f57-a1fa-c8aa3d40616c` remains `1120.50 CNY / 2026-08-02 / 余额宝`, row MD5 `7c94d3e343e26713a54e779e1d3b53da`.
+- Business owner confirmed the prior `400.00 CNY` 余额宝 expense delta as legitimate ordinary Cash operation. The approved balance baseline is `111041.82 CNY`, expense count `37`, expense sum `124069.05 CNY`; hardening did not modify or roll back that operation.
 
 2026-07-24 JPY investment profit/loss support:
 

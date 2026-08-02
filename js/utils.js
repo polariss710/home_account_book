@@ -19,6 +19,27 @@ export function moneyCny(value) {
   return new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(toNumber(value));
 }
 
+export function moneyByCurrency(value, currency) {
+  return String(currency || "").toUpperCase() === "CNY" ? moneyCny(value) : money(value);
+}
+
+export function isExternalTransaction(transaction) {
+  if (!transaction) return false;
+  const externalTextFields = [
+    "external_source",
+    "external_event_type",
+    "external_idempotency_key",
+    "external_reference_type",
+    "external_note",
+    "external_payload_hash",
+  ];
+  return transaction.created_by_external === true ||
+    Boolean(transaction.external_source_id) ||
+    Boolean(transaction.external_reference_id) ||
+    Boolean(transaction.external_created_at) ||
+    externalTextFields.some((field) => String(transaction[field] || "").trim() !== "");
+}
+
 export function emptyRow(colspan) {
   return `<tr><td colspan="${colspan}" class="empty-state">暂无数据</td></tr>`;
 }

@@ -1,6 +1,6 @@
 # System Map
 
-Status date: 2026-06-16
+Status date: 2026-08-02
 
 ## Core Tables
 
@@ -44,6 +44,28 @@ Current excluded accounts:
 - `医生处兑换日元先行支付` (`JPY`, cash)
 
 ## External JPY/CNY RPC Boundary
+
+External transaction immutability is symmetric for `home_cny_transactions` and
+`home_jpy_transactions`:
+
+- any row with `created_by_external = true` or canonical external source,
+  event, idempotency, reference, note, payload-hash, or timestamp metadata is
+  external;
+- enabled `BEFORE UPDATE OR DELETE` triggers fail closed with
+  `EXTERNAL_TRANSACTION_IMMUTABLE`, including function-owner/service-role direct
+  mutation attempts;
+- authenticated RLS can read owned rows, but can insert/update/delete only
+  ordinary rows with no external metadata;
+- ordinary update/delete RPCs lock the target row and reject external rows
+  before applying ordinary ownership/business validation;
+- frontend rows use the same canonical external predicate, render as read-only,
+  and expose no edit/copy/delete action;
+- correction of an external row requires a separately approved reversal flow;
+  no reversal flow is opened by this hardening.
+
+The controlled external writers remain the only normal creation path for
+external rows. Ordinary manual CNY/JPY transaction create/edit/copy/delete
+continues through the authenticated path.
 
 `home_create_external_jpy_transaction(...)` only writes `home_jpy_transactions`.
 `home_create_external_cny_transaction(...)` only writes `home_cny_transactions`.

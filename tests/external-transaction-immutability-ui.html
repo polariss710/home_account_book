@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>External transaction immutability UI contract</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "#config": "../js/config.js",
+          "#elements": "../js/elements.js",
+          "#state": "../js/state.js",
+          "#supabase": "../js/supabase.js",
+          "#ui": "../js/ui.js",
+          "#utils": "../js/utils.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <p id="result">RUNNING</p>
+    <table><tbody id="cny-external"></tbody></table>
+    <table><tbody id="cny-manual"></tbody></table>
+    <table><tbody id="jpy-external"></tbody></table>
+    <table><tbody id="jpy-manual"></tbody></table>
+    <script type="module">
+      import { renderCnyTransactionRow } from "../js/cny.js";
+      import { renderJpyTransactionRow } from "../js/jpy.js";
+
+      const common = {
+        transaction_type: "income",
+        transacted_at: "2026-08-02",
+        account_name: "codex-test account",
+        amount: 1120.50,
+        description: "codex-test UI only",
+        note: "not persisted",
+      };
+      document.querySelector("#cny-external").innerHTML = renderCnyTransactionRow({
+        ...common,
+        id: "ui-external-cny",
+        created_by_external: false,
+        external_source: "aozora_school",
+      });
+      document.querySelector("#cny-manual").innerHTML = renderCnyTransactionRow({
+        ...common,
+        id: "ui-manual-cny",
+        created_by_external: false,
+      });
+      document.querySelector("#jpy-external").innerHTML = renderJpyTransactionRow({
+        ...common,
+        id: "ui-external-jpy",
+        created_by_external: true,
+      });
+      document.querySelector("#jpy-manual").innerHTML = renderJpyTransactionRow({
+        ...common,
+        id: "ui-manual-jpy",
+        created_by_external: false,
+      });
+
+      const checks = [
+        document.querySelectorAll("#cny-external [data-edit-cny], #cny-external [data-copy-cny], #cny-external [data-delete-cny]").length === 0,
+        document.querySelector("#cny-external").textContent.includes("1,120.50 CNY"),
+        document.querySelector("#cny-external").textContent.includes("School同步生成"),
+        document.querySelectorAll("#cny-manual [data-edit-cny], #cny-manual [data-copy-cny], #cny-manual [data-delete-cny]").length === 3,
+        document.querySelectorAll("#jpy-external [data-edit-jpy], #jpy-external [data-copy-jpy], #jpy-external [data-delete-jpy]").length === 0,
+        document.querySelector("#jpy-external").textContent.includes("1,121"),
+        document.querySelectorAll("#jpy-manual [data-edit-jpy], #jpy-manual [data-copy-jpy], #jpy-manual [data-delete-jpy]").length === 3,
+      ];
+      document.querySelector("#result").textContent = checks.every(Boolean) ? "PASS 7/7" : `FAIL ${checks}`;
+    </script>
+  </body>
+</html>

@@ -23,7 +23,7 @@ import {
   updateTemplate,
 } from "#supabase";
 import { setActionMessage } from "#ui";
-import { emptyRow, escapeHtml, formData, moneyCny, toNumber } from "#utils";
+import { emptyRow, escapeHtml, formData, isExternalTransaction, moneyCny, toNumber } from "#utils";
 
 export function bindCnyEvents() {
   els.cnyTransactionForm.elements.transaction_type.addEventListener("change", updateTransferAccountControl);
@@ -60,6 +60,10 @@ async function saveTransaction(event) {
   const form = event.currentTarget;
   const data = formData(form);
   const existingTransaction = findTransaction(appState.editingCnyTransactionId);
+  if (isExternalTransaction(existingTransaction)) {
+    setActionMessage("外部系统同步流水不可编辑。", "error");
+    return;
+  }
   const transactionType = existingTransaction?.transaction_type || data.transaction_type;
   const transferAccountId = transactionType === "transfer" ? data.transfer_account_id : null;
   if (transactionType === "transfer" && (!transferAccountId || transferAccountId === data.account_id)) {
@@ -426,7 +430,7 @@ function updateTransferAccountControl() {
 
 function renderTransactions() {
   const transactions = filteredTransactions();
-  els.cnyTransactionRows.innerHTML = transactions.length ? transactions.map(transactionRow).join("") : emptyRow(8);
+  els.cnyTransactionRows.innerHTML = transactions.length ? transactions.map(renderCnyTransactionRow).join("") : emptyRow(8);
   bindTransactionControls();
 }
 
@@ -441,16 +445,18 @@ function filteredTransactions() {
   });
 }
 
-function transactionRow(item) {
+export function renderCnyTransactionRow(item) {
   const fixedLocked = Boolean(item.linked_fixed_month_item_id);
   const fxLinked = Boolean(item.linked_jpy_transaction_id);
-  const schoolSynced = Boolean(item.created_by_external);
+  const externalLocked = isExternalTransaction(item);
   const sourceFx = fxLinked && item.transaction_type === "fx_out";
   const generatedFx = fxLinked && item.transaction_type === "fx_in";
-  const locked = fixedLocked || fxLinked;
+  const locked = fixedLocked || fxLinked || externalLocked;
   const targetAccountName = fxLinked ? item.linked_jpy_account_name : item.transfer_account_name;
-  const sourceBadge = schoolSynced ? `<span class="badge settled" title="School 收支确认请求同步生成">School同步生成</span>` : "";
-  const controls = fixedLocked
+  const sourceBadge = externalLocked ? `<span class="badge settled" title="外部系统同步生成，不可修改、复制或删除">School同步生成</span>` : "";
+  const controls = externalLocked
+    ? ""
+    : fixedLocked
     ? `<span class="badge settled">固定项生成</span>`
     : generatedFx
       ? `<span class="badge settled">换汇生成</span>`
@@ -474,9 +480,9 @@ function transactionRow(item) {
       <td>${labelTransactionType(item.transaction_type)}</td>
       <td>${escapeHtml(item.account_name || "-")}</td>
       <td>${escapeHtml(targetAccountName || "-")}</td>
-      <td><input class="table-input amount-input" data-cny-amount="${item.id}" type="number" step="0.01" value="${Number(item.amount || 0)}"${locked ? " disabled" : ""} /></td>
-      <td><input class="table-input" data-cny-description="${item.id}" value="${escapeHtml(item.description || "")}"${locked ? " disabled" : ""} /></td>
-      <td><input class="table-input" data-cny-note="${item.id}" value="${escapeHtml(item.note || "")}"${locked ? " disabled" : ""} /></td>
+      <td>${locked ? `${moneyCny(item.amount || 0)} CNY` : `<input class="table-input amount-input" data-cny-amount="${item.id}" type="number" step="0.01" value="${toNumber(item.amount).toFixed(2)}" />`}</td>
+      <td>${locked ? escapeHtml(item.description || "") : `<input class="table-input" data-cny-description="${item.id}" value="${escapeHtml(item.description || "")}" />`}</td>
+      <td>${locked ? escapeHtml(item.note || "") : `<input class="table-input" data-cny-note="${item.id}" value="${escapeHtml(item.note || "")}" />`}</td>
       <td>${sourceBadge}${controls}</td>
     </tr>
   `;
@@ -545,6 +551,10 @@ function resetFilters() {
 async function saveTransactionPatch(id, patch) {
   const transaction = findTransaction(id);
   if (!transaction) return;
+  if (isExternalTransaction(transaction)) {
+    setActionMessage("外部系统同步流水不可编辑。", "error");
+    return;
+  }
   const result = await updateCnyTransaction({ ...transaction, ...patch });
   if (!result) return;
   await refreshAfterMutation(result.message || "人民币流水已更新。", "success");
@@ -722,6 +732,11 @@ function confirmDeleteCnyTransaction(transaction) {
     return window.confirm("确认删除这笔人民币流水？");
   }
 
+  if (isExternalTransaction(transaction)) {
+    setActionMessage("外部系统同步流水不可删除；如需纠错，请使用独立冲正流程。", "error");
+    return false;
+  }
+
   const linkedMessage = transaction.transaction_type === "fx_out"
     ? "\n\n这笔购汇转出会同步删除关联的日元入金流水。"
     : "";
@@ -730,11 +745,7 @@ function confirmDeleteCnyTransaction(transaction) {
     return false;
   }
 
-  if (!isSchoolSyncedTransaction(transaction)) {
-    return true;
-  }
-
-  return window.confirm("这条流水由 School 收入/支出记录同步生成。删除后可能导致 School 与 Cash 状态不一致。请再次确认：我理解这可能造成 School/Cash 状态不一致，仍要删除。");
+  return true;
 }
 
 function confirmDeleteCnyFixedItem(item) {
@@ -783,15 +794,6 @@ function deleteTransactionMemo(transaction) {
 
 function formatDeleteAmount(amount, currency) {
   return currency === "CNY" ? `${moneyCny(amount)} CNY` : `${money(amount)} JPY`;
-}
-
-function isSchoolSyncedTransaction(transaction) {
-  return Boolean(
-    transaction?.created_by_external ||
-    transaction?.external_source_id ||
-    transaction?.external_reference_type ||
-    transaction?.external_reference_id
-  );
 }
 
 function fixedItemAccountLabel(accountId) {

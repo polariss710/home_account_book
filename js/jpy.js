@@ -11,7 +11,7 @@ import {
   updateJpyTransaction,
 } from "#supabase";
 import { setActionMessage } from "#ui";
-import { emptyRow, escapeHtml, formData, money, toNumber } from "#utils";
+import { emptyRow, escapeHtml, formData, isExternalTransaction, money, moneyByCurrency, toNumber } from "#utils";
 
 export function bindJpyEvents() {
   els.jpyTransactionForm.elements.transaction_type.addEventListener("change", updateTransferAccountControl);
@@ -27,6 +27,10 @@ export function bindJpyEvents() {
     const form = event.currentTarget;
     const data = formData(form);
     const existingTransaction = findJpyTransaction(appState.editingJpyTransactionId);
+    if (isExternalTransaction(existingTransaction)) {
+      setActionMessage("外部系统同步流水不可编辑。", "error");
+      return;
+    }
     const transactionType = existingTransaction?.transaction_type || data.transaction_type;
     const transferAccountId = transactionType === "transfer" ? data.transfer_account_id : null;
     const isFixedTransfer = transactionType === "fixed_in" || transactionType === "fixed_out";
@@ -142,7 +146,7 @@ function updateTransferAccountControl() {
 
 function renderJpyTransactions() {
   const transactions = filteredTransactions();
-  els.jpyTransactionRows.innerHTML = transactions.length ? transactions.map(transactionRow).join("") : emptyRow(8);
+  els.jpyTransactionRows.innerHTML = transactions.length ? transactions.map(renderJpyTransactionRow).join("") : emptyRow(8);
   bindTransactionControls();
 }
 
@@ -181,14 +185,14 @@ function resetFilters() {
   renderJpyTransactions();
 }
 
-function transactionRow(item) {
+export function renderJpyTransactionRow(item) {
   const fixedTransfer = isFixedTransfer(item);
   const fixedAdvance = isFixedAdvance(item);
   const fxLinked = Boolean(item.linked_cny_transaction_id);
-  const schoolSynced = Boolean(item.created_by_external);
+  const externalLocked = isExternalTransaction(item);
   const sourceFx = fxLinked && item.transaction_type === "fx_out";
   const generatedFx = fxLinked && item.transaction_type === "fx_in";
-  const locked = fixedTransfer || fixedAdvance || generatedFx || sourceFx;
+  const locked = fixedTransfer || fixedAdvance || generatedFx || sourceFx || externalLocked;
   const targetAccountName = sourceFx || generatedFx ? item.linked_cny_account_name : item.transfer_account_name;
   const amountCell = locked
     ? money(item.amount || 0)
@@ -199,7 +203,9 @@ function transactionRow(item) {
   const noteCell = locked
     ? escapeHtml(item.note || "")
     : `<input class="table-input" data-jpy-note="${item.id}" value="${escapeHtml(item.note || "")}" />`;
-  const controls = generatedFx
+  const controls = externalLocked
+    ? ""
+    : generatedFx
     ? `<span class="badge settled">购汇生成</span>`
     : fixedAdvance
       ? `<span class="badge settled">固定垫付生成</span>`
@@ -218,7 +224,7 @@ function transactionRow(item) {
         <button class="danger-button compact-button" data-delete-jpy="${item.id}" type="button">删除</button>
       </div>
     `;
-  const sourceBadge = schoolSynced ? `<span class="badge settled" title="School 收支确认请求同步生成">School同步生成</span>` : "";
+  const sourceBadge = externalLocked ? `<span class="badge settled" title="外部系统同步生成，不可修改、复制或删除">School同步生成</span>` : "";
   return `
     <tr>
       <td>${escapeHtml(item.transacted_at)}</td>
@@ -273,6 +279,10 @@ function bindTransactionControls() {
 async function saveTransactionPatch(id, patch) {
   const transaction = (appState.jpyPage?.transactions || []).find((item) => item.id === id);
   if (!transaction) return;
+  if (isExternalTransaction(transaction)) {
+    setActionMessage("外部系统同步流水不可编辑。", "error");
+    return;
+  }
   const result = await updateJpyTransaction({ ...transaction, ...patch });
   if (!result) return;
   await refreshAfterJpyMutation(result.message || "日元流水已更新。", result.reset_expense_status ? "error" : "success");
@@ -329,6 +339,11 @@ function confirmDeleteJpyTransaction(transaction) {
     return window.confirm("确定删除这条日元支出记录吗？此操作无法撤销。");
   }
 
+  if (isExternalTransaction(transaction)) {
+    setActionMessage("外部系统同步流水不可删除；如需纠错，请使用独立冲正流程。", "error");
+    return false;
+  }
+
   const linkedMessages = [];
   if (isFixedTransfer(transaction)) {
     linkedMessages.push("这笔固定调拨会同步删除固定收支中的对应记录，并可能让已付固定支出恢复为未付。");
@@ -346,11 +361,7 @@ function confirmDeleteJpyTransaction(transaction) {
     return false;
   }
 
-  if (!isSchoolSyncedTransaction(transaction)) {
-    return true;
-  }
-
-  return window.confirm("这条流水由 School 收入/支出记录同步生成。删除后可能导致 School 与 Cash 状态不一致。请再次确认：我理解这可能造成 School/Cash 状态不一致，仍要删除。");
+  return true;
 }
 
 async function refreshAfterJpyMutation(message, type) {
@@ -413,14 +424,5 @@ function deleteTransactionMemo(transaction) {
 }
 
 function formatDeleteAmount(amount, currency) {
-  return currency === "CNY" ? `${amount} CNY` : `${money(amount)} JPY`;
-}
-
-function isSchoolSyncedTransaction(transaction) {
-  return Boolean(
-    transaction?.created_by_external ||
-    transaction?.external_source_id ||
-    transaction?.external_reference_type ||
-    transaction?.external_reference_id
-  );
+  return `${moneyByCurrency(amount, currency)} ${currency}`;
 }

@@ -9,7 +9,7 @@ import {
   rejectExternalTransactionRequest,
   syncCashRequestResultToSchool,
 } from "#supabase";
-import { emptyRow, escapeHtml, money } from "#utils";
+import { emptyRow, escapeHtml, money, moneyByCurrency } from "#utils";
 
 let renderPage = () => {};
 let teacherWageGroupContainer = null;
@@ -42,7 +42,7 @@ function requestRow(request) {
       <td>${escapeHtml(sourceLabel(request.external_source))}</td>
       <td>${escapeHtml(requestTypeLabel(request))}</td>
       <td>${escapeHtml(transactionTypeLabel(request.transaction_type))}</td>
-      <td>${money(request.amount || 0)} ${escapeHtml(request.currency || "JPY")}</td>
+      <td>${moneyByCurrency(request.amount || 0, request.currency || "JPY")} ${escapeHtml(request.currency || "JPY")}</td>
       <td>${escapeHtml(request.account_name || request.account_id || "-")}</td>
       <td>${escapeHtml(formatDateTime(request.requested_at))}</td>
       <td>
@@ -66,11 +66,11 @@ function renderReferenceSummary(request) {
       legacyTitle,
       payload.original_amount_jpy ? `JPY工资总额 ${money(payload.original_amount_jpy)}` : "",
       payload.actual_received_amount && payload.actual_received_currency
-        ? `实际到账 ${money(payload.actual_received_amount)} ${payload.actual_received_currency}`
+        ? `实际到账 ${moneyByCurrency(payload.actual_received_amount, payload.actual_received_currency)} ${payload.actual_received_currency}`
         : "",
       payload.school_amount_jpy ? `School成本 ${money(payload.school_amount_jpy)} JPY` : "",
       payload.payment_amount && payload.payment_currency
-        ? `实际支付 ${money(payload.payment_amount)} ${payload.payment_currency}`
+        ? `实际支付 ${moneyByCurrency(payload.payment_amount, payload.payment_currency)} ${payload.payment_currency}`
         : "",
     ].filter(Boolean).join(" / ");
 
@@ -114,10 +114,10 @@ function renderReferenceSummary(request) {
     ].filter(Boolean).join(" / ");
     const details = [
       payload.original_amount && payload.original_currency
-        ? `原始金额 ${money(payload.original_amount)} ${payload.original_currency}`
+        ? `原始金额 ${moneyByCurrency(payload.original_amount, payload.original_currency)} ${payload.original_currency}`
         : "",
       payload.actual_payment_amount && payload.actual_payment_currency
-        ? `实际支付 ${money(payload.actual_payment_amount)} ${payload.actual_payment_currency}`
+        ? `实际支付 ${moneyByCurrency(payload.actual_payment_amount, payload.actual_payment_currency)} ${payload.actual_payment_currency}`
         : "",
     ].filter(Boolean).join(" / ");
     const meta = [
@@ -319,7 +319,7 @@ function teacherWageGroupCard(group) {
       <div class="teacher-wage-group-summary">
         <div class="compact-stack">
           <strong>${escapeHtml(group.teacherName)} / ${escapeHtml(group.wageMonth)} / ${escapeHtml(group.currency)}</strong>
-          <span>合计：${escapeHtml(group.currency)} ${money(group.amount)} · 明细：${group.requests.length} 条 · 当前状态：待确认</span>
+          <span>合计：${escapeHtml(group.currency)} ${moneyByCurrency(group.amount, group.currency)} · 明细：${group.requests.length} 条 · 当前状态：待确认</span>
           ${renderBusinessSummary(group)}
         </div>
         <div class="button-row teacher-wage-group-actions">
@@ -339,7 +339,7 @@ function teacherWageGroupCard(group) {
 
 function renderBusinessSummary(group) {
   const parts = group.requests.map((item) => (
-    `${item.businessName || "业务归属未提供"}：${item.currency} ${money(item.amount)}`
+    `${item.businessName || "业务归属未提供"}：${item.currency} ${moneyByCurrency(item.amount, item.currency)}`
   ));
   return `<span>${escapeHtml(parts.join(" / "))}</span>`;
 }
@@ -347,7 +347,7 @@ function renderBusinessSummary(group) {
 function teacherWageGroupDetail(item) {
   return `
     <div class="teacher-wage-group-detail">
-      <strong>${escapeHtml(item.businessName || "业务归属未提供")}：${escapeHtml(item.currency)} ${money(item.amount)}</strong>
+      <strong>${escapeHtml(item.businessName || "业务归属未提供")}：${escapeHtml(item.currency)} ${moneyByCurrency(item.amount, item.currency)}</strong>
       <span>School expense：${escapeHtml(item.expenseId || "-")}</span>
       <span>Cash request：${escapeHtml(item.request.id || "-")} / ${escapeHtml(item.request.status || "-")}</span>
       ${item.note ? `<span>${escapeHtml(item.note)}</span>` : ""}
@@ -362,7 +362,7 @@ function bindTeacherWageGroupActions() {
       const group = findTeacherWageGroup(button.dataset.approveTeacherWageGroup);
       if (!group) return;
       const confirmed = window.confirm(
-        `确认将 ${group.teacherName} ${group.wageMonth} 老师工资 ${group.currency} ${money(group.amount)} 的 ${group.requests.length} 条 Cash 请求全部标记为已确认？\n` +
+        `确认将 ${group.teacherName} ${group.wageMonth} 老师工资 ${group.currency} ${moneyByCurrency(group.amount, group.currency)} 的 ${group.requests.length} 条 Cash 请求全部标记为已确认？\n` +
         "请仅在已经完成实际转账后继续。系统会逐条确认这些 Cash 请求。",
       );
       if (!confirmed) return;
@@ -378,7 +378,7 @@ function bindTeacherWageGroupActions() {
       const reason = window.prompt("请输入拒绝理由，将用于本组所有 Cash 请求。", "");
       if (reason === null) return;
       const confirmed = window.confirm(
-        `确认将 ${group.teacherName} ${group.wageMonth} 老师工资 ${group.currency} ${money(group.amount)} 的 ${group.requests.length} 条 Cash 请求全部拒绝？\n` +
+        `确认将 ${group.teacherName} ${group.wageMonth} 老师工资 ${group.currency} ${moneyByCurrency(group.amount, group.currency)} 的 ${group.requests.length} 条 Cash 请求全部拒绝？\n` +
         "系统会逐条拒绝这些 Cash 请求，并逐条回写 School。",
       );
       if (!confirmed) return;
@@ -575,13 +575,13 @@ function incomeCategoryLabel(category) {
 function originalAmountLabel(payload) {
   const amount = firstValue(payload.original_amount, payload.amount);
   const currency = firstValue(payload.original_currency, payload.currency);
-  return amount && currency ? `School 原始金额：${currency} ${money(amount)}` : "";
+  return amount && currency ? `School 原始金额：${currency} ${moneyByCurrency(amount, currency)}` : "";
 }
 
 function actualIncomeAmountLabel(payload) {
   const amount = firstValue(payload.actual_received_amount, payload.payment_amount);
   const currency = firstValue(payload.actual_received_currency, payload.payment_currency, payload.currency);
-  return amount && currency ? `实际到账：${currency} ${money(amount)}` : "";
+  return amount && currency ? `实际到账：${currency} ${moneyByCurrency(amount, currency)}` : "";
 }
 
 function incomeExchangeRateLabel(payload) {
