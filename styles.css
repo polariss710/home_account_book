@@ -912,6 +912,10 @@ tbody tr:hover td {
 @media (max-width: 960px) {
   .app-shell {
     grid-template-columns: 1fr;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
   }
 
   .sidebar {
@@ -923,6 +927,9 @@ tbody tr:hover td {
     border-bottom: 1px solid var(--line);
     padding: 14px;
     box-shadow: var(--shadow-soft);
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .brand {
@@ -937,6 +944,8 @@ tbody tr:hover td {
     border: 1px solid var(--line);
     border-radius: 8px;
     background: #f4f7f5;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .nav-button {
