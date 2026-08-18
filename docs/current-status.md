@@ -1,12 +1,13 @@
 # Current Status
 
-Status date: 2026-08-02
+Status date: 2026-08-19
 
 This document keeps the current Cash System implementation checkpoint, safety notes, and active backlog.
 
 ## Current State
 
 - Cash System is a static Supabase-backed household ledger using `home_` tables.
+- Phase 2A-P is deployed: fixed templates, fixed month items, JPY/CNY transactions, fixed advances, and external transaction requests now carry `accounting_scope` with the only allowed values `household` and `school`. The column is `NOT NULL` with defensive default `household`; School external requests and transactions are database-forced to `school`.
 - Normal JPY/CNY account and transaction UI remains unchanged.
 - External JPY/CNY transaction request infrastructure for aozora school now accepts new requests only from canonical School income and expense records: `school_income_records / income_received` and `school_expense_records / expense_paid`. Historical `tuition_income_received` income-record requests remain compatible.
 - Legacy business-module direct request families are deprecated for new creation: `school_payment_requests / teacher_wage_payment_confirm`, `school_payment_requests / teacher_wage_payment_reverse`, and `school_part_time_work_income_requests / part_time_work_income_received`. Existing historical rows remain readable for audit.
@@ -21,6 +22,16 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - No direct School DB writes, School-side Edge Function deployment, background worker, or automatic scheduler is implemented in this repository.
 
 ## Latest Update
+
+2026-08-19 Phase 2A-P accounting scope production migration:
+
+- Added `accounting_scope text NOT NULL DEFAULT 'household'` and an allowed-values CHECK to `home_fixed_templates`, `home_fixed_month_items`, `home_jpy_transactions`, `home_cny_transactions`, `home_fixed_advance_payments`, and `home_external_transaction_requests`. The field was intentionally not added to accounts or payment channels because those can carry both scopes.
+- Deterministic production backfill completed: fixed templates `26 household / 0 school`; fixed month items `70 / 0`; JPY transactions `31 / 4`; CNY transactions `37 / 38`; fixed advances `2 / 0`; external requests `0 / 50`. All target rows are classified and no name/note inference was used.
+- Installed `home_assign_accounting_scope()` as postgres-owned, security invoker, fixed `search_path = pg_catalog, public`, with direct execute revoked from PUBLIC, anon, authenticated, and service_role. Four enabled `BEFORE INSERT` triggers provide old-client household compatibility, fixed template-to-month inheritance, linked CNY/FX inheritance, and database-forced School external scope.
+- Added the invariant that `external_source = 'aozora_school'` requires `accounting_scope = 'school'` on JPY/CNY transactions and external requests. Existing CNY/JPY external immutable triggers remain enabled and continue to reject updates/deletes.
+- Final rollback precheck and committed migration both passed the isolated 2099 fixture matrix. Commit-time fixture residue was 0. Postcommit row counts, primary-key sets, all pre-existing business-field fingerprints, amount totals, account balances, fixed statuses/payment groups, 16 existing RPC definitions/ACLs, and existing reader amount/balance outputs matched the pre-migration baseline.
+- No HTML/CSS/JS, reader definition, RPC signature, balance algorithm, annual-statistics rule, fixed settlement, fixed advance, or School V2 behavior changed. UI version remains `20260802-external-transaction-immutable-1`. Phase 2B scope UI/filtering and Phase 3/4 work have not started.
+- Pre-existing audit fact retained without data correction: request `475b2b7f-2e86-415f-87a0-580759fb50a4` has request date `2026-05-31`, while linked CNY transaction `f8bec66d-e03c-45aa-9eef-329ac604ca54` has transaction date `2026-06-15`. Reference, event, idempotency, currency, amount, account, type, and transaction ID remain canonically matched.
 
 2026-08-02 external transaction immutability hardening:
 
@@ -56,7 +67,7 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - Cash UI renamed the former `外部待确认` entry to `收支确认`; the page title is now `School 收支确认请求`.
 - Pending rows are presented as School confirmation requests, while canonical income rows show `收入确认 / School 收入记录`, canonical expense rows show `支出确认 / School 支出记录`, and legacy rows remain `旧链路记录`.
 - School-originated CNY/JPY transaction rows now show a compact `School同步生成` badge. Cash still keeps ordinary manual maintenance capabilities; the badge is a source hint, not a hard edit/delete lock.
-- The real 2026-05 诺应教育 canonical income request `475b2b7f-2e86-415f-87a0-580759fb50a4` is approved and generated CNY transaction `f8bec66d-e03c-45aa-9eef-329ac604ca54`, amount `3,670 CNY`, account `余额宝`, transaction date `2026-05-31`. It belongs to the `2026-05` RMB transaction view. The three verified tuition CNY rows have transaction date `2026-06-15` and belong to the `2026-06` RMB transaction view.
+- The real 2026-05 诺应教育 canonical income request `475b2b7f-2e86-415f-87a0-580759fb50a4` is approved and linked to CNY transaction `f8bec66d-e03c-45aa-9eef-329ac604ca54`, amount `3,670 CNY`, account `余额宝`. The request date is `2026-05-31`; the current immutable transaction date is `2026-06-15`, so it appears in the `2026-06` RMB transaction view. This pre-existing date difference was documented during Phase 2A-P and was not corrected.
 
 2026-06-16 finalized canonical School/Cash flow:
 

@@ -1,16 +1,32 @@
 # System Map
 
-Status date: 2026-08-02
+Status date: 2026-08-19
 
 ## Core Tables
 
 - `home_accounts`: account master data for JPY/CNY accounts, including `allow_school_requests` for School-originated external request eligibility.
 - `home_payment_channels`: fixed item payment channel grouping, not a balance ledger.
-- `home_jpy_transactions`: JPY ledger movements.
-- `home_cny_transactions`: CNY ledger movements.
-- `home_fixed_templates`: recurring fixed item templates.
-- `home_fixed_month_items`: generated monthly fixed items.
-- `home_external_transaction_requests`: Cash-owned pending request table for aozora school external transaction requests. Pending/rejected rows do not affect Cash balances.
+- `home_jpy_transactions`: JPY ledger movements with row-level `accounting_scope`.
+- `home_cny_transactions`: CNY ledger movements with row-level `accounting_scope`.
+- `home_fixed_templates`: recurring fixed item templates with `accounting_scope`.
+- `home_fixed_month_items`: generated monthly fixed items that inherit template `accounting_scope` at insertion.
+- `home_fixed_advance_payments`: grouped JPY fixed advances; current existing and legacy-client records are household.
+- `home_external_transaction_requests`: Cash-owned pending request table for aozora school external transaction requests. Pending/rejected rows do not affect Cash balances; School requests are database-forced to `accounting_scope = school`.
+
+## Accounting Scope Boundary
+
+Phase 2A-P installs one shared accounting ownership field on the six business-record tables above:
+
+- `accounting_scope text NOT NULL DEFAULT 'household'`
+- allowed values: `household`, `school`
+- School external source invariant: `external_source = 'aozora_school'` requires `school`
+- existing fixed templates/month items/advances are household
+- existing non-School JPY/CNY transactions are household
+- existing School external requests and linked transactions are school
+
+`home_assign_accounting_scope()` and four enabled `BEFORE INSERT` triggers enforce old-client defaults, external School forcing, fixed-template inheritance, CNY fixed linkage, and FX linked-leg inheritance. The function is security invoker with fixed `search_path = pg_catalog, public`; only postgres retains direct execute.
+
+Scope is not stored on `home_accounts` or `home_payment_channels`. It does not replace transaction type, external source metadata, account balance movement, or business categories. Phase 2B display/filter/entry changes and Phase 3 mixed-scope advance rules are not implemented.
 
 ## Core RPCs
 

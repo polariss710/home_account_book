@@ -1,15 +1,28 @@
 # Module Status
 
-Status date: 2026-06-16
+Status date: 2026-08-19
 
 | Module | Current State | Next Priority |
 | --- | --- | --- |
 | JPY accounts | Existing UI/RPC behavior unchanged; `allow_school_requests` marks School-eligible accounts | Keep ordinary account management stable |
-| JPY transactions | Existing ordinary flows unchanged; external JPY DB/RPC insert support added and now requires School-eligible active JPY accounts | Keep `home_create_external_jpy_transaction` as approval-time primitive while aligning policy coverage |
-| CNY transactions | Existing ordinary flows unchanged; external CNY approval primitive supports canonical School income/expense requests for School-eligible active CNY accounts | Keep ordinary CNY flows stable |
-| Fixed templates/month items | Unchanged | Keep fixed-item linkage separate |
-| FX linkage | Unchanged | Keep FX linkage separate |
+| JPY transactions | Phase 2A-P `accounting_scope` deployed: 31 household / 4 school; ordinary flows and transaction types unchanged; external School inserts are DB-forced to school | Phase 2B may expose labels/filters without changing balances or statistics |
+| CNY transactions | Phase 2A-P `accounting_scope` deployed: 37 household / 38 school; linked fixed rows inherit item scope; external School inserts are DB-forced to school | Phase 2B may expose labels/filters without changing balances or statistics |
+| Fixed templates/month items | Scope contract deployed: existing templates 26 household and month items 70 household; generated items inherit template scope and sync does not rewrite historical scope | Add Phase 2B scope input/display only after a separate plan |
+| FX linkage | Old calls remain household; the second linked leg inherits the first leg scope | Keep both legs atomic when Phase 2B later accepts a selected scope |
 | School 收支确认 | Cash linkage v2 pending request table/RPC/UI implemented. New request creation is restricted to canonical School income/expense records: `school_income_records / income_received` and `school_expense_records / expense_paid`; compatible `tuition_income_received` income-record history remains supported. Legacy teacher-wage payment requests and direct part-time-work income requests are historical read-only paths only. | Keep canonical flow stable; any legacy removal requires separate historical audit |
+
+## Accounting Scope Contract
+
+Phase 2A-P was committed to production on 2026-08-19.
+
+- Allowed values: `household`, `school`.
+- Contract: `text NOT NULL DEFAULT 'household'` plus allowed-values CHECK.
+- Tables: `home_fixed_templates`, `home_fixed_month_items`, `home_jpy_transactions`, `home_cny_transactions`, `home_fixed_advance_payments`, and `home_external_transaction_requests`.
+- Accounts and payment channels intentionally have no scope because one account/channel can carry both.
+- `external_source = 'aozora_school'` is constrained to `school`; old frontend calls that omit scope remain `household`.
+- `home_assign_accounting_scope()` is postgres-owned, security invoker, fixed to `pg_catalog, public`, and has no direct PUBLIC/anon/authenticated/service_role execute grant. Four enabled insert triggers invoke it automatically.
+- Existing balances, ordinary income/expense definitions, transfer/FX/investment exclusions, fixed settlement, advance/repayment, and annual statistics remain unchanged.
+- Phase 2B UI/reader filtering has not started. Mixed-scope fixed payment-group advance behavior remains deferred to Phase 3; Phase 4 has not started.
 
 ## Final System Boundary
 
