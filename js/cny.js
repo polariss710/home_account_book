@@ -26,6 +26,12 @@ import { setActionMessage } from "#ui";
 import { emptyRow, escapeHtml, formData, isExternalTransaction, moneyCny, toNumber } from "#utils";
 
 export function bindCnyEvents() {
+  document.getElementById("cnyScopeFilter").addEventListener("change", (event) => {
+    appState.cnyAccountingScope = event.currentTarget.value;
+    renderFixedItems();
+    renderFixedTemplates();
+    renderTransactions();
+  });
   els.cnyTransactionForm.elements.transaction_type.addEventListener("change", updateTransferAccountControl);
   els.cnyTransactionCancelBtn.addEventListener("click", resetTransactionForm);
   els.cnyTransactionForm.addEventListener("submit", saveTransaction);
@@ -218,13 +224,15 @@ function renderFilterControls() {
   els.cnyFilterForm.elements.date_to.value = filters.dateTo || "";
   els.cnyFilterForm.elements.transaction_type.value = filters.transactionType || "";
   els.cnyFilterAccountSelect.value = filters.accountId || "";
+  document.getElementById("cnyScopeFilter").value = appState.cnyAccountingScope;
 }
 
 function renderFixedItems() {
-  const incomeItems = appState.cnyFixedPage?.income_items || [];
-  const expenseItems = appState.cnyFixedPage?.expense_items || [];
-  els.cnyFixedIncomeRows.innerHTML = incomeItems.length ? incomeItems.map(fixedItemRow).join("") : emptyRow(7);
-  els.cnyFixedExpenseRows.innerHTML = expenseItems.length ? expenseItems.map(fixedItemRow).join("") : emptyRow(7);
+  const selectedScope = appState.cnyAccountingScope;
+  const incomeItems = (appState.cnyFixedPage?.income_items || []).filter((item) => matchesAccountingScope(item, selectedScope, "CNY fixed income"));
+  const expenseItems = (appState.cnyFixedPage?.expense_items || []).filter((item) => matchesAccountingScope(item, selectedScope, "CNY fixed expense"));
+  els.cnyFixedIncomeRows.innerHTML = incomeItems.length ? incomeItems.map(fixedItemRow).join("") : scopeEmptyRow(8, selectedScope);
+  els.cnyFixedExpenseRows.innerHTML = expenseItems.length ? expenseItems.map(fixedItemRow).join("") : scopeEmptyRow(8, selectedScope);
   bindFixedItemControls();
   bindBulkFixedItemControls();
 }
@@ -238,6 +246,7 @@ function fixedItemRow(item) {
       <td>${escapeHtml(item.due_date || "-")}</td>
       <td>${fixedStatusSelect(item)}</td>
       <td><input class="table-input" data-cny-fixed-note="${item.id}" value="${escapeHtml(item.note || "")}" /></td>
+      <td>${accountingScopeBadge(item, "CNY fixed item")}</td>
       <td><button class="danger-button compact-button" data-delete-cny-fixed="${item.id}" type="button">删除</button></td>
     </tr>
   `;
@@ -324,20 +333,21 @@ function bindBulkFixedItemControls() {
 }
 
 function renderFixedTemplates() {
-  const templates = appState.cnyFixedPage?.templates || [];
-  const stoppedTemplates = appState.cnyFixedPage?.stopped_templates || [];
+  const selectedScope = appState.cnyAccountingScope;
+  const templates = (appState.cnyFixedPage?.templates || []).filter((item) => matchesAccountingScope(item, selectedScope, "CNY fixed template"));
+  const stoppedTemplates = (appState.cnyFixedPage?.stopped_templates || []).filter((item) => matchesAccountingScope(item, selectedScope, "CNY stopped fixed template"));
   els.cnyFixedTemplateListTitle.textContent = `人民币固定模板（${templates.length}）`;
   els.cnyFixedTemplateRows.hidden = !appState.cnyFixedTemplatesExpanded;
   els.toggleCnyFixedTemplatesBtn.textContent = appState.cnyFixedTemplatesExpanded ? "收起" : "展开";
   els.cnyFixedTemplateRows.innerHTML = appState.cnyFixedTemplatesExpanded
-    ? templates.map((item) => fixedTemplateRow(item, "active")).join("") || `<div class="empty-state">暂无人民币固定模板</div>`
+    ? templates.map((item) => fixedTemplateRow(item, "active")).join("") || scopeEmptyState(selectedScope, "暂无人民币固定模板")
     : "";
 
   els.cnyStoppedTemplateTitle.textContent = `停止生成的固定模板（${stoppedTemplates.length}）`;
   els.cnyStoppedTemplateRows.hidden = !appState.cnyStoppedTemplatesExpanded;
   els.toggleCnyStoppedTemplatesBtn.textContent = appState.cnyStoppedTemplatesExpanded ? "收起" : "展开";
   els.cnyStoppedTemplateRows.innerHTML = appState.cnyStoppedTemplatesExpanded
-    ? stoppedTemplates.map((item) => fixedTemplateRow(item, "stopped")).join("") || `<div class="empty-state">暂无停止生成的人民币固定模板</div>`
+    ? stoppedTemplates.map((item) => fixedTemplateRow(item, "stopped")).join("") || scopeEmptyState(selectedScope, "暂无停止生成的人民币固定模板")
     : "";
 
   els.toggleCnyFixedTemplatesBtn.onclick = () => {
@@ -361,7 +371,7 @@ function fixedTemplateRow(template, mode) {
   return `
     <div class="settings-item">
       <div>
-        <strong>${escapeHtml(template.name)}</strong>
+        <strong>${escapeHtml(template.name)}</strong> ${accountingScopeBadge(template, "CNY fixed template")}
         <span>${labelDirection(template.direction)} · ${escapeHtml(account?.name || "未选账户")} · ${moneyCny(template.default_amount || 0)} · 支付日 ${template.due_day || "-"}</span>
       </div>
       <div class="button-row">
@@ -430,13 +440,16 @@ function updateTransferAccountControl() {
 
 function renderTransactions() {
   const transactions = filteredTransactions();
-  els.cnyTransactionRows.innerHTML = transactions.length ? transactions.map(renderCnyTransactionRow).join("") : emptyRow(8);
+  els.cnyTransactionRows.innerHTML = transactions.length
+    ? transactions.map(renderCnyTransactionRow).join("")
+    : scopeEmptyRow(9, appState.cnyAccountingScope);
   bindTransactionControls();
 }
 
 function filteredTransactions() {
   const filters = appState.cnyFilters;
   return (appState.cnyPage?.transactions || []).filter((transaction) => {
+    if (!matchesAccountingScope(transaction, appState.cnyAccountingScope, "CNY transaction")) return false;
     if (filters.dateFrom && transaction.transacted_at < filters.dateFrom) return false;
     if (filters.dateTo && transaction.transacted_at > filters.dateTo) return false;
     if (filters.transactionType && transaction.transaction_type !== filters.transactionType) return false;
@@ -483,6 +496,7 @@ export function renderCnyTransactionRow(item) {
       <td>${locked ? `${moneyCny(item.amount || 0)} CNY` : `<input class="table-input amount-input" data-cny-amount="${item.id}" type="number" step="0.01" value="${toNumber(item.amount).toFixed(2)}" />`}</td>
       <td>${locked ? escapeHtml(item.description || "") : `<input class="table-input" data-cny-description="${item.id}" value="${escapeHtml(item.description || "")}" />`}</td>
       <td>${locked ? escapeHtml(item.note || "") : `<input class="table-input" data-cny-note="${item.id}" value="${escapeHtml(item.note || "")}" />`}</td>
+      <td>${accountingScopeBadge(item, "CNY transaction")}</td>
       <td>${sourceBadge}${controls}</td>
     </tr>
   `;
@@ -538,6 +552,7 @@ function applyFilters(event) {
 }
 
 function resetFilters() {
+  appState.cnyAccountingScope = "all";
   appState.cnyFilters = {
     dateFrom: "",
     dateTo: "",
@@ -545,6 +560,9 @@ function resetFilters() {
     accountId: "",
   };
   els.cnyFilterForm.reset();
+  renderFilterControls();
+  renderFixedItems();
+  renderFixedTemplates();
   renderTransactions();
 }
 
@@ -816,4 +834,40 @@ function cnyGenerationMessage(result) {
 
 function cnyBulkStatusMessage(result) {
   return `${result.message || "人民币固定项状态已批量更新。"} 共 ${Number(result.updated_count || 0)} 条。`;
+}
+
+function matchesAccountingScope(item, selectedScope, context) {
+  const scope = accountingScopeKind(item, context);
+  return selectedScope === "all" || scope === selectedScope;
+}
+
+function accountingScopeBadge(item, context) {
+  const scope = accountingScopeKind(item, context);
+  const labels = {
+    household: "家庭",
+    school: "School",
+    invalid: "归属异常",
+  };
+  return `<span class="scope-badge scope-${scope}">${labels[scope]}</span>`;
+}
+
+function accountingScopeKind(item, context) {
+  const scope = item?.accounting_scope;
+  if (scope === "household" || scope === "school") return scope;
+  console.error("[accounting_scope] Unexpected value in reader record.", {
+    context,
+    id: item?.id || null,
+    accounting_scope: scope,
+  });
+  return "invalid";
+}
+
+function scopeEmptyRow(colspan, selectedScope) {
+  if (selectedScope === "all") return emptyRow(colspan);
+  return `<tr><td colspan="${colspan}" class="empty-state">当前没有符合该账务归属的记录。</td></tr>`;
+}
+
+function scopeEmptyState(selectedScope, defaultMessage) {
+  const message = selectedScope === "all" ? defaultMessage : "当前没有符合该账务归属的记录。";
+  return `<div class="empty-state">${message}</div>`;
 }

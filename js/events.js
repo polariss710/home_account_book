@@ -23,6 +23,11 @@ import {
 import { formData, toNumber } from "#utils";
 
 export function bindEvents() {
+  document.getElementById("fixedScopeFilter").addEventListener("change", (event) => {
+    appState.fixedAccountingScope = event.currentTarget.value;
+    render();
+  });
+
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.addEventListener("click", async () => {
       switchView(button.dataset.view);

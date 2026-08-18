@@ -92,10 +92,17 @@ function renderPendingSummary(metrics) {
 }
 
 function renderMonthItems() {
-  const incomeItems = appState.page?.income_items || [];
-  const expenseSections = appState.page?.expense_sections || [];
-  const expenseItems = appState.page?.expense_items || [];
-  els.incomeItemRows.innerHTML = incomeItems.length ? incomeItems.map(incomeItemRow).join("") : emptyRow(7);
+  const selectedScope = appState.fixedAccountingScope;
+  document.getElementById("fixedScopeFilter").value = selectedScope;
+  const incomeItems = (appState.page?.income_items || []).filter((item) => matchesAccountingScope(item, selectedScope, "JPY fixed income"));
+  const expenseSections = (appState.page?.expense_sections || [])
+    .map((section) => ({
+      ...section,
+      items: (section.items || []).filter((item) => matchesAccountingScope(item, selectedScope, "JPY fixed expense")),
+    }))
+    .filter((section) => section.items.length > 0);
+  const expenseItems = (appState.page?.expense_items || []).filter((item) => matchesAccountingScope(item, selectedScope, "JPY fixed expense"));
+  els.incomeItemRows.innerHTML = incomeItems.length ? incomeItems.map(incomeItemRow).join("") : scopeEmptyRow(8, selectedScope);
   els.expenseItemRows.innerHTML = renderExpenseRows(expenseSections, expenseItems);
   bindMonthItemControls();
 }
@@ -103,7 +110,7 @@ function renderMonthItems() {
 function renderExpenseRows(sections, items) {
   if (sections.length) return sections.map(expenseSectionRows).join("");
   if (items.length) return items.map(expenseItemRow).join("");
-  return emptyRow(8);
+  return scopeEmptyRow(9, appState.fixedAccountingScope);
 }
 
 function incomeItemRow(item) {
@@ -115,6 +122,7 @@ function incomeItemRow(item) {
       <td>${monthItemStatusCell(item)}</td>
       <td>${termLabel(item)}</td>
       <td>${monthItemNoteCell(item)}</td>
+      <td>${accountingScopeBadge(item, "JPY fixed income")}</td>
       <td>${monthItemDeleteCell(item)}</td>
     </tr>
   `;
@@ -130,6 +138,7 @@ function expenseItemRow(item) {
       <td>${monthItemStatusCell(item)}</td>
       <td>${termLabel(item)}</td>
       <td>${monthItemNoteCell(item)}</td>
+      <td>${accountingScopeBadge(item, "JPY fixed expense")}</td>
       <td>${monthItemDeleteCell(item)}</td>
     </tr>
   `;
@@ -158,7 +167,7 @@ function monthItemDeleteCell(item) {
 function expenseSectionRows(section) {
   return `
     <tr class="fixed-expense-section">
-      <td colspan="8">
+      <td colspan="9">
         <div class="fixed-expense-section-summary">
           <div>
             <strong>${escapeHtml(section.payment_group || "未分组")}</strong>
@@ -373,20 +382,21 @@ function confirmDeleteMonthItem(item) {
 }
 
 function renderTemplates() {
-  const templates = appState.page?.templates || [];
-  const stoppedTemplates = appState.page?.stopped_templates || [];
+  const selectedScope = appState.fixedAccountingScope;
+  const templates = (appState.page?.templates || []).filter((item) => matchesAccountingScope(item, selectedScope, "JPY fixed template"));
+  const stoppedTemplates = (appState.page?.stopped_templates || []).filter((item) => matchesAccountingScope(item, selectedScope, "JPY stopped fixed template"));
   els.activeTemplateTitle.textContent = `使用中的固定模板（${templates.length}）`;
   els.templateRows.hidden = !appState.jpyTemplatesExpanded;
   els.toggleActiveTemplatesBtn.textContent = appState.jpyTemplatesExpanded ? "收起" : "展开";
   els.templateRows.innerHTML = appState.jpyTemplatesExpanded
-    ? templates.map((item) => templateRow(item, "active")).join("") || `<div class="empty-state">暂无固定模板</div>`
+    ? templates.map((item) => templateRow(item, "active")).join("") || scopeEmptyState(selectedScope, "暂无固定模板")
     : "";
 
   els.stoppedTemplateTitle.textContent = `停止生成的固定模板（${stoppedTemplates.length}）`;
   els.stoppedTemplateRows.hidden = !appState.stoppedTemplatesExpanded;
   els.toggleStoppedTemplatesBtn.textContent = appState.stoppedTemplatesExpanded ? "收起" : "展开";
   els.stoppedTemplateRows.innerHTML = appState.stoppedTemplatesExpanded
-    ? stoppedTemplates.map((item) => templateRow(item, "stopped")).join("") || `<div class="empty-state">暂无停止生成的模板</div>`
+    ? stoppedTemplates.map((item) => templateRow(item, "stopped")).join("") || scopeEmptyState(selectedScope, "暂无停止生成的模板")
     : "";
 
   els.toggleActiveTemplatesBtn.onclick = () => {
@@ -510,7 +520,7 @@ function templateRow(item, status) {
   return `
     <div class="settings-item">
       <div>
-        <strong>${escapeHtml(item.name)}</strong>
+        <strong>${escapeHtml(item.name)}</strong> ${accountingScopeBadge(item, "JPY fixed template")}
         <span>${statusLabel} · ${labelDirection(item.direction)} · ${labelFixedType(item.fixed_type)} · ${periodLabel} · ${escapeHtml(item.payment_group || "未分组")} · ${money(item.default_amount || 0)}</span>
       </div>
       <div class="button-row">
@@ -524,6 +534,42 @@ function templateRow(item, status) {
 
 function templatePeriodLabel(item) {
   return getFixedTemplateTermStatus(item, appState.activeMonth).label;
+}
+
+function matchesAccountingScope(item, selectedScope, context) {
+  const scope = accountingScopeKind(item, context);
+  return selectedScope === "all" || scope === selectedScope;
+}
+
+function accountingScopeBadge(item, context) {
+  const scope = accountingScopeKind(item, context);
+  const labels = {
+    household: "家庭",
+    school: "School",
+    invalid: "归属异常",
+  };
+  return `<span class="scope-badge scope-${scope}">${labels[scope]}</span>`;
+}
+
+function accountingScopeKind(item, context) {
+  const scope = item?.accounting_scope;
+  if (scope === "household" || scope === "school") return scope;
+  console.error("[accounting_scope] Unexpected value in reader record.", {
+    context,
+    id: item?.id || null,
+    accounting_scope: scope,
+  });
+  return "invalid";
+}
+
+function scopeEmptyRow(colspan, selectedScope) {
+  if (selectedScope === "all") return emptyRow(colspan);
+  return `<tr><td colspan="${colspan}" class="empty-state">当前没有符合该账务归属的记录。</td></tr>`;
+}
+
+function scopeEmptyState(selectedScope, defaultMessage) {
+  const message = selectedScope === "all" ? defaultMessage : "当前没有符合该账务归属的记录。";
+  return `<div class="empty-state">${message}</div>`;
 }
 
 function setTemplateForm(template, mode) {

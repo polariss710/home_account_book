@@ -401,7 +401,7 @@ input[type="month"] {
 
 .filter-form {
   display: grid;
-  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
   padding: 16px 20px;
   border-bottom: 1px solid var(--line);
@@ -426,6 +426,38 @@ input[type="month"] {
 
 .compact-filter select {
   width: 132px;
+}
+
+.scope-filter-panel {
+  box-shadow: var(--shadow-soft);
+}
+
+.scope-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: end;
+  padding: 16px 20px;
+}
+
+.scope-filter-bar label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.scope-filter-bar p,
+.scope-filter-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.scope-filter-note {
+  padding: 0 20px 14px;
+  border-bottom: 1px solid var(--line);
 }
 
 .form-submit {
@@ -654,6 +686,39 @@ tbody tr:hover td {
 .badge.settled {
   background: var(--surface-2);
   color: var(--accent);
+}
+
+.scope-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 23px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.scope-badge.scope-school,
+.settings-item .scope-badge.scope-school {
+  border-color: #b9d8cd;
+  background: #e9f5f0;
+  color: #246457;
+}
+
+.scope-badge.scope-household,
+.settings-item .scope-badge.scope-household {
+  border-color: #d4d9d6;
+  background: #f2f4f3;
+  color: #58625f;
+}
+
+.scope-badge.scope-invalid,
+.settings-item .scope-badge.scope-invalid {
+  border-color: #efb9ae;
+  background: #fff1ed;
+  color: var(--unpaid);
 }
 
 .settings-list {
@@ -906,6 +971,11 @@ tbody tr:hover td {
   .inline-form {
     grid-template-columns: 1fr;
   }
+
+  .scope-filter-bar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
 }
 
 @media (max-width: 560px) {
@@ -992,6 +1062,14 @@ tbody tr:hover td {
   .settings-form,
   .settings-list {
     padding: 14px;
+  }
+
+  .scope-filter-bar {
+    padding: 14px;
+  }
+
+  .scope-filter-note {
+    padding: 0 14px 14px;
   }
 
   .topbar-actions {

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>Accounting scope UI contract</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "#config": "../js/config.js?v=20260819-accounting-scope-ui-1",
+          "#elements": "../js/elements.js?v=20260819-accounting-scope-ui-1",
+          "#state": "../js/state.js?v=20260819-accounting-scope-ui-1",
+          "#supabase": "../js/supabase.js?v=20260819-accounting-scope-ui-1",
+          "#ui": "../js/ui.js?v=20260819-accounting-scope-ui-1",
+          "#utils": "../js/utils.js?v=20260819-accounting-scope-ui-1"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <p id="result">RUNNING</p>
+    <table><tbody id="jpy-school"></tbody></table>
+    <table><tbody id="cny-household"></tbody></table>
+    <table><tbody id="cny-invalid"></tbody></table>
+    <script type="module">
+      import { renderCnyTransactionRow } from "../js/cny.js?v=20260819-accounting-scope-ui-1";
+      import { renderJpyTransactionRow } from "../js/jpy.js?v=20260819-accounting-scope-ui-1";
+
+      const common = {
+        transaction_type: "income",
+        transacted_at: "2026-08-19",
+        account_name: "UI contract account",
+        amount: 100,
+        description: "UI contract only",
+        note: "not persisted",
+      };
+
+      document.querySelector("#jpy-school").innerHTML = renderJpyTransactionRow({
+        ...common,
+        id: "scope-jpy-school",
+        accounting_scope: "school",
+      });
+      document.querySelector("#cny-household").innerHTML = renderCnyTransactionRow({
+        ...common,
+        id: "scope-cny-household",
+        accounting_scope: "household",
+      });
+
+      const originalConsoleError = console.error;
+      const capturedErrors = [];
+      console.error = (...args) => capturedErrors.push(args);
+      document.querySelector("#cny-invalid").innerHTML = renderCnyTransactionRow({
+        ...common,
+        id: "scope-cny-invalid",
+        accounting_scope: "unexpected",
+      });
+      console.error = originalConsoleError;
+
+      const indexHtml = await fetch("../index.html").then((response) => response.text());
+      const checks = [
+        document.querySelector("#jpy-school .scope-school")?.textContent === "School",
+        document.querySelector("#cny-household .scope-household")?.textContent === "家庭",
+        document.querySelector("#cny-invalid .scope-invalid")?.textContent === "归属异常",
+        capturedErrors.length === 1,
+        String(capturedErrors[0]?.[0] || "").includes("accounting_scope"),
+        indexHtml.includes('id="fixedScopeFilter"'),
+        indexHtml.includes('id="jpyScopeFilter"'),
+        indexHtml.includes('id="cnyScopeFilter"'),
+        indexHtml.includes("当前没有符合该账务归属的记录。") === false,
+        indexHtml.includes("归属筛选仅影响明细显示，固定收支合计仍为全部记录。"),
+        indexHtml.includes("归属筛选仅影响明细显示，账户余额仍包含全部真实账户变动。"),
+      ];
+      const passed = checks.filter(Boolean).length;
+      document.querySelector("#result").textContent = passed === checks.length ? `PASS ${passed}/${checks.length}` : `FAIL ${passed}/${checks.length}: ${checks}`;
+    </script>
+  </body>
+</html>

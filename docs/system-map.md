@@ -26,11 +26,13 @@ Phase 2A-P installs one shared accounting ownership field on the six business-re
 
 `home_assign_accounting_scope()` and four enabled `BEFORE INSERT` triggers enforce old-client defaults, external School forcing, fixed-template inheritance, CNY fixed linkage, and FX linked-leg inheritance. The function is security invoker with fixed `search_path = pg_catalog, public`; only postgres retains direct execute.
 
-Scope is not stored on `home_accounts` or `home_payment_channels`. It does not replace transaction type, external source metadata, account balance movement, or business categories. Phase 2B display/filter/entry changes and Phase 3 mixed-scope advance rules are not implemented.
+Scope is not stored on `home_accounts` or `home_payment_channels`. It does not replace transaction type, external source metadata, account balance movement, or business categories. Phase 2B1 display/detail filtering is implemented without reader filter parameters: each module filters its existing page JSON in memory while database totals and balances stay all-record. Phase 2B2 entry changes and Phase 3 mixed-scope advance rules are not implemented.
 
 ## Core RPCs
 
-- `home_get_jpy_account_page(text)`: reads JPY accounts, balances, and month transactions.
+- `home_get_fixed_month_page(text,text)`: reads fixed metrics, settlement, groups, items, templates, accounts, and channels; item/template objects explicitly return `accounting_scope`.
+- `home_get_jpy_account_page(text)`: reads JPY accounts, balances, and month transactions; transaction objects explicitly return `accounting_scope`.
+- `home_get_cny_account_page(text)`: reads CNY accounts, balances, and month transactions; transaction objects explicitly return `accounting_scope`.
 - `home_update_jpy_transaction(...)`: updates ordinary JPY transactions.
 - `home_delete_jpy_transaction(uuid)`: deletes ordinary JPY transactions.
 - `home_create_external_jpy_transaction(...)`: creates idempotent external-source JPY transactions for guarded aozora school linkages after Cash approval.

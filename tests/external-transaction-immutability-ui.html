@@ -6,12 +6,12 @@
     <script type="importmap">
       {
         "imports": {
-          "#config": "../js/config.js",
-          "#elements": "../js/elements.js",
-          "#state": "../js/state.js",
-          "#supabase": "../js/supabase.js",
-          "#ui": "../js/ui.js",
-          "#utils": "../js/utils.js"
+          "#config": "../js/config.js?v=20260819-accounting-scope-ui-1",
+          "#elements": "../js/elements.js?v=20260819-accounting-scope-ui-1",
+          "#state": "../js/state.js?v=20260819-accounting-scope-ui-1",
+          "#supabase": "../js/supabase.js?v=20260819-accounting-scope-ui-1",
+          "#ui": "../js/ui.js?v=20260819-accounting-scope-ui-1",
+          "#utils": "../js/utils.js?v=20260819-accounting-scope-ui-1"
         }
       }
     </script>
@@ -23,8 +23,8 @@
     <table><tbody id="jpy-external"></tbody></table>
     <table><tbody id="jpy-manual"></tbody></table>
     <script type="module">
-      import { renderCnyTransactionRow } from "../js/cny.js";
-      import { renderJpyTransactionRow } from "../js/jpy.js";
+      import { renderCnyTransactionRow } from "../js/cny.js?v=20260819-accounting-scope-ui-1";
+      import { renderJpyTransactionRow } from "../js/jpy.js?v=20260819-accounting-scope-ui-1";
 
       const common = {
         transaction_type: "income",
@@ -33,12 +33,14 @@
         amount: 1120.50,
         description: "codex-test UI only",
         note: "not persisted",
+        accounting_scope: "household",
       };
       document.querySelector("#cny-external").innerHTML = renderCnyTransactionRow({
         ...common,
         id: "ui-external-cny",
         created_by_external: false,
         external_source: "aozora_school",
+        accounting_scope: "school",
       });
       document.querySelector("#cny-manual").innerHTML = renderCnyTransactionRow({
         ...common,
@@ -49,6 +51,7 @@
         ...common,
         id: "ui-external-jpy",
         created_by_external: true,
+        accounting_scope: "school",
       });
       document.querySelector("#jpy-manual").innerHTML = renderJpyTransactionRow({
         ...common,

@@ -16,6 +16,9 @@ export const appState = {
   editingAccountId: null,
   editingCnyAccountId: null,
   editingCnyTemplateId: null,
+  fixedAccountingScope: "all",
+  jpyAccountingScope: "all",
+  cnyAccountingScope: "all",
   jpyFilters: {
     dateFrom: "",
     dateTo: "",

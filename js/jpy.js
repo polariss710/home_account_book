@@ -122,6 +122,7 @@ function renderJpyFilterControls() {
   els.jpyFilterForm.elements.date_to.value = filters.dateTo || "";
   els.jpyFilterForm.elements.transaction_type.value = filters.transactionType || "";
   els.jpyFilterAccountSelect.value = filters.accountId || "";
+  document.getElementById("jpyScopeFilter").value = appState.jpyAccountingScope;
 }
 
 function updateTransferAccountControl() {
@@ -146,13 +147,16 @@ function updateTransferAccountControl() {
 
 function renderJpyTransactions() {
   const transactions = filteredTransactions();
-  els.jpyTransactionRows.innerHTML = transactions.length ? transactions.map(renderJpyTransactionRow).join("") : emptyRow(8);
+  els.jpyTransactionRows.innerHTML = transactions.length
+    ? transactions.map(renderJpyTransactionRow).join("")
+    : scopeEmptyRow(9, appState.jpyAccountingScope);
   bindTransactionControls();
 }
 
 function filteredTransactions() {
   const filters = appState.jpyFilters;
   return (appState.jpyPage?.transactions || []).filter((transaction) => {
+    if (!matchesAccountingScope(transaction, appState.jpyAccountingScope, "JPY transaction")) return false;
     if (filters.dateFrom && transaction.transacted_at < filters.dateFrom) return false;
     if (filters.dateTo && transaction.transacted_at > filters.dateTo) return false;
     if (filters.transactionType && transaction.transaction_type !== filters.transactionType) return false;
@@ -170,10 +174,12 @@ function applyFilters(event) {
     transactionType: data.transaction_type,
     accountId: data.account_id,
   };
+  appState.jpyAccountingScope = data.accounting_scope;
   renderJpyTransactions();
 }
 
 function resetFilters() {
+  appState.jpyAccountingScope = "all";
   appState.jpyFilters = {
     dateFrom: "",
     dateTo: "",
@@ -234,6 +240,7 @@ export function renderJpyTransactionRow(item) {
       <td>${amountCell}</td>
       <td>${descriptionCell}</td>
       <td>${noteCell}</td>
+      <td>${accountingScopeBadge(item, "JPY transaction")}</td>
       <td>${sourceBadge}${controls}</td>
     </tr>
   `;
@@ -425,4 +432,35 @@ function deleteTransactionMemo(transaction) {
 
 function formatDeleteAmount(amount, currency) {
   return `${moneyByCurrency(amount, currency)} ${currency}`;
+}
+
+function matchesAccountingScope(item, selectedScope, context) {
+  const scope = accountingScopeKind(item, context);
+  return selectedScope === "all" || scope === selectedScope;
+}
+
+function accountingScopeBadge(item, context) {
+  const scope = accountingScopeKind(item, context);
+  const labels = {
+    household: "家庭",
+    school: "School",
+    invalid: "归属异常",
+  };
+  return `<span class="scope-badge scope-${scope}">${labels[scope]}</span>`;
+}
+
+function accountingScopeKind(item, context) {
+  const scope = item?.accounting_scope;
+  if (scope === "household" || scope === "school") return scope;
+  console.error("[accounting_scope] Unexpected value in reader record.", {
+    context,
+    id: item?.id || null,
+    accounting_scope: scope,
+  });
+  return "invalid";
+}
+
+function scopeEmptyRow(colspan, selectedScope) {
+  if (selectedScope === "all") return emptyRow(colspan);
+  return `<tr><td colspan="${colspan}" class="empty-state">当前没有符合该账务归属的记录。</td></tr>`;
 }
