@@ -24,6 +24,15 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
+2026-08-19 Phase 3C3-B fixed request entry foundation:
+
+- Deployed the service-only `home_get_school_fixed_card_schedule(uuid,date)` catalog/schedule wrapper and independent `home_create_external_fixed_transaction_request(...)` writer. Both are postgres-owned `SECURITY DEFINER` functions with `search_path = pg_catalog, public`; PUBLIC/anon/authenticated execution is denied.
+- Fixed requests now require `account_id = funding_account_id = NULL`; immediate requests still require their existing account. Projection funding accounts are nullable only while unfunded, and `supersedes_projection_id` now points from a future replacement to the corrected projection. No projection was created.
+- Referenced card schedule/currency/channel/template facts are frozen, while route/active flags remain versioned. Active-name uniqueness allows a future inactive historical card version without creating a second production card in this phase.
+- The generic approve RPC now fails fixed requests before writes with `HOME_FIXED_REQUEST_APPROVAL_REQUIRES_FIXED_WRITER`; fixed rejection creates no transaction, projection, fixed item, cycle, or balance change.
+- Exact-body production ROLLBACK, isolated two-connection request-create concurrency, boundary dates, identity conflicts, ACL and forced-failure matrices passed. Formal deployment left 50 requests, 0 fixed requests/projections/cycles/School fixed items, 35 JPY transactions, 75 CNY transactions, and 2 fixed advances. Request fingerprint `7885061cf09eee37b62e39670286cc4e` and account fingerprint `af7a367cfc163b1a5f4a053887ceb8ce` were unchanged.
+- `西武卡.is_school_fixed_route_enabled` remains `false` at version 1. No page file changed; Cash UI version remains `20260819-accounting-scope-filter-2`. See `docs/home-phase3c3b-fixed-request-entry-20260819.md`.
+
 2026-08-19 Phase 3B credit-card fixed-payment database foundation:
 
 - Added postgres-owned, RLS-enabled `home_card_instruments`, `home_card_statement_cycles`, and `home_external_fixed_payment_projections`. No anon/authenticated/service_role role has direct SELECT/INSERT/UPDATE/DELETE on these tables, and Phase 3B exposes no business writer.

@@ -16,6 +16,14 @@ Status date: 2026-08-19
 - `home_card_statement_cycles`: one card statement total per user/card/fixed month. It contains no browser-authoritative School subtotal or household remainder calculation.
 - `home_external_fixed_payment_projections`: immutable same-currency projection identity from one School expense request to one School fixed month item and its future funding identity.
 
+## Phase 3C3-B Fixed Request Entry Boundary
+
+- `home_get_school_fixed_card_schedule(card, charge_date)` is the only School Edge schedule/catalog surface. The home database computes cutoff attribution, suggested/target fixed month and funding date; Edge does not calculate them.
+- `home_create_external_fixed_transaction_request(...)` creates or exactly reuses only a pending fixed request with null account fields. It creates no ledger transaction, projection, fixed item or statement cycle.
+- A fixed request freezes School identity, card, charge date, schedule, amount/currency, event, idempotency and structured fingerprint evidence. Initial target month must equal suggested month.
+- `home_approve_external_transaction_request(...)` explicitly rejects fixed requests until a future dedicated Phase 3D writer exists. The existing immediate route is unchanged.
+- Fixed rejection is terminal for the request and has no downstream financial facts. The School fixed route flag remains disabled, so the production entry is established but closed.
+
 ## Accounting Scope Boundary
 
 Phase 2A-P installs one shared accounting ownership field on the six business-record tables above:
