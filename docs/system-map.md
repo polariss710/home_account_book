@@ -33,6 +33,16 @@ Status date: 2026-08-19
 - Projection-linked fixed items are immutable through a table trigger. Existing fixed item status, bulk-status, delete, sync and advance writers also reject them before writes. Ordinary fixed settlement, advance, deficit/surplus and one-click-paid rules are unchanged.
 - Fixed approval requires the card route flag and School fixed Gate to be opened in a later separately authorized phase. Both remain closed, so production fixed requests, projections, cycles and School fixed items remain zero.
 
+## Phase 3E Statement Confirmation Boundary
+
+- `home_preview_card_statement(card, month, total)` is authenticated read-only. It returns the current cycle/version, ordered School manifest and SHA-256, DB subtotal/remainder, exact household item identity and blockers. It never creates a cycle or month item.
+- `home_confirm_card_statement(card, month, total, expected_version, operation_key)` is the only statement confirm/reconfirm entry. It recomputes all preview facts under the shared card/month lock, updates only the card-bound household item amount, appends a revision and advances the cycle by one version.
+- `home_reopen_card_statement(card, month, expected_version, operation_key, reason)` restores the household amount recorded before the latest confirm, appends a required-reason reopen revision and returns the cycle to pending. Reconfirm is a later normal confirm and recalculates the manifest/subtotal/remainder.
+- `home_card_statement_cycle_revisions` is append-only, RLS enabled and inaccessible by direct client DML. It keeps every confirm/reopen/reconfirm manifest and item before/after amount; cycles retain only the current confirmed snapshot plus the latest operation identity.
+- School subtotal includes only fully consistent approved fixed requests with active projected/unfunded projections and matching unpaid School items. Pending requests are excluded. Any approved/projection integrity mismatch fails the whole preview/confirm.
+- A cycle-linked household item remains statement-controlled after reopen: direct DML, ordinary status/bulk/delete/sync and fixed advance paths reject it. Unlinked ordinary fixed items are unchanged.
+- Confirm/reopen take card then shared advisory lock and never lock request/projection rows. Phase 3D approve keeps request→card→advisory order; either the approval commits first and enters the manifest, or statement confirm commits first and the approval rejects. New request creation also enters the same card/month serialization domain.
+
 ## Accounting Scope Boundary
 
 Phase 2A-P installs one shared accounting ownership field on the six business-record tables above:
@@ -89,6 +99,9 @@ Current production feature state:
 - `home_get_card_route_catalog(uuid)`: owner-only operations catalog for instrument/channel/template bindings; no client EXECUTE.
 - `home_approve_external_fixed_transaction_request(uuid)`: authenticated-only atomic fixed approval entry; currently unreachable in production while the card fixed route is disabled.
 - `home_get_external_fixed_approval_evidence(uuid)`: service-role-only typed approval evidence reader for School callback.
+- `home_preview_card_statement(uuid,date,numeric)`: authenticated read-only statement preview; all financial calculations remain in PostgreSQL.
+- `home_confirm_card_statement(uuid,date,numeric,bigint,text)`: authenticated optimistic-version/idempotent confirm or reconfirm writer.
+- `home_reopen_card_statement(uuid,date,bigint,text,text)`: authenticated explicit reopen writer with required reason.
 
 ## School Account Eligibility
 

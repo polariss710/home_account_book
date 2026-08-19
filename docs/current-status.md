@@ -24,6 +24,15 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
+2026-08-19 Phase 3E card statement confirmation foundation:
+
+- Deployed DB-authoritative statement preview plus authenticated confirm/reopen writers. School subtotal and ordered manifest are derived only from structurally complete approved request/projection/School-item chains; household remainder is calculated as statement total minus School subtotal. Browser/JS supplies none of those derived values.
+- Extended `home_card_statement_cycles` with the current confirmed snapshot and added RLS-enabled, client-DML-closed `home_card_statement_cycle_revisions`. Every confirm/reopen/reconfirm writes one immutable revision with cycle version, manifest SHA-256, item before/after amounts, actor, DB time, operation identity and payload fingerprint.
+- Confirm updates only the card-bound household template item for the target month. Missing/invalid/non-unique items, statement totals below School subtotal, advance/funding facts and confirmed cycles fail closed. Reopen restores the latest confirm revision's prior item amount, clears the current confirmed snapshot and preserves all revision history; reconfirm recomputes all evidence.
+- Confirm/reopen and fixed request create/approve share `home_lock_card_fixed_month`. Statement code never takes a request/projection row lock, avoiding the Phase 3D request→card lock-order inversion. Confirmed cycles reject new fixed requests with `HOME_CARD_STATEMENT_REOPEN_REQUIRED`; fixed approve retains `HOME_FIXED_APPROVAL_STATEMENT_CONFIRMED`.
+- Exact-body production ROLLBACK, forced item/revision/cycle failures, ACL/guard/idempotency/reopen/reconfirm matrices and an isolated production clone with four independent two-session races passed without deadlock. Formal deployment hash was `bb7baba4a1b11d18bcb052eef47a62f5f8f12fe57d19ccbb9ef08c88abcb17c5`.
+- Formal postcheck remains 50 requests, 0 fixed requests/projections/cycles/revisions/School fixed items, 70 fixed items, 35 JPY transactions, 75 CNY transactions and 2 advances. Card route remains false/version 1 and School Gate remains blocked. No real statement confirm/reopen ran; page version remains `20260819-accounting-scope-filter-2`. See `docs/home-phase3e-card-statement-confirm-reopen-20260819.md`.
+
 2026-08-19 Phase 3D fixed approval/projection foundation:
 
 - Deployed the dedicated authenticated `home_approve_external_fixed_transaction_request(uuid)` writer and service-only `home_get_external_fixed_approval_evidence(uuid)` reader. The approval path locks request, card/month, cycle, projection and advance facts in a deterministic order and atomically creates exactly one unpaid School JPY fixed month item, one immutable projection, and the approved request state.
