@@ -8,6 +8,7 @@ Status date: 2026-08-19
 | JPY transactions | Phase 2B1 label/filter UI deployed in code; production reader explicitly returns scope; 31 household / 4 school overall; balance and transaction-type rules unchanged | Phase 2B2 may add guarded scope input in a separate phase |
 | CNY transactions | Phase 2B1 uses one label/filter control for fixed/casual/external rows; production reader explicitly returns scope; 37 household / 38 school overall | Phase 2B2 may add guarded scope input in a separate phase |
 | Fixed templates/month items | Phase 2B1 displays and filters scope; current templates 26 household and month items 70 household; generated items still inherit template scope | Keep entry scope and mixed-group advance work in later isolated phases |
+| Credit-card fixed route | Phase 3B database foundation deployed. `西武卡` is a distinct active instrument bound to physical funding channel `邮局卡` and household statement template `西武卡消费`; School route is disabled, and cycle/projection/fixed-route row counts are 0 | Phase 3C should define the request-entry contract without enabling projection/funding writers or changing current immediate-account behavior |
 | FX linkage | Old calls remain household; the second linked leg inherits the first leg scope | Keep both legs atomic when Phase 2B later accepts a selected scope |
 | School 收支确认 | Cash linkage v2 pending request table/RPC/UI implemented. New request creation is restricted to canonical School income/expense records: `school_income_records / income_received` and `school_expense_records / expense_paid`; compatible `tuition_income_received` income-record history remains supported. Legacy teacher-wage payment requests and direct part-time-work income requests are historical read-only paths only. | Keep canonical flow stable; any legacy removal requires separate historical audit |
 
@@ -23,6 +24,19 @@ Phase 2A-P was committed to production on 2026-08-19.
 - `home_assign_accounting_scope()` is postgres-owned, security invoker, fixed to `pg_catalog, public`, and has no direct PUBLIC/anon/authenticated/service_role execute grant. Four enabled insert triggers invoke it automatically.
 - Existing balances, ordinary income/expense definitions, transfer/FX/investment exclusions, fixed settlement, advance/repayment, and annual statistics remain unchanged.
 - Phase 2B1 reader/display filtering is complete. The filters only hide/show existing reader records; database totals, balances, writer signatures, and annual statistics are unchanged. Phase 2B2 entry scope, Phase 2B3/2B4 statistics, mixed-scope fixed payment-group advance behavior, and Phase 4 remain deferred.
+
+## Credit-Card Fixed Route Foundation
+
+Phase 3B was committed to production on 2026-08-19.
+
+- `home_card_instruments` stores card cutoff and funding rules separately from `home_payment_channels`.
+- `home_card_statement_cycles` reserves one user-entered statement total per card and fixed month. It does not store a browser-authoritative School subtotal or household remainder.
+- `home_external_fixed_payment_projections` reserves one immutable School-expense-to-fixed-item identity, exact same-currency amounts, target month, funding account, and future funding transaction identity.
+- `home_external_transaction_requests.payment_route` defaults to `immediate_account`; all 50 historical rows are explicitly backfilled to that route. Existing writers omit the field safely and remain unchanged.
+- `fixed_credit_card` rows fail closed while the referenced card has `is_school_fixed_route_enabled = false`. Production currently has zero such requests, zero statement cycles, and zero projections.
+- The sole card master is `西武卡` (`9b27347e-2dce-4caf-bac0-67f053ef6c3b`): JPY, cutoff day 10 inclusive, funding day 25, funding channel `邮局卡` (`53af0c53-03d3-477a-944e-a9bdfbe441fc`), and household statement template `西武卡消费` (`1e2cb848-7d9f-4a68-ba9d-9adc7d434b7f`).
+- No direct client/service-role table access and no business writer were opened. Schedule/catalog helpers are owner-only.
+- Group funding/allocation remains deferred. A projection can carry each School expense and its funding identity; Phase 3E should introduce a lightweight header only if its writer contract requires one.
 
 ## Final System Boundary
 

@@ -12,6 +12,9 @@ Status date: 2026-08-19
 - `home_fixed_month_items`: generated monthly fixed items that inherit template `accounting_scope` at insertion.
 - `home_fixed_advance_payments`: grouped JPY fixed advances; current existing and legacy-client records are household.
 - `home_external_transaction_requests`: Cash-owned pending request table for aozora school external transaction requests. Pending/rejected rows do not affect Cash balances; School requests are database-forced to `accounting_scope = school`.
+- `home_card_instruments`: credit-card tool rules, including cutoff inclusion, funding day, physical funding payment channel, household statement template, and the School-route feature flag.
+- `home_card_statement_cycles`: one card statement total per user/card/fixed month. It contains no browser-authoritative School subtotal or household remainder calculation.
+- `home_external_fixed_payment_projections`: immutable same-currency projection identity from one School expense request to one School fixed month item and its future funding identity.
 
 ## Accounting Scope Boundary
 
@@ -28,6 +31,29 @@ Phase 2A-P installs one shared accounting ownership field on the six business-re
 
 Scope is not stored on `home_accounts` or `home_payment_channels`. It does not replace transaction type, external source metadata, account balance movement, or business categories. Phase 2B1 display/detail filtering is implemented without reader filter parameters: each module filters its existing page JSON in memory while database totals and balances stay all-record. Phase 2B2 entry changes and Phase 3 mixed-scope advance rules are not implemented.
 
+## Credit-Card Fixed-Payment Boundary
+
+Phase 3B implements the database foundation only:
+
+- A card instrument is not a payment channel. `西武卡` is the card instrument; `邮局卡` remains the physical fixed funding group and is referenced by UUID from the instrument.
+- The current `西武卡消费` household fixed template remains the household remainder target. Its production template and `2026-08` fixed item were not modified.
+- `home_external_transaction_requests.payment_route` allows only `immediate_account` and `fixed_credit_card`. Historical and legacy-writer rows default to `immediate_account`; the existing writer signatures and definitions are unchanged.
+- Fixed credit-card requests require a same-user/same-currency active card, School expense scope, charge date, database-derived suggested fixed month, target month, and active School-eligible funding account. They are rejected while the card route flag is disabled.
+- `home_calculate_card_fixed_schedule(uuid,date)` applies the instrument cutoff rule in the database. For the current inclusive day-10 rule, `2026-08-13` maps to fixed month `2026-09-01` and funding date `2026-09-25`; funding days beyond month end are clamped to the last day.
+- Projection rows keep original and settlement amount/currency as separate fields but Phase 3 requires exact same-currency equality and `confirmed` settlement amount status. A projection owns one fixed item and one external request identity; active request/source-event/School-expense and funding-transaction identities are unique.
+- Projection identity, external source, amount, currency, card, month, and fixed-item fields cannot be updated. Future narrow writers may advance versioned projection/funding status fields without weakening immutable business columns.
+- New tables are postgres-owned with RLS enabled and no direct table access for anon, authenticated, or service_role. Phase 3B adds no executable business writer and exposes only owner-only schedule/catalog helpers.
+- No group-funding or allocation table exists. Phase 3E may add a lightweight group funding header only after its real writer/rounding contract is fixed.
+
+Current production feature state:
+
+- card master: `西武卡` / active
+- School fixed route: disabled
+- fixed-credit-card requests: 0
+- card statement cycles: 0
+- external fixed projections: 0
+- School fixed month items: 0
+
 ## Core RPCs
 
 - `home_get_fixed_month_page(text,text)`: reads fixed metrics, settlement, groups, items, templates, accounts, and channels; item/template objects explicitly return `accounting_scope`.
@@ -42,6 +68,8 @@ Scope is not stored on `home_accounts` or `home_payment_channels`. It does not r
 - `home_reject_external_transaction_request(uuid, text)`: rejects a pending request without creating a transaction.
 - `home_get_external_transaction_requests(text, integer)`: reads requests for the Cash approval UI.
 - `home_list_school_eligible_cash_accounts()`: reads active Cash accounts allowed for School-originated request selectors.
+- `home_calculate_card_fixed_schedule(uuid,date)`: owner-only pure schedule helper; no direct PUBLIC/anon/authenticated/service_role EXECUTE.
+- `home_get_card_route_catalog(uuid)`: owner-only operations catalog for instrument/channel/template bindings; no client EXECUTE.
 
 ## School Account Eligibility
 
