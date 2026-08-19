@@ -24,6 +24,14 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
+2026-08-19 Phase 3D fixed approval/projection foundation:
+
+- Deployed the dedicated authenticated `home_approve_external_fixed_transaction_request(uuid)` writer and service-only `home_get_external_fixed_approval_evidence(uuid)` reader. The approval path locks request, card/month, cycle, projection and advance facts in a deterministic order and atomically creates exactly one unpaid School JPY fixed month item, one immutable projection, and the approved request state.
+- Approval uses the database-owned card schedule, exact request amount/currency and immutable School identity. It creates no JPY/CNY transaction, changes no account balance, creates no funding transaction, and does not enable either fixed-route Gate. Exact approved replay returns the same evidence; conflicting/corrupt replay fails closed.
+- A final-defense trigger prevents direct UPDATE/DELETE of a projection-linked fixed month item. Existing single, bulk, delete, sync and advance writers now reject projected items explicitly; ordinary fixed items retain their existing behavior. Generic external approval remains closed for fixed requests.
+- Exact-body production ROLLBACK, three forced-failure points, ACL/negative/replay matrices and isolated two-session approve/approve plus approve/reject races passed. Formal postcheck remains 50 requests, 0 fixed requests/projections/cycles/School fixed items, 35 JPY transactions, 75 CNY transactions and 2 fixed advances; request/account fingerprints remain `7885061cf09eee37b62e39670286cc4e` / `af7a367cfc163b1a5f4a053887ceb8ce`.
+- `西武卡.is_school_fixed_route_enabled` remains `false`, version 1. No page, UI or page-version file changed; Cash UI remains `20260819-accounting-scope-filter-2`. See `docs/home-phase3d-fixed-approval-projection-20260819.md`.
+
 2026-08-19 Phase 3C3-B fixed request entry foundation:
 
 - Deployed the service-only `home_get_school_fixed_card_schedule(uuid,date)` catalog/schedule wrapper and independent `home_create_external_fixed_transaction_request(...)` writer. Both are postgres-owned `SECURITY DEFINER` functions with `search_path = pg_catalog, public`; PUBLIC/anon/authenticated execution is denied.

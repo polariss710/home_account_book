@@ -24,6 +24,15 @@ Status date: 2026-08-19
 - `home_approve_external_transaction_request(...)` explicitly rejects fixed requests until a future dedicated Phase 3D writer exists. The existing immediate route is unchanged.
 - Fixed rejection is terminal for the request and has no downstream financial facts. The School fixed route flag remains disabled, so the production entry is established but closed.
 
+## Phase 3D Fixed Approval Boundary
+
+- `home_approve_external_fixed_transaction_request(uuid)` is the only client-facing fixed approval writer. It is authenticated-only; the generic external approval writer continues to reject fixed requests.
+- `home_apply_external_fixed_transaction_approval(uuid,uuid)` owns the atomic database transition. One approval creates one unpaid `accounting_scope=school` JPY fixed month item, one `projected` fixed projection, and one approved request, with no ledger transaction, balance movement or funding fact.
+- `home_get_external_fixed_approval_evidence(uuid)` is service-role-only and returns typed, fully cross-checked evidence for School callback. Edge maps this evidence but does not calculate amount, month, due date, group or identity.
+- `home_lock_card_fixed_month(uuid,date)` uses a transaction-scoped advisory lock shared by request approval for the same card/month. Request row locks preserve exact replay and approve/reject race safety.
+- Projection-linked fixed items are immutable through a table trigger. Existing fixed item status, bulk-status, delete, sync and advance writers also reject them before writes. Ordinary fixed settlement, advance, deficit/surplus and one-click-paid rules are unchanged.
+- Fixed approval requires the card route flag and School fixed Gate to be opened in a later separately authorized phase. Both remain closed, so production fixed requests, projections, cycles and School fixed items remain zero.
+
 ## Accounting Scope Boundary
 
 Phase 2A-P installs one shared accounting ownership field on the six business-record tables above:
@@ -78,6 +87,8 @@ Current production feature state:
 - `home_list_school_eligible_cash_accounts()`: reads active Cash accounts allowed for School-originated request selectors.
 - `home_calculate_card_fixed_schedule(uuid,date)`: owner-only pure schedule helper; no direct PUBLIC/anon/authenticated/service_role EXECUTE.
 - `home_get_card_route_catalog(uuid)`: owner-only operations catalog for instrument/channel/template bindings; no client EXECUTE.
+- `home_approve_external_fixed_transaction_request(uuid)`: authenticated-only atomic fixed approval entry; currently unreachable in production while the card fixed route is disabled.
+- `home_get_external_fixed_approval_evidence(uuid)`: service-role-only typed approval evidence reader for School callback.
 
 ## School Account Eligibility
 
