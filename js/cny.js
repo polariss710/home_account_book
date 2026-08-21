@@ -23,7 +23,16 @@ import {
   updateTemplate,
 } from "#supabase";
 import { setActionMessage } from "#ui";
-import { emptyRow, escapeHtml, formData, isExternalTransaction, moneyCny, toNumber } from "#utils";
+import {
+  canRequestFixedMonthItemDelete,
+  emptyRow,
+  escapeHtml,
+  fixedMonthItemDeleteLockLabel,
+  formData,
+  isExternalTransaction,
+  moneyCny,
+  toNumber,
+} from "#utils";
 
 export function bindCnyEvents() {
   document.getElementById("cnyScopeFilter").addEventListener("change", (event) => {
@@ -247,9 +256,16 @@ function fixedItemRow(item) {
       <td>${fixedStatusSelect(item)}</td>
       <td><input class="table-input" data-cny-fixed-note="${item.id}" value="${escapeHtml(item.note || "")}" /></td>
       <td>${accountingScopeBadge(item, "CNY fixed item")}</td>
-      <td><button class="danger-button compact-button" data-delete-cny-fixed="${item.id}" type="button">删除</button></td>
+      <td>${cnyFixedItemDeleteCell(item)}</td>
     </tr>
   `;
+}
+
+function cnyFixedItemDeleteCell(item) {
+  if (!canRequestFixedMonthItemDelete(item)) {
+    return `<span class="badge settled">${fixedMonthItemDeleteLockLabel(item)}</span>`;
+  }
+  return `<button class="danger-button compact-button" data-delete-cny-fixed="${item.id}" type="button">删除</button>`;
 }
 
 function fixedStatusRowClass(item) {
@@ -780,7 +796,7 @@ function confirmDeleteCnyFixedItem(item) {
     `类型：${item.direction === "income" ? "固定收入" : "固定支出"}`,
     `备注：${[item.name, item.note].filter(Boolean).join(" / ") || "-"}`,
     "",
-    "如果该固定项已生成或关联 Cash 流水，删除可能同步清理对应流水或影响状态。",
+    "只有未支付且没有下游支付事实的普通固定项会被删除；关联流水不会被同步删除。",
     "",
     "确认删除吗？",
   ].join("\n"));

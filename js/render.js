@@ -6,7 +6,7 @@ import { renderFixedTransferForm } from "#fixed-transfer";
 import { renderJpyPage } from "#jpy";
 import { appState, findFixedTemplate, findJpyAccount, getFixedTemplateTermStatus } from "#state";
 import { renderShell, setActionMessage } from "#ui";
-import { emptyRow, escapeHtml, money } from "#utils";
+import { canRequestFixedMonthItemDelete, emptyRow, escapeHtml, fixedMonthItemDeleteLockLabel, money } from "#utils";
 import {
   deactivatePaymentChannel,
   deactivateAccount,
@@ -160,7 +160,9 @@ function monthItemNoteCell(item) {
 }
 
 function monthItemDeleteCell(item) {
-  if (item.advance_id) return `<span class="badge settled">垫付锁定</span>`;
+  if (!canRequestFixedMonthItemDelete(item)) {
+    return `<span class="badge settled">${fixedMonthItemDeleteLockLabel(item)}</span>`;
+  }
   return `<button class="danger-button compact-button" data-delete-item="${item.id}" type="button">删除</button>`;
 }
 
@@ -362,9 +364,6 @@ function confirmDeleteMonthItem(item) {
     return window.confirm("确定删除这条日元固定支出吗？此操作无法撤销。");
   }
 
-  const linkedText = item.linked_jpy_transaction_id
-    ? "\n\n这笔固定项已关联日元零散收支流水。删除会同步删除对应流水，并可能让已付固定支出恢复为未付。"
-    : "";
   return window.confirm([
     item.direction === "expense"
       ? "确定删除这条日元固定支出吗？此操作无法撤销。"
@@ -375,7 +374,8 @@ function confirmDeleteMonthItem(item) {
     `账户：${item.account_name || "-"}`,
     `类型：${item.direction === "income" ? "固定收入" : "固定支出"}`,
     `备注：${[item.name, item.note].filter(Boolean).join(" / ") || "-"}`,
-    linkedText,
+    "",
+    "只有未支付且没有下游支付事实的普通固定项会被删除；关联流水不会被同步删除。",
     "",
     "确认删除吗？",
   ].join("\n"));

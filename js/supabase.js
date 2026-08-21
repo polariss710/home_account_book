@@ -1,5 +1,5 @@
 import { appState } from "#state";
-import { getRedirectUrl } from "#utils";
+import { fixedMonthItemDeleteErrorMessage, getRedirectUrl } from "#utils";
 import { getConfig, setActionMessage } from "#ui";
 
 let onCloudChange = () => {};
@@ -633,10 +633,14 @@ export async function deleteMonthItem(id) {
     p_item_id: id,
   });
   if (error) {
-    setActionMessage(`固定项删除失败：${error.message}`, "error");
+    setActionMessage(fixedMonthItemDeleteErrorMessage(error, "JPY"), "error");
     return null;
   }
-  return handleRpcResult(data, "固定项删除失败。");
+  if (data?.ok === false) {
+    setActionMessage(fixedMonthItemDeleteErrorMessage(data, "JPY"), "error");
+    return null;
+  }
+  return data;
 }
 
 export async function deleteJpyTransaction(id) {
@@ -688,10 +692,14 @@ export async function deleteCnyFixedItem(id) {
     p_item_id: id,
   });
   if (error) {
-    setActionMessage(`人民币固定项删除失败：${error.message}`, "error");
+    setActionMessage(fixedMonthItemDeleteErrorMessage(error, "CNY"), "error");
     return null;
   }
-  return handleRpcResult(data, "人民币固定项删除失败。");
+  if (data?.ok === false) {
+    setActionMessage(fixedMonthItemDeleteErrorMessage(data, "CNY"), "error");
+    return null;
+  }
+  return data;
 }
 
 export async function deactivateAccount(id) {
