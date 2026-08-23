@@ -59,11 +59,19 @@
 - Do not run `delete`, `truncate`, `drop`, historical data repair, broad backfill, or cleanup automatically.
 - Do not skip static review, rollback test, commit test, or the `docs/current-status.md` update for a write-operation feature.
 - Frontend deploys to GitHub Pages from this repository. Any change to a versioned asset must carry a forward cache-buster update; do not reuse a previous phase's cache key.
+- `.gitignore` contains `*.sql`, so new SQL is invisible to `git status` by default. Every SQL file that is executed against production — schema, RPC, rollback test, postdeploy check — must be committed with `git add -f` in the same turn it is executed. Never treat "git status is clean" as evidence that SQL work is committed; run `git ls-files --error-unmatch <file>` to confirm. Deployed SQL that exists only on a local disk has never been reviewed in a diff and cannot be recovered from the repository.
 
 ## Known Gaps (2026-08-24)
 
 以下为建立本文件时已知、尚未处理的问题，不构成对现状的背书：
 
 - `home_external_fixed_payment_projections` 建表时未做任何权限授予，也未启用 RLS，导致四个 `security invoker` writer 在读取它时报 `42501`。这是本文件「Privilege And Function Security Boundary」一节的直接来源。
+- **28 个 `supabase-update-*.sql` 与 4 个 `supabase-test-*.sql` 已部署到生产但从未纳入版本控制**，仅存在于本地磁盘。其中包括引入上述缺陷的
+  `supabase-update-20260819-phase3c3b-fixed-entry.sql`、`-phase3d-fixed-approval.sql`、
+  `-phase3e-card-statement.sql` 及其三份 rollback test。
+  即：改坏生产的那行 `select` 从未出现在任何 diff 中，也从未被 review。
+  这是「Default Guardrails」中 SQL 必须 `git add -f` 那条规则的由来。
+  已跟踪 21 个 / 磁盘 57 个，缺口需单独立项补齐——补齐前须逐个用
+  `pg_get_functiondef` 与生产比对，不能假定本地文件即生产内容。
 - 本项目尚未做过 P0 计算边界的全量符合性审计。已核实的范围是：`js/supabase.js` 中传给写 RPC 的金额参数均为 `record.*` 原样透传，唯一的计算参数是 `p_year: Number(year)`（年份类型转换，非业务金额）。渲染层的数值处理未逐条核查。
 - `supabase-update-20260822-correction-p.sql` 的文件头仍写着 `Phase B local draft only. NOT DEPLOYED.`，而该文件已于 2026-08-22 部署；同文件的 `home_correction_p_evidence_fingerprint_v1` 仍为 `p_amount::text`，而生产已由 0823 补丁改为 `trim_scale(p_amount)::text`，按原样重跑会覆盖回旧定义。School 侧的同类问题已于 2026-08-24 修复，本项目尚未同步。
