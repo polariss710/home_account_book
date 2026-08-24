@@ -58,7 +58,7 @@
 -- ----
 -- 不给 authenticated 授予该表权限，也不新增 RLS policy：在 RLS 已启用且零
 -- policy 的现状下，授权只会让守卫读到空集从而静默放行。
--- 也不把三个 invoker 整体改为 security definer：那会让函数内所有读取与 DML
+-- 也不把四个 invoker 整体改为 security definer：那会让函数内所有读取与 DML
 -- 一并绕过调用者权限与 RLS，权限面过大。
 -- 改为抽取两个只返回布尔值的窄范围 security definer helper。
 --
@@ -199,7 +199,7 @@ comment on function public.home_fixed_scope_has_external_projection(text, text, 
   'in this month/currency, optionally narrowed to a direction and to a payment '
   'group, that has an external fixed payment projection. Pass NULL for either '
   'optional argument to skip that filter. Payment group matching normalises '
-  'NULL to 未分組 the same way the advance payment writer does. Returns a '
+  'NULL to 未分组 the same way the advance payment writer does. Returns a '
   'boolean only.';
 
 -- ---------------------------------------------------------------------------

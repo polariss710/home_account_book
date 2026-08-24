@@ -329,6 +329,58 @@ begin
 end
 $t9$;
 
+-- ---------------------------------------------------------------------------
+-- T10 一般不变式：authenticated 可调用的 security invoker 函数，不得引用任何
+--     authenticated 无 SELECT 权限的表。
+--
+--     T5 把表名写死成 home_external_fixed_payment_projections，那是个错误。
+--     修掉 projection 表之后，端到端测试立刻在同一批 writer 上撞到第二张表
+--     home_card_statement_cycles，症状完全相同——因为真正的不变式从来不是
+--     「不许碰这张表」，而是「不许碰任何调用者没权限的表」。
+--
+--     本断言表达完整形式。它在整个缺陷类清理完成前会失败，这是预期：
+--     失败输出即为剩余工作清单。先跑
+--     supabase-readonly-20260824-invoker-privilege-audit.sql 确定爆炸半径。
+-- ---------------------------------------------------------------------------
+do $t10$
+declare
+  v_rec record;
+  v_offenders text := '';
+  v_count integer := 0;
+begin
+  for v_rec in
+    with ungranted as (
+      select c.oid, c.relname
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relkind in ('r', 'p')
+        and not has_table_privilege('authenticated', c.oid, 'SELECT')
+    ),
+    invokers as (
+      select p.oid, p.oid::regprocedure::text as sig,
+             pg_get_functiondef(p.oid) as def
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and not p.prosecdef and p.prokind = 'f'
+        and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+    )
+    select i.sig, string_agg(u.relname, ', ' order by u.relname) as tables
+    from invokers i
+    join ungranted u on i.def ~ ('\m' || u.relname || '\M')
+    group by i.sig
+    order by i.sig
+  loop
+    v_count := v_count + 1;
+    v_offenders := v_offenders || E'\n  ' || v_rec.sig || ' → ' || v_rec.tables;
+  end loop;
+
+  if v_count > 0 then
+    raise exception
+      'T10_INVOKER_TOUCHES_UNGRANTED_TABLE: % 个 authenticated 可调用的 invoker '
+      '函数引用了无权限表，每一处都是潜在 42501：%',
+      v_count, v_offenders;
+  end if;
+end
+$t10$;
+
 do $done$
 begin
   raise notice 'fixed projection privilege helper rollback tests: all passed';
