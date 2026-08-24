@@ -65,13 +65,19 @@
 
 以下为建立本文件时已知、尚未处理的问题，不构成对现状的背书：
 
-- `home_external_fixed_payment_projections` 建表时未做任何权限授予，也未启用 RLS，导致四个 `security invoker` writer 在读取它时报 `42501`。这是本文件「Privilege And Function Security Boundary」一节的直接来源。
-- **28 个 `supabase-update-*.sql` 与 4 个 `supabase-test-*.sql` 已部署到生产但从未纳入版本控制**，仅存在于本地磁盘。其中包括引入上述缺陷的
+- `home_external_fixed_payment_projections` 建表时未对 `authenticated` 做任何权限授予；生产实测 `relrowsecurity=true`、`relforcerowsecurity=false`、`policy_count=0`、owner 为 `postgres`。四个 `security invoker` writer 直接读取该表因而报 `42501`：
+  `home_update_fixed_month_item_status`、`home_update_fixed_month_items_status`、
+  `home_sync_fixed_month_items`、`home_create_fixed_advance_payment`。
+  删除链（`home_delete_fixed_month_item` 及其 `_core` 与 eligibility helper）全部是 `security definer`，不受影响。
+  这是本文件「Privilege And Function Security Boundary」一节的直接来源。
+  注意「RLS 已启用但零 policy」这一组合：单纯授予 `SELECT` 不能修复，查询会被过滤为空集，守卫将**静默放行**——比 `42501` 更危险。
+  本条曾在 2026-08-24 初版误记为「未启用 RLS」，且把删除 writer 误列为受影响入口；两处均由生产只读审计更正。
+- **大量 SQL 从未纳入版本控制**，仅存在于本地磁盘。截至 2026-08-24：磁盘 57 个 SQL，当前 HEAD 已跟踪 23 个，未跟踪 34 个（27 个 `supabase-update-*`、3 个 `supabase-test-*`、4 个其他）。
+  其中包括引入上述权限缺陷的
   `supabase-update-20260819-phase3c3b-fixed-entry.sql`、`-phase3d-fixed-approval.sql`、
   `-phase3e-card-statement.sql` 及其三份 rollback test。
   即：改坏生产的那行 `select` 从未出现在任何 diff 中，也从未被 review。
   这是「Default Guardrails」中 SQL 必须 `git add -f` 那条规则的由来。
-  已跟踪 21 个 / 磁盘 57 个，缺口需单独立项补齐——补齐前须逐个用
-  `pg_get_functiondef` 与生产比对，不能假定本地文件即生产内容。
+  **不要把「本地存在某个 SQL 文件」等同于「该文件已部署」**：文件名与磁盘存在性都不构成部署证据，本条初版就犯过这个错。补齐时须为每个 SQL 建立对象清单（函数签名、表/列、约束、索引、触发器、注释、grant、RLS、policy），按确切签名读取生产 `pg_get_functiondef` / `pg_get_triggerdef` 逐对象比对，标记为「完全一致 / 部分部署 / 已被后续补丁覆盖 / 无法证明 / 未部署」后才 `git add -f`。已被后续补丁覆盖的 SQL 必须标明历史状态，禁止作为可重跑的当前生产定义。数据迁移另需只读行数、不变量与 marker 核对，不能只比函数。
 - 本项目尚未做过 P0 计算边界的全量符合性审计。已核实的范围是：`js/supabase.js` 中传给写 RPC 的金额参数均为 `record.*` 原样透传，唯一的计算参数是 `p_year: Number(year)`（年份类型转换，非业务金额）。渲染层的数值处理未逐条核查。
 - `supabase-update-20260822-correction-p.sql` 的文件头仍写着 `Phase B local draft only. NOT DEPLOYED.`，而该文件已于 2026-08-22 部署；同文件的 `home_correction_p_evidence_fingerprint_v1` 仍为 `p_amount::text`，而生产已由 0823 补丁改为 `trim_scale(p_amount)::text`，按原样重跑会覆盖回旧定义。School 侧的同类问题已于 2026-08-24 修复，本项目尚未同步。
