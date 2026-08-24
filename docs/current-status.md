@@ -1,6 +1,6 @@
 # Current Status
 
-Status date: 2026-08-19
+Status date: 2026-08-24
 
 This document keeps the current Cash System implementation checkpoint, safety notes, and active backlog.
 
@@ -23,6 +23,14 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - No direct School DB writes, School-side Edge Function deployment, background worker, or automatic scheduler is implemented in this repository.
 
 ## Latest Update
+
+2026-08-24 fixed-item invoker privilege closeout:
+
+- Kept `home_external_fixed_payment_projections`, `home_card_statement_cycles`, and `home_card_instruments` closed to direct authenticated SELECT, with RLS enabled and no policy. Added five postgres-owned narrow boolean `security definer` helpers and replaced the affected predicates in four writers without changing writer owner, invoker mode, search path, ACL, business code, or message.
+- The generalized T10 invariant now reports zero authenticated-callable invoker functions referencing tables they cannot SELECT. Rollback tests also protect helper owner/FORCE-RLS assumptions and the card-statement direct-write GUC defense.
+- The real 2026-08 JPY income fixed item `余额调整` (`58de8fe4-14f0-464e-82be-50eeaf9aa16b`) had no projection or statement-cycle association and was successfully updated from unpaid to paid through the authenticated writer.
+- Three-group rollback behavior passed with zero residue: group A contained only a projection and returned the projection business guard; group C contained only a valid household-remainder statement cycle and returned `HOME_CARD_STATEMENT_GROUP_ADVANCE_FORBIDDEN`; clean group B advanced successfully inside the rollback transaction. Cross-user helper/writer isolation passed.
+- Synchronized the historical `supabase-update-20260822-correction-p.sql` header and evidence amount fingerprint body with production. The baseline file, the 2026-08-23 canonicalization patch, and production normalized body all hash to `dca31653cd2afabce8a0a467292c43ac`; the historical migration was not re-executed.
 
 2026-08-19 Phase 3E card statement confirmation foundation:
 

@@ -381,9 +381,98 @@ begin
 end
 $t10$;
 
+-- ---------------------------------------------------------------------------
+-- T11  card statement 三个 helper 与两张底表的完整安全合同。
+-- ---------------------------------------------------------------------------
+do $t11$
+declare
+  v_sig text;
+  v_oid oid;
+  v_proc record;
+  v_table text;
+  v_rel record;
+  v_bool boolean;
+begin
+  foreach v_sig in array array[
+    'public.home_fixed_item_has_card_statement(uuid)',
+    'public.home_fixed_scope_has_card_statement(text,text,text)',
+    'public.home_fixed_advance_group_has_card_statement(text,text,text)'
+  ] loop
+    v_oid := to_regprocedure(v_sig);
+    if v_oid is null then
+      raise exception 'T11_CARD_STATEMENT_HELPER_MISSING: %', v_sig;
+    end if;
+
+    select p.proowner, p.prosecdef, p.provolatile, p.proconfig, p.proacl
+      into strict v_proc
+    from pg_proc p where p.oid = v_oid;
+
+    if v_proc.proowner <> 'postgres'::regrole
+       or not v_proc.prosecdef
+       or v_proc.provolatile <> 's'
+       or v_proc.proconfig is distinct from
+          array['search_path=pg_catalog, public']::text[] then
+      raise exception 'T11_CARD_STATEMENT_HELPER_SECURITY_FAILED: %', v_sig;
+    end if;
+    if exists (
+         select 1
+         from aclexplode(
+           coalesce(v_proc.proacl, acldefault('f', v_proc.proowner))
+         ) a
+         where a.grantee = 0 and a.privilege_type = 'EXECUTE'
+       )
+       or has_function_privilege('anon', v_oid, 'EXECUTE')
+       or not has_function_privilege('authenticated', v_oid, 'EXECUTE')
+       or not has_function_privilege('service_role', v_oid, 'EXECUTE') then
+      raise exception 'T11_CARD_STATEMENT_HELPER_ACL_FAILED: %', v_sig;
+    end if;
+  end loop;
+
+  foreach v_table in array array[
+    'home_card_instruments',
+    'home_card_statement_cycles'
+  ] loop
+    select c.oid, c.relrowsecurity, c.relforcerowsecurity, c.relowner,
+           (select count(*) from pg_policy p where p.polrelid = c.oid) as policy_count
+      into strict v_rel
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relname = v_table;
+
+    if v_rel.relowner <> 'postgres'::regrole
+       or not v_rel.relrowsecurity
+       or v_rel.relforcerowsecurity
+       or v_rel.policy_count <> 0
+       or has_table_privilege('authenticated', v_rel.oid, 'SELECT') then
+      raise exception 'T11_CARD_STATEMENT_TABLE_BOUNDARY_FAILED: %', v_table;
+    end if;
+  end loop;
+
+  select public.home_fixed_item_has_card_statement(
+    '00000000-0000-0000-0000-000000000000'::uuid
+  ) into v_bool;
+  if v_bool is not false then
+    raise exception 'T11_CARD_STATEMENT_ITEM_SMOKE_FAILED: %', v_bool;
+  end if;
+
+  select public.home_fixed_scope_has_card_statement('1900-01','JPY')
+    into v_bool;
+  if v_bool is not false then
+    raise exception 'T11_CARD_STATEMENT_SCOPE_SMOKE_FAILED: %', v_bool;
+  end if;
+
+  select public.home_fixed_advance_group_has_card_statement(
+    '1900-01','JPY','未分组'
+  ) into v_bool;
+  if v_bool is not false then
+    raise exception 'T11_CARD_STATEMENT_GROUP_SMOKE_FAILED: %', v_bool;
+  end if;
+end
+$t11$;
+
 do $done$
 begin
-  raise notice 'fixed projection privilege helper rollback tests: all passed';
+  raise notice 'fixed projection/card statement privilege helper rollback tests: all passed';
 end
 $done$;
 

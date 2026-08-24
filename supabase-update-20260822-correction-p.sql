@@ -1,6 +1,6 @@
 -- School V2 x Cash Correction-P
--- Phase B local draft only. NOT DEPLOYED.
--- Production execution is explicitly out of scope for Phase B.
+-- Deployed to production on 2026-08-22.
+-- Includes the 2026-08-23 canonical amount fingerprint so reruns stay idempotent.
 
 alter table public.home_external_transaction_requests
   add column if not exists correction_id uuid;
@@ -1498,7 +1498,7 @@ as $$
     'replacement_projection_id',p_replacement_projection_id,
     'school_expense_id',p_school_expense_id,
     'school_attempt_id',p_school_attempt_id,
-    'amount',p_amount::text,
+    'amount',trim_scale(p_amount)::text,
     'currency',p_currency,
     'charge_date',p_charge_date::text,
     'accounting_scope',p_accounting_scope,
