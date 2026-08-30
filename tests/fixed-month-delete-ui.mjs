@@ -12,17 +12,36 @@ function check(condition, message) {
   assertionCount += 1;
 }
 
-const unpaid = { status: "unpaid" };
+// accounting_scope 是 reader 明确构造的权威字段（见 docs/current-status.md
+// 2026-08-19 Phase 2B1 条目），reader 记录必然带有它，因此 fixture 也必须带。
+const unpaid = { status: "unpaid", accounting_scope: "household" };
 check(canRequestFixedMonthItemDelete(unpaid), "ordinary unpaid item keeps delete entry");
-check(!canRequestFixedMonthItemDelete({ status: "paid" }), "paid item hides delete entry");
-check(!canRequestFixedMonthItemDelete({ status: "settled" }), "settled item hides delete entry");
+check(!canRequestFixedMonthItemDelete({ status: "paid", accounting_scope: "household" }), "paid item hides delete entry");
+check(!canRequestFixedMonthItemDelete({ status: "settled", accounting_scope: "household" }), "settled item hides delete entry");
 check(!canRequestFixedMonthItemDelete({ ...unpaid, advance_id: "advance" }), "advanced item hides delete entry");
 check(!canRequestFixedMonthItemDelete({ ...unpaid, linked_jpy_transaction_id: "jpy" }), "JPY-linked item hides delete entry");
 check(!canRequestFixedMonthItemDelete({ ...unpaid, linked_cny_transaction_id: "cny" }), "CNY-linked item hides delete entry");
 check(canRequestFixedMonthItemDelete({ ...unpaid, projection_id: "not-reader-authoritative" }), "frontend does not guess downstream projection eligibility");
-check(fixedMonthItemDeleteLockLabel({ status: "paid" }) === "仅未支付可删除", "paid lock label");
+
+// School 来源的固定项不提供删除入口。
+//
+// 判据是 accounting_scope 而非 projection —— 上一条断言仍然成立：前端不猜测
+// 下游 projection 资格，只依据 reader 权威给出的归属。数据库侧仍以 projection
+// 为准（HOME_PROJECTION_FIXED_ITEM_DELETE_FORBIDDEN），两者范围不完全重合，
+// 前端因此比数据库更严，这是安全方向。
+check(!canRequestFixedMonthItemDelete({ ...unpaid, accounting_scope: "school" }), "School item hides delete entry");
+check(!canRequestFixedMonthItemDelete({ status: "paid", accounting_scope: "school" }), "paid School item hides delete entry");
+// 归属缺失或非法时同样不给入口：accountingScopeKind() 会把这类记录判为 invalid
+check(!canRequestFixedMonthItemDelete({ status: "unpaid" }), "item without accounting_scope hides delete entry");
+check(!canRequestFixedMonthItemDelete({ ...unpaid, accounting_scope: "unexpected" }), "item with invalid accounting_scope hides delete entry");
+
+check(fixedMonthItemDeleteLockLabel({ status: "paid", accounting_scope: "household" }) === "仅未支付可删除", "paid lock label");
 check(fixedMonthItemDeleteLockLabel({ ...unpaid, advance_id: "advance" }) === "垫付锁定", "advance lock label");
 check(fixedMonthItemDeleteLockLabel({ ...unpaid, linked_jpy_transaction_id: "jpy" }) === "流水已关联", "linked lock label");
+check(fixedMonthItemDeleteLockLabel({ ...unpaid, accounting_scope: "school" }) === "School 项不可删除", "School lock label");
+// 已付的 School 项显示 School 而非「仅未支付可删除」——后者会暗示改成未付就能删
+check(fixedMonthItemDeleteLockLabel({ status: "paid", accounting_scope: "school" }) === "School 项不可删除", "paid School item keeps School label");
+check(fixedMonthItemDeleteLockLabel({ status: "unpaid" }) === "归属异常", "missing scope lock label");
 
 const expectedCodes = [
   "HOME_FIXED_ITEM_ALREADY_ABSENT",
@@ -69,8 +88,8 @@ check(!renderSource.includes("删除会同步删除对应流水"), "JPY confirma
 check(!cnySource.includes("删除可能同步清理对应流水"), "CNY confirmation no longer promises linked deletion");
 check(renderSource.includes("关联流水不会被同步删除"), "JPY confirmation states linked rows remain");
 check(cnySource.includes("关联流水不会被同步删除"), "CNY confirmation states linked rows remain");
-check(indexSource.includes("20260822-fixed-delete-contract-2"), "index asset version bumped");
-check(configSource.includes("20260822-fixed-delete-contract-2"), "runtime version bumped");
+check(indexSource.includes("20260830-school-item-delete-guard-1"), "index asset version bumped");
+check(configSource.includes("20260830-school-item-delete-guard-1"), "runtime version bumped");
 check(!supabaseSource.includes("home_fixed_month_item_delete_authorizations"), "frontend never touches the authorization table");
 check(!supabaseSource.includes("fixed_month_item_delete_actor"), "frontend never sets delete actor context");
 check(!supabaseSource.includes("fixed_month_item_delete_writer"), "frontend never sets delete writer context");

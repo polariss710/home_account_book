@@ -43,6 +43,19 @@ export function isExternalTransaction(transaction) {
 export function canRequestFixedMonthItemDelete(item) {
   return Boolean(
     item &&
+      // School 来源的固定项不提供删除入口。数据库侧
+      // home_check_fixed_month_item_delete_eligibility 会以 projection 为判据拒绝
+      // （HOME_PROJECTION_FIXED_ITEM_DELETE_FORBIDDEN），此处只是不再显示一个
+      // 注定失败的按钮。
+      //
+      // 判据用 accounting_scope 而非 projection，有两个原因：reader 目前不返回
+      // projection 字段；以及业务要求本就是「School 产生的不可随意删除」，与
+      // scope 语义一致。两者范围不完全重合——前端因此比数据库更严，这是安全方向。
+      //
+      // 写成「必须明确等于 household」而不是「不等于 school」：accounting_scope
+      // 只有 household / school 两个合法值，出现其他值时 accountingScopeKind()
+      // 会判为 invalid 并报错，那种记录同样不该给删除入口。
+      item.accounting_scope === "household" &&
       item.status === "unpaid" &&
       !item.advance_id &&
       !item.linked_jpy_transaction_id &&
@@ -53,6 +66,8 @@ export function canRequestFixedMonthItemDelete(item) {
 export function fixedMonthItemDeleteLockLabel(item) {
   if (item?.advance_id) return "垫付锁定";
   if (item?.linked_jpy_transaction_id || item?.linked_cny_transaction_id) return "流水已关联";
+  if (item?.accounting_scope === "school") return "School 项不可删除";
+  if (item?.accounting_scope !== "household") return "归属异常";
   if (item?.status !== "unpaid") return "仅未支付可删除";
   return "";
 }
