@@ -24,6 +24,11 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
+2026-08-31 Phase 3F anon ACL correction:
+
+- Revoked the direct `anon` EXECUTE grant from `home_confirm_projection_fixed_item_status(uuid,text)`. Production now reports `anon=false`, `authenticated=true`, and ACL `{postgres, authenticated, service_role}`; the function owner, `SECURITY DEFINER` mode, fixed `search_path`, and body were unchanged.
+- A read-only scan found five other public-schema `SECURITY DEFINER` functions still executable by anon: `can_write_daily()`, `current_user_role()`, `home_get_jpy_account_page(text)`, `home_get_year_summary(integer)`, and `is_admin()`. They were listed only and were not modified in this phase.
+
 2026-08-31 Phase 3F projection fixed-item status writer:
 
 - Deployed `home_confirm_projection_fixed_item_status(uuid,text)` as a postgres-owned `SECURITY DEFINER` writer with fixed `search_path`. It self-checks `auth.uid()`, accepts only projection-linked fixed items, rejects statement-linked and ordinary items, and uses the transaction-local `home.phase3f_projection_status_write` guard to change only `status`.
