@@ -1,6 +1,6 @@
 # Current Status
 
-Status date: 2026-08-24
+Status date: 2026-08-31
 
 This document keeps the current Cash System implementation checkpoint, safety notes, and active backlog.
 
@@ -23,6 +23,14 @@ This document keeps the current Cash System implementation checkpoint, safety no
 - No direct School DB writes, School-side Edge Function deployment, background worker, or automatic scheduler is implemented in this repository.
 
 ## Latest Update
+
+2026-08-31 Phase 3F projection fixed-item status writer:
+
+- Deployed `home_confirm_projection_fixed_item_status(uuid,text)` as a postgres-owned `SECURITY DEFINER` writer with fixed `search_path`. It self-checks `auth.uid()`, accepts only projection-linked fixed items, rejects statement-linked and ordinary items, and uses the transaction-local `home.phase3f_projection_status_write` guard to change only `status`.
+- The final-defense trigger still rejects projection-item DELETE unconditionally. UPDATE is allowed only while the Phase 3F GUC is `on` and every field other than `status` is unchanged. Direct status writes without the GUC and amount/due-date writes even with the GUC returned `42501 / HOME_PROJECTION_FIXED_ITEM_UPDATE_FORBIDDEN` in production rollback tests.
+- The ordinary JPY writer and delete RPC still reject the Correction-P projection item with `HOME_PROJECTION_FIXED_ITEM_STATUS_FORBIDDEN` and `HOME_PROJECTION_FIXED_ITEM_DELETE_FORBIDDEN`. The ordinary CNY writer now performs the same explicit projection precheck, and the deficit-reset helper excludes projection items.
+- Production item `4e9977b9-9e0e-412f-99b5-d0a4a1b52e3c` successfully changed `unpaid -> paid -> unpaid` through the dedicated writer. Its non-status fingerprint and full projection fingerprint were unchanged; projection status remains `projected`, funding status remains `unfunded`, and no funding transaction was created.
+- Rollback-only ordinary JPY/CNY fixtures passed. JPY status changed normally; CNY paid created exactly one linked CNY transaction and unpaid deleted it. Final fixture and transaction residue was zero. The deployed SQL SHA-256 is `cd6481e57471f37228a9b1dadcbb5267ce7bf62d0d2d9b1970d8335f14b983dc`.
 
 2026-08-24 fixed-item invoker privilege closeout:
 
