@@ -35,16 +35,29 @@
 --   3. 依赖「函数体内碰巧有自校验」来保证安全，属于隐式防护，不该作为设计前提
 --
 -- ===========================================================================
--- 新建 SECURITY DEFINER 函数时的检查项（记下来，避免重复）
+-- 新建 / 重建函数时的检查项（记下来，避免重复）
 -- ===========================================================================
 --
---   revoke all on function <fn> from public, anon;
---   grant execute on function <fn> to authenticated;
+-- 【2026-09-01 修正】本节最初写的是一条固定模板：
+--     revoke all on function <fn> from public, anon;
+--     grant execute on function <fn> to authenticated;
+-- 那是错的。它假定目标状态一定是「authenticated 可执行」，对业务 writer 成立，
+-- 对内部 helper 不成立。
 --
--- 撤 public 与撤 anon 都要写。部署后用下式复核，不要只看 grant 语句：
---   select proacl from pg_proc where proname = '<fn>';
--- 或
---   select has_function_privilege('anon', '<fn>(...)'::regprocedure, 'EXECUTE');
+-- 实例：home_check_fixed_month_item_delete_eligibility 的 proacl 本来是
+-- {postgres=X/postgres}，只被两个 SECURITY DEFINER 函数以 postgres 身份调用，
+-- 从不对外暴露。重建它时若套用上面的模板，Supabase default privileges 会自动
+-- 授予 anon / authenticated / service_role，而模板只撤前两者，等于凭空给
+-- authenticated 和 service_role 开了一个入口。
+--
+-- 正确做法：
+--   1. 动手前先查该对象**原本**的 ACL
+--        select proacl from pg_proc where proname = '<fn>';
+--   2. 按原 ACL 决定 revoke 到什么程度，而不是套模板
+--        对外 writer      → revoke from public, anon; grant to authenticated
+--        内部 helper      → revoke from public, anon, authenticated, service_role
+--   3. 部署后复核 proacl 是否与预期精确相等，不要只查「有没有 anon」——
+--      default privileges 一次授予三个角色，任一残留都是权限边界变化
 --
 -- ===========================================================================
 
