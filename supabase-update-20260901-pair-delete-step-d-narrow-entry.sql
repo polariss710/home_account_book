@@ -382,7 +382,18 @@ commit;
 --      → ★ 且流水本身未被删除，确认事务整体回滚
 --   2. 配对固定项进了 statement
 --      → HOME_STATEMENT_FIXED_ITEM_DELETE_FORBIDDEN
---   3. external 来源流水 → 仍 EXTERNAL_TRANSACTION_IMMUTABLE
+--   3. external 来源流水 → 仍返回「没有找到可删除的日元流水。」
+--
+--      注意：不是 EXTERNAL_TRANSACTION_IMMUTABLE。本文件初版的验收标准写错了，
+--      2026-09-01 由部署后验证发现。
+--
+--      原因：函数首行 SELECT ... FOR UPDATE 需要满足 UPDATE policy，而
+--      home_jpy_transactions_manual_update 明确排除 external 流水，因此
+--      external 行在这一步就返回 0 行，走不到下面那段显式的 external 检查。
+--
+--      这是基线既有行为，与本次改动无关。真正拦住 external 流水的是 RLS
+--      policy 而非那段显式检查——该检查因此是死代码，两者条件等价所以行为
+--      上无差别。已单独记入 docs/lessons.md，不在本步处理。
 --   4. 垫付流水 → 仍被拒绝
 --   5. 他人流水 → 仍「没有找到可删除的日元流水。」
 --
