@@ -59,6 +59,22 @@ Supabase 的 default privileges 会给 postgres 新建的函数自动授予
 部署后复核 `proacl` 是否与预期**精确相等**，不要只查「有没有 anon」——
 三个角色任一残留都是权限边界变化。
 
+**写完 SQL 后回头对照本条逐项核对，不要靠记忆。** 这个错误在 2026-08-31 到
+09-01 之间犯了三次：第一次写错模板本身；第二次重建 eligibility 时只撤
+`public, anon`（审查拦下）；第三次写 Step D 窄入口时仍然只撤 `public, anon`，
+漏掉 `service_role`（审查再次拦下）。三次都是「知道规则但写的时候没想起来」。
+
+照抄这个模板：
+
+```sql
+-- 对外 writer
+revoke all on function <fn> from public, anon, service_role;
+grant execute on function <fn> to authenticated;
+
+-- 内部 helper
+revoke all on function <fn> from public, anon, authenticated, service_role;
+```
+
 出处：2026-09-01 配对删除 Step A 要重建
 `home_check_fixed_month_item_delete_eligibility`。该函数 proacl 本来是
 `{postgres=X/postgres}`，纯内部 helper，只被两个 SECURITY DEFINER 以 postgres
