@@ -200,6 +200,33 @@ DEFINER 来解决 C4 的断点，实测确认那样会连带让
 INVOKER。窄入口必须从 `auth.uid()` 内部取 actor 而不是接受参数，否则调用方
 可以伪造身份。
 
+### C7. `SELECT ... FOR UPDATE` 要过 UPDATE policy，可能让后面的检查变成死代码
+
+`FOR UPDATE` 不只需要 SELECT policy，还要满足 **UPDATE policy**。若 UPDATE
+policy 比 SELECT 严，某些行会在锁定读取时就返回 0 行，函数里后续针对这些行的
+显式检查将永远走不到。
+
+出处：2026-09-01。`home_delete_jpy_transaction` 首行是
+
+```sql
+select * into v_transaction from home_jpy_transactions
+where id = p_transaction_id for update;
+```
+
+而 `home_jpy_transactions_manual_update` policy 排除 external 流水。于是
+external 流水在这里就「未找到」，函数返回「没有找到可删除的日元流水。」，
+**下面那段 15 行的 external 不可变检查从未被执行过**。
+
+两者条件等价，所以行为上没有差别，保护也没有缺口——真正拦住 external 流水的
+是 RLS policy。但看代码的人会以为保护来自那段显式检查。
+
+**待办**：该死代码尚未处理。要让它生效需要调整锁定顺序（先无锁读、检查、
+再 FOR UPDATE），但那样在读与锁之间有并发窗口，需另行评估是否值得。
+
+写验收标准时的教训：**期望值要基于实际行为，不能照着代码字面推断。**
+本例中我看到函数里有 external 检查，就写了「期望返回
+EXTERNAL_TRANSACTION_IMMUTABLE」，而那个分支根本到不了。
+
 ### C6. 触发器函数不需要调用者持有 EXECUTE 权限
 
 触发器执行机制与普通函数调用不同。绑定在表上的触发器函数即使 ACL 是
