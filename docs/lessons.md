@@ -55,6 +55,7 @@ Supabase 的 default privileges 会给 postgres 新建的函数自动授予
 |---|---|
 | 对外 writer | `revoke from public, anon` + `grant to authenticated` |
 | 内部 helper | `revoke from public, anon, authenticated, service_role` |
+| service_role 专用（跨系统 Edge 调用） | 先全撤，再 `grant to service_role` |
 
 部署后复核 `proacl` 是否与预期**精确相等**，不要只查「有没有 anon」——
 三个角色任一残留都是权限边界变化。
@@ -73,6 +74,10 @@ grant execute on function <fn> to authenticated;
 
 -- 内部 helper
 revoke all on function <fn> from public, anon, authenticated, service_role;
+
+-- service_role 专用（先全撤再单独授予，不要只 revoke 一部分）
+revoke all on function <fn> from public, anon, authenticated, service_role;
+grant execute on function <fn> to service_role;
 ```
 
 出处：2026-09-01 配对删除 Step A 要重建
@@ -102,6 +107,25 @@ TRUNCATE。
 
 出处：2026-08-27 School 侧盘点漏了 3 个 `school_v_*_summary` 视图，
 第二轮才发现它们对 anon 全权限开放。Home 侧 public schema 无视图，暂不适用。
+
+### A6. `BYPASSRLS` 不能替代表级 grant
+
+`service_role` 带 `BYPASSRLS` 属性，但它绕过的是 RLS policy，**不是表级权限**。
+一张表若 `relacl` 里没有 service_role 的 SELECT，service_role 照样
+`42501 permission denied for table`。
+
+判断「service_role 能不能读某张表」必须查 `relacl`，不能因为它有 BYPASSRLS
+就假定畅通。这两件事经常被混为一谈。
+
+另一条可直接用的判断法：**一张表如果只有 owner grant 且零 policy，这个配置
+本身就是「不打算对外」的表态**。需要跨系统读它时，应当加一个只返回必要字段的
+窄 DEFINER 函数，而不是给这张表补 grant——后者会把该表的全部列一并暴露。
+
+出处：2026-09-01 School 侧新增固定信用卡的卡列表入口，第一版直接从 Edge 用
+service_role 查 `home_card_instruments`。该表 ACL 为
+`{postgres=arwdDxtm/postgres}`、RLS 启用、0 条 policy。审查实测 42501，
+该入口一旦被前端调用必然 500。改为 `home_list_school_fixed_route_cards()`，
+只返回 id / name / settlement_currency / cash_route_enabled 四个字段。
 
 ---
 
