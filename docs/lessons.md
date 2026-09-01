@@ -144,6 +144,59 @@ HOME_LINKED_PAYMENT_FIXED_ITEM_DELETE_FORBIDDEN 拒绝有关联流水的
 
 出处：同 C1 的后续。第二版方案（只改 core 加参数）也是错的，读了触发器才发现。
 
+### C4. 改调用关系时，要检查调用方有没有权限调被调方
+
+`SECURITY INVOKER` 函数以调用者身份运行，它调用的函数必须对**调用者**开放
+EXECUTE。收紧某个函数的 ACL 时，要同时检查谁在调它。
+
+出处：2026-09-01 配对删除。Step B 把
+`home_delete_fixed_month_item_core` 的 ACL 收成 `{postgres=X/postgres}`，
+Step C 让 `home_delete_jpy_transaction`（INVOKER）去调它，部署后必然报
+`42501: permission denied for function`。两步分开看都对，合起来是断点。
+
+检查方法：
+
+```sql
+select p.proname,
+       case p.prosecdef when true then 'DEFINER' else 'INVOKER' end,
+       has_function_privilege('authenticated', p.oid, 'EXECUTE')
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.prosrc ~ '<被调函数名>';
+```
+
+### C5. DEFINER 嵌套会让整棵子树都绕过 RLS
+
+`SECURITY DEFINER` 函数内部 `current_user` 变为 owner。它调用的
+**INVOKER 子函数会继承这个身份**，于是整条子调用链都以 owner 身份运行、
+一起绕过 RLS（当表为 `FORCE RLS = false` 时）。
+
+所以「把外层函数改成 DEFINER」的代价远不止那一层。
+
+出处：2026-09-01 权限链核查。当时考虑把 `home_delete_jpy_transaction` 改成
+DEFINER 来解决 C4 的断点，实测确认那样会连带让
+`home_resolve_fixed_transfer_item_id`、`home_reset_plain_fixed_expenses_if_deficit`、
+`home_check_fixed_paid_balance` 全部绕过 RLS，失去
+`home_jpy_transactions` 的 owner_select / manual_update / manual_delete、
+`home_fixed_month_items` 的 owner SELECT 与 business_reader 可见性隐藏、
+以及 `home_fixed_advance_payments` 的 `auth.uid() = user_id`。
+
+正确做法是**加窄入口**：只把需要提权的那一个动作交给 DEFINER，外层保持
+INVOKER。窄入口必须从 `auth.uid()` 内部取 actor 而不是接受参数，否则调用方
+可以伪造身份。
+
+### C6. 触发器函数不需要调用者持有 EXECUTE 权限
+
+触发器执行机制与普通函数调用不同。绑定在表上的触发器函数即使 ACL 是
+`{postgres=X/postgres}`，authenticated 触发 DML 时也照样执行，不会因为
+「调用者无 EXECUTE」而报错。
+
+DEFINER 触发器函数以 owner 身份运行；INVOKER 触发器函数以触发该 DML 的
+有效身份运行。
+
+出处：2026-09-01。此前担心 `home_guard_fixed_month_item_delete_contract`
+（postgres-only）会成为第二个断点，实测确认不会——这也解释了 Step B
+为什么能跑通。
+
 ### C3. `home_fixed_month_items` 的删除有三层保护
 
 1. 表级 `revoke delete, truncate from authenticated`（2026-08-21）
