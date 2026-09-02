@@ -88,19 +88,25 @@ check(!renderSource.includes("删除会同步删除对应流水"), "JPY confirma
 check(!cnySource.includes("删除可能同步清理对应流水"), "CNY confirmation no longer promises linked deletion");
 check(renderSource.includes("关联流水不会被同步删除"), "JPY confirmation states linked rows remain");
 check(cnySource.includes("关联流水不会被同步删除"), "CNY confirmation states linked rows remain");
-// 断言两处版本号一致，而不是硬编码某个具体值。
+// 三条断言并存，防的是两种不同的失误。
 //
-// 原断言写死了 20260830-school-item-delete-guard-1，导致任何一次正常的版本更新
-// 都会让这个测试变红——2026-09-03 接入固定卡批准入口时即被打红一次。
+// 前两条防「忘记 bump」：改了 JS 却没更新版本号，浏览器继续用缓存里的旧模块。
+// 这个保护只能由测试提供——.github/workflows/pages.yml 里只有 checkout、上传与
+// Pages 部署，没有任何版本前移检查，所以「发布流程会覆盖」这个想法不成立。
+// 代价是每次 bump 都要同步改这里的 expectedVersion，那是有意的：它就是 bump 的
+// 检查点。
 //
-// 而真正该防的风险不是「忘记更新版本号」（那由发布流程覆盖），是「只更新了一处」：
-// importmap 与 APP_VERSION 不一致时，模块缓存会部分失效部分不失效，页面上出现
-// 新旧代码混跑，且症状难以复现。
+// 第三条防「只改一处」：importmap 与 APP_VERSION 不一致时，模块缓存会部分失效、
+// 部分不失效，页面上新旧代码混跑，症状难以复现。
+//
+// 2026-09-03 曾一度把前两条替换成纯一致性检查，被审核驳回——理由即上面那条对
+// pages.yml 的实际核查。
+const expectedVersion = "20260903-fixed-card-approval-1";
 const indexVersion = indexSource.match(/\?v=(\d{8}-[a-z0-9-]+)/)?.[1];
 const configVersion = configSource.match(/APP_VERSION\s*=\s*"(\d{8}-[a-z0-9-]+)"/)?.[1];
-check(Boolean(indexVersion), "index asset version present and well formed");
-check(Boolean(configVersion), "runtime version present and well formed");
-check(indexVersion === configVersion, "index and runtime asset versions are in sync");
+check(indexVersion === expectedVersion, "index asset version advanced");
+check(configVersion === expectedVersion, "runtime version advanced");
+check(indexVersion === configVersion, "index and runtime versions stay aligned");
 check(!supabaseSource.includes("home_fixed_month_item_delete_authorizations"), "frontend never touches the authorization table");
 check(!supabaseSource.includes("fixed_month_item_delete_actor"), "frontend never sets delete actor context");
 check(!supabaseSource.includes("fixed_month_item_delete_writer"), "frontend never sets delete writer context");
