@@ -196,12 +196,43 @@ function requestActions(request) {
   `;
 }
 
+// 批准前的最终确认文案，按支付路线分开。
+//
+// 通用文案说的是「生成 Cash 支出流水」，那对固定信用卡路线是错的：它生成的是
+// home_fixed_month_items 与 projection，不产生任何流水，也不动账户余额。
+//
+// 更要紧的是不可逆。固定项与 projection 被 eligibility 检查、表触发器、UI 三层
+// 无条件锁死，request 无法从 approved 退回，而 schema 里预留的
+// projection_status='corrected' / supersedes_projection_id 撤销链没有任何写入器
+// 实现。因此这句确认必须写明目标月、扣款日和不可撤回，而不是笼统地说生成流水。
+function buildApproveConfirmMessage(request) {
+  const payload = request.payload_snapshot || {};
+  if (payload.payment_route !== "fixed_credit_card") {
+    return `确认这笔 School 收支确认请求并生成 Cash ${transactionTypeLabel(request.transaction_type)}流水？`;
+  }
+
+  const targetMonth = payload.target_fixed_month
+    ? String(payload.target_fixed_month).slice(0, 7)
+    : "（未知月份）";
+  const fundingDate = payload.funding_date || "（未知日期）";
+
+  return [
+    `确认这笔信用卡固定支出请求？`,
+    ``,
+    `将在 ${targetMonth} 生成固定支出项，${fundingDate} 扣款。`,
+    `不产生 Cash 流水，也不扣减账户余额。`,
+    ``,
+    `⚠️ 批准后无法撤销：固定项与 projection 均不可删除，请求也无法退回待确认。`,
+    `如需修改金额或日期，请改为「拒绝」，在 School 侧改正后重新提交。`,
+  ].join("\n");
+}
+
 function bindRequestActions() {
   document.querySelectorAll("[data-approve-external-request]").forEach((button) => {
     button.addEventListener("click", async () => {
       const request = findRequest(button.dataset.approveExternalRequest);
       if (!request) return;
-      const confirmed = window.confirm(`确认这笔 School 收支确认请求并生成 Cash ${transactionTypeLabel(request.transaction_type)}流水？`);
+      const confirmed = window.confirm(buildApproveConfirmMessage(request));
       if (!confirmed) return;
       const result = await approveRequestAndSync(request);
       if (!result.ok) {
@@ -467,7 +498,10 @@ async function approveRequestAndSync(request) {
   const paymentRoute = request.payload_snapshot?.payment_route ?? null;
   const result = await approveExternalTransactionRequest(request.id, paymentRoute);
   if (!result) {
-    return { ok: false, message: "Cash 确认 RPC 未成功。" };
+    // 不覆盖已显示的具体原因。handleRpcResult 在失败时已经把 DB 返回的 message
+    // 显示出来了（例如 HOME_FIXED_APPROVAL_* 系列），再回一句泛化文案会让刷新后
+    // 只剩「Cash 确认 RPC 未成功」，真实拒绝原因就此丢失。
+    return { ok: false, message: "" };
   }
   const schoolSync = await syncCashRequestResultToSchool(request.id, "approved");
   if (!schoolSync?.ok) {
@@ -494,9 +528,18 @@ async function rejectRequestAndSync(request, reason) {
   return { ok: true };
 }
 
+// message 为空时只刷新、不覆盖当前提示。
+//
+// 用于底层已经显示过更具体原因的场景：handleRpcResult 在 RPC 返回 ok:false 时
+// 会把 DB 的 message（如 HOME_FIXED_APPROVAL_* 系列）显示出来，此处若再写一句
+// 泛化文案，刷新后就只剩「操作未成功」，真实原因反而丢了。
+//
+// setActionMessage 会无条件覆盖 textContent，因此判断必须放在调用之前。
 async function refreshAfterRequestMutation(message, type = "success") {
   await Promise.all([loadExternalTransactionRequests(), loadAppData()]);
-  setActionMessage(message, type);
+  if (message) {
+    setActionMessage(message, type);
+  }
   renderPage();
 }
 

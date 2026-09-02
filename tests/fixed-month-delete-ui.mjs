@@ -88,8 +88,19 @@ check(!renderSource.includes("删除会同步删除对应流水"), "JPY confirma
 check(!cnySource.includes("删除可能同步清理对应流水"), "CNY confirmation no longer promises linked deletion");
 check(renderSource.includes("关联流水不会被同步删除"), "JPY confirmation states linked rows remain");
 check(cnySource.includes("关联流水不会被同步删除"), "CNY confirmation states linked rows remain");
-check(indexSource.includes("20260830-school-item-delete-guard-1"), "index asset version bumped");
-check(configSource.includes("20260830-school-item-delete-guard-1"), "runtime version bumped");
+// 断言两处版本号一致，而不是硬编码某个具体值。
+//
+// 原断言写死了 20260830-school-item-delete-guard-1，导致任何一次正常的版本更新
+// 都会让这个测试变红——2026-09-03 接入固定卡批准入口时即被打红一次。
+//
+// 而真正该防的风险不是「忘记更新版本号」（那由发布流程覆盖），是「只更新了一处」：
+// importmap 与 APP_VERSION 不一致时，模块缓存会部分失效部分不失效，页面上出现
+// 新旧代码混跑，且症状难以复现。
+const indexVersion = indexSource.match(/\?v=(\d{8}-[a-z0-9-]+)/)?.[1];
+const configVersion = configSource.match(/APP_VERSION\s*=\s*"(\d{8}-[a-z0-9-]+)"/)?.[1];
+check(Boolean(indexVersion), "index asset version present and well formed");
+check(Boolean(configVersion), "runtime version present and well formed");
+check(indexVersion === configVersion, "index and runtime asset versions are in sync");
 check(!supabaseSource.includes("home_fixed_month_item_delete_authorizations"), "frontend never touches the authorization table");
 check(!supabaseSource.includes("fixed_month_item_delete_actor"), "frontend never sets delete actor context");
 check(!supabaseSource.includes("fixed_month_item_delete_writer"), "frontend never sets delete writer context");
