@@ -543,8 +543,21 @@ export async function updateCnyFixedItemsStatus(direction, status) {
   return handleRpcResult(data, "人民币固定项批量状态更新失败。");
 }
 
-export async function approveExternalTransactionRequest(id) {
-  const { data, error } = await appState.supabaseClient.rpc("home_approve_external_transaction_request", {
+// 批准入口按支付路线分岔。
+//
+// 通用的 home_approve_external_transaction_request 遇到
+// payment_route='fixed_credit_card' 会直接返回
+// HOME_FIXED_REQUEST_APPROVAL_REQUIRES_FIXED_WRITER——固定路线必须走独立写入器，
+// 因为它生成的是固定项与 projection，而不是流水。
+//
+// 在此之前前端只调通用函数，因此固定路线的请求在界面上点「确认」必然失败，
+// 批准只能手工执行 RPC。
+export async function approveExternalTransactionRequest(id, paymentRoute = null) {
+  const rpcName = paymentRoute === "fixed_credit_card"
+    ? "home_approve_external_fixed_transaction_request"
+    : "home_approve_external_transaction_request";
+
+  const { data, error } = await appState.supabaseClient.rpc(rpcName, {
     p_request_id: id,
   });
   if (error) {

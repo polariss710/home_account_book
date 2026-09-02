@@ -120,7 +120,22 @@ function renderReferenceSummary(request) {
         ? `实际支付 ${moneyByCurrency(payload.actual_payment_amount, payload.actual_payment_currency)} ${payload.actual_payment_currency}`
         : "",
     ].filter(Boolean).join(" / ");
+    // 固定信用卡路线：目标固定月与扣款日必须显式显示。
+    //
+    // 这两个值决定这笔钱最终落在哪个月的账单、哪天扣款，而它们与下面的「业务归属月」
+    // 通常差一整月——业务归属月是 School 的记账月，目标固定月由刷卡日经卡的
+    // cutoff/funding 推导。只显示业务归属月会让审批者以为钱在那个月出去。
+    //
+    // 批准是不可逆操作（固定项与 projection 被三层锁死、request 无法退回、
+    // 撤销链没有写入器实现），因此这条信息必须在点确认之前就摆在眼前。
+    const isFixedCardRoute = payload.payment_route === "fixed_credit_card";
+    const fixedRouteLine = isFixedCardRoute && payload.target_fixed_month
+      ? `信用卡固定项 → ${String(payload.target_fixed_month).slice(0, 7)}`
+        + `${payload.funding_date ? `，${payload.funding_date} 扣款` : ""}`
+      : "";
+
     const meta = [
+      isFixedCardRoute && payload.charge_date ? `刷卡日 ${payload.charge_date}` : "",
       payload.year_month ? `业务归属月 ${payload.year_month}` : "",
       payload.expense_date || payload.paid_date ? `支付日期 ${payload.expense_date || payload.paid_date}` : "",
       payload.note || "",
@@ -128,6 +143,7 @@ function renderReferenceSummary(request) {
 
     return `
       <strong>${escapeHtml(title)}</strong>
+      ${fixedRouteLine ? `<strong>${escapeHtml(fixedRouteLine)}</strong>` : ""}
       ${details ? `<span>${escapeHtml(details)}</span>` : ""}
       ${meta.map((part) => `<span>${escapeHtml(part)}</span>`).join("")}
     `;
@@ -446,7 +462,10 @@ function groupActionMessage(successCount, failures) {
 }
 
 async function approveRequestAndSync(request) {
-  const result = await approveExternalTransactionRequest(request.id);
+  // 路线取自 payload snapshot：创建函数强制校验过它与请求行的 payment_route 列
+  // 一致，因此这里读到的值与数据库权威值必然相同。
+  const paymentRoute = request.payload_snapshot?.payment_route ?? null;
+  const result = await approveExternalTransactionRequest(request.id, paymentRoute);
   if (!result) {
     return { ok: false, message: "Cash 确认 RPC 未成功。" };
   }
