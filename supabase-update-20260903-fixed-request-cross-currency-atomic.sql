@@ -146,9 +146,12 @@ begin;
 --
 -- 全部失败关闭。任一条不符即整个事务回滚，不会留下半部署状态。
 --
--- 注：若下面两条 constraintdef 的 md5 断言失败，**先确认 Codex 当时哈希的是
--- 什么**（本文件假定是 md5(pg_get_constraintdef(oid))），再判断是不是真漂移。
--- 假设错了会误报，但方向是安全的——误报只会挡住部署，不会放行错误状态。
+-- 注：本节全部基于 pg_get_constraintdef(oid) 的 **canonical（非 pretty）形式**。
+-- 2026-09-03 首次部署尝试在这里硬停止过——当时文件里的两个 md5 取自审核报告，
+-- 而审核算的是 pg_get_constraintdef(oid, true)，两者不同，脚本会误报漂移。
+-- 已统一到非 pretty 一侧：pretty 的换行缩进是给人看的，不保证跨版本稳定。
+--
+-- 那次停止本身是这套断言起作用的证据：它没有放行，也没有自作主张改常量。
 -- ---------------------------------------------------------------------------
 
 do $$
@@ -222,18 +225,24 @@ begin
     raise exception 'ABORT: projection amount_status_check 已漂移：%', coalesce(v_def, '(不存在)');
   end if;
 
-  -- 本文件一字不碰的两条巨型约束，用 md5 钉住
+  -- 本文件一字不碰的两条巨型约束，用 md5 钉住。
+  --
+  -- 哈希的是 pg_get_constraintdef(oid)，**不带 pretty 参数**。
+  -- 2026-09-03 部署前核对时发现审核给的两个 md5 算的是
+  -- pg_get_constraintdef(oid, true)，两者不同，脚本会在这里误报。
+  -- 选非 pretty 一侧的理由：pretty 形式的换行与缩进是给人看的，PostgreSQL 不保证
+  -- 它跨版本稳定，拿它当指纹将来会无故失败。canonical 形式才适合做断言。
   select md5(pg_get_constraintdef(oid)) into v_def from pg_constraint
   where conrelid = 'public.home_external_transaction_requests'::regclass
     and conname = 'home_external_requests_route_fields_check';
-  if v_def is distinct from '2228dd61acafe54aaf89114ab213c182' then
+  if v_def is distinct from '00ad41cb72d3ee7a1de29f7f8781f4f9' then
     raise exception 'ABORT: route_fields_check 已漂移，实际 md5 %', coalesce(v_def, '(不存在)');
   end if;
 
   select md5(pg_get_constraintdef(oid)) into v_def from pg_constraint
   where conrelid = 'public.home_external_transaction_requests'::regclass
     and conname = 'home_external_transaction_requests_correction_link_check';
-  if v_def is distinct from '99aca97cb82c18a84c4d9871f6b749b8' then
+  if v_def is distinct from '2bc0f3da90d9f0cf9aa7c701e0beaad9' then
     raise exception 'ABORT: correction_link_check 已漂移，实际 md5 %', coalesce(v_def, '(不存在)');
   end if;
 end $$;
@@ -1425,9 +1434,7 @@ commit;
 --     b. 先 add column original_amount 再跑本文件 → 期望 ABORT: … 可能是半部署状态
 --     c. 改掉 projection amount_check 的定义 → 期望 ABORT: projection amount_check 已漂移
 --     d. 改掉 route_fields_check → 期望 ABORT: route_fields_check 已漂移
---   **d 若不失败，先别怀疑生产，先确认 md5 断言哈希的对象是不是
---   pg_get_constraintdef(oid)** —— 那两个 md5 是审核给的，本文件对它哈希的是什么
---   做了假设。
+--   全部基于 canonical（非 pretty）形式，见第 0 步的注释。
 --
 -- 一、逐行 diff（E2）—— 先做这项，diff 不符就别往下验
 --   与 ~/aozora-security-20260827/cash-baseline/ 下 2026-09-03 的五份导出逐行比，
