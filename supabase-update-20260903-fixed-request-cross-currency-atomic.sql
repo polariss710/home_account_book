@@ -23,8 +23,8 @@
 -- original_*，而 writer 在后面的文件里才改——School 固定卡 Gate 已开，
 -- 中间那段时间西武卡提交会直接 23514。**那不是中间态，是生产中断窗口。**
 --
--- 本文件把加列、回填、约束、四个函数改动全部放进一个事务。任一步失败则整体
--- 回滚，生产不存在「约束已加但 writer 未改」的时刻。
+-- 本文件把基线断言、加列、回填、约束、五个函数改动全部放进一个事务。任一步失败
+-- 则整体回滚，生产不存在「约束已加但 writer 未改」的时刻。
 --
 -- ===========================================================================
 -- 语义声明（业务模型扩展，需业务负责人批准后方可执行）
@@ -138,7 +138,108 @@
 begin;
 
 -- ---------------------------------------------------------------------------
--- 1. 前置断言
+-- 0. 生产基线断言（审核 P2-1）
+--
+-- 首版把「生产与文件头五个 MD5 一致」当成已知条件，靠部署流程保证。审核指出这
+-- 不够：审核通过与实际部署之间若有别的生产改动，本文件会**静默覆盖**新定义。
+-- 把断言写进原子文件本身，比依赖流程可靠——它跟改动同生共死。
+--
+-- 全部失败关闭。任一条不符即整个事务回滚，不会留下半部署状态。
+--
+-- 注：若下面两条 constraintdef 的 md5 断言失败，**先确认 Codex 当时哈希的是
+-- 什么**（本文件假定是 md5(pg_get_constraintdef(oid))），再判断是不是真漂移。
+-- 假设错了会误报，但方向是安全的——误报只会挡住部署，不会放行错误状态。
+-- ---------------------------------------------------------------------------
+
+do $$
+declare
+  v_expected constant jsonb := jsonb_build_object(
+    'home_apply_external_fixed_transaction_approval', 'edd41ae6488737e6fb2068605fd1b614',
+    'home_build_external_fixed_approval_evidence',    '4e805ca332a5d7df4a35fb9c82176743',
+    'home_create_external_fixed_transaction_request', 'dd50ebe732932670c07656a4dd1d1abe',
+    'home_validate_external_fixed_projection',        'cd6e4a7e3b814a942c8eda100f283855',
+    'home_validate_external_request_payment_route',   'a6720c24d99c14fc090dcdd502babdd0'
+  );
+  v_name text;
+  v_actual text;
+  v_count integer;
+begin
+  for v_name in select jsonb_object_keys(v_expected) loop
+    select count(*) into v_count
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = v_name;
+    if v_count <> 1 then
+      raise exception 'ABORT: % 在生产中有 % 个重载，本文件只针对唯一重载', v_name, v_count;
+    end if;
+
+    select md5(p.prosrc) into v_actual
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = v_name;
+
+    if v_actual is distinct from (v_expected ->> v_name) then
+      raise exception 'ABORT: % 的生产定义已漂移，期望 md5 %，实际 %',
+        v_name, v_expected ->> v_name, v_actual;
+    end if;
+  end loop;
+end $$;
+
+do $$
+declare
+  v_def text;
+begin
+  -- 两列必须尚未存在。有了这条，ADD COLUMN 不会接受一个类型/可空性不符预期的
+  -- 半部署状态（下面的 add column 也已去掉 IF NOT EXISTS，两层保护）。
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'home_external_transaction_requests'
+      and column_name in ('original_amount', 'original_currency')
+  ) then
+    raise exception 'ABORT: original_amount / original_currency 已存在，可能是半部署状态';
+  end if;
+
+  -- 本文件要改的两条 projection 约束，定义必须与基线逐字相同
+  select pg_get_constraintdef(oid) into v_def from pg_constraint
+  where conrelid = 'public.home_external_fixed_payment_projections'::regclass
+    and conname = 'home_external_fixed_projections_amount_check';
+  if v_def is distinct from
+     'CHECK (((original_amount > (0)::numeric) AND (settlement_amount > (0)::numeric) AND (original_amount = settlement_amount)))' then
+    raise exception 'ABORT: projection amount_check 已漂移：%', coalesce(v_def, '(不存在)');
+  end if;
+
+  select pg_get_constraintdef(oid) into v_def from pg_constraint
+  where conrelid = 'public.home_external_fixed_payment_projections'::regclass
+    and conname = 'home_external_fixed_projections_same_currency_check';
+  if v_def is distinct from 'CHECK ((original_currency = settlement_currency))' then
+    raise exception 'ABORT: projection same_currency_check 已漂移：%', coalesce(v_def, '(不存在)');
+  end if;
+
+  -- 方案乙的边界。本文件不碰它，但它若已被别人放开，本文件的前提就不成立。
+  select pg_get_constraintdef(oid) into v_def from pg_constraint
+  where conrelid = 'public.home_external_fixed_payment_projections'::regclass
+    and conname = 'home_external_fixed_projections_amount_status_check';
+  if v_def is distinct from 'CHECK ((settlement_amount_status = ''confirmed''::text))' then
+    raise exception 'ABORT: projection amount_status_check 已漂移：%', coalesce(v_def, '(不存在)');
+  end if;
+
+  -- 本文件一字不碰的两条巨型约束，用 md5 钉住
+  select md5(pg_get_constraintdef(oid)) into v_def from pg_constraint
+  where conrelid = 'public.home_external_transaction_requests'::regclass
+    and conname = 'home_external_requests_route_fields_check';
+  if v_def is distinct from '2228dd61acafe54aaf89114ab213c182' then
+    raise exception 'ABORT: route_fields_check 已漂移，实际 md5 %', coalesce(v_def, '(不存在)');
+  end if;
+
+  select md5(pg_get_constraintdef(oid)) into v_def from pg_constraint
+  where conrelid = 'public.home_external_transaction_requests'::regclass
+    and conname = 'home_external_transaction_requests_correction_link_check';
+  if v_def is distinct from '99aca97cb82c18a84c4d9871f6b749b8' then
+    raise exception 'ABORT: correction_link_check 已漂移，实际 md5 %', coalesce(v_def, '(不存在)');
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 1. 数据前置断言
 --
 -- E3：如果我对历史语义的理解是错的，这些检查必须失败。
 -- ---------------------------------------------------------------------------
@@ -178,8 +279,13 @@ begin
   end if;
 end $$;
 
--- 1c. 待回填的行（expense_paid）在快照里必须四键齐全，且与行值一致。
+-- 1c. 待回填的行（expense_paid）在快照里必须四键齐全、数值可解析，且与行值一致。
 --     若不成立，说明「原币事实早就在快照里」这个前提不成立，整个方案作废。
+--
+--     两处数值比较都套在 case 里先做形状判断再 cast。裸 cast 遇到非数字文本会抛
+--     22P02，中止方向虽然是对的，但报出来的是不知所云的类型转换错误而不是这里
+--     写的中止信息。case 会短路，能保证走到 cast 的一定是数字形状。
+--     （与审核 P2-2 在创建器里指出的是同一类问题。）
 do $$
 declare v_bad integer;
 begin
@@ -191,10 +297,19 @@ begin
       or r.payload_snapshot ->> 'original_currency' is null
       or r.payload_snapshot ->> 'settlement_amount' is null
       or r.payload_snapshot ->> 'settlement_currency' is null
-      or (r.payload_snapshot ->> 'settlement_amount')::numeric is distinct from r.amount
+      or case
+           when r.payload_snapshot ->> 'original_amount' ~ '^[0-9]+(\.[0-9]+)?$'
+             then (r.payload_snapshot ->> 'original_amount')::numeric <= 0
+           else true
+         end
+      or case
+           when r.payload_snapshot ->> 'settlement_amount' ~ '^[0-9]+(\.[0-9]+)?$'
+             then (r.payload_snapshot ->> 'settlement_amount')::numeric is distinct from r.amount
+           else true
+         end
       or r.payload_snapshot ->> 'settlement_currency' is distinct from r.currency);
   if v_bad > 0 then
-    raise exception 'ABORT: % 条 expense_paid fixed 请求的快照缺四键或与行值不符', v_bad;
+    raise exception 'ABORT: % 条 expense_paid fixed 请求的快照缺四键、数值不可解析或与行值不符', v_bad;
   end if;
 end $$;
 
@@ -219,9 +334,11 @@ end $$;
 -- CHECK 表达，而不是 NOT NULL——NOT NULL 无法区分路线与请求类型。
 -- ---------------------------------------------------------------------------
 
+-- 不用 IF NOT EXISTS：第 0 步已断言两列不存在，此处让半部署状态直接报错，
+-- 而不是被静默接受（审核 P2-1）。
 alter table public.home_external_transaction_requests
-  add column if not exists original_amount numeric,
-  add column if not exists original_currency text;
+  add column original_amount numeric,
+  add column original_currency text;
 
 comment on column public.home_external_transaction_requests.original_amount is
   'Amount in the original (charged) currency. Required for fixed_credit_card + expense_paid; NULL for immediate_account and for Correction-P. Source: payload_snapshot, itself covered by the School fingerprint.';
@@ -511,6 +628,10 @@ declare
   -- ① 原币事实来自快照，不是入参。理由见文件头。
   v_original_amount numeric;
   v_original_currency text;
+  -- 结算额也先解析到局部变量再比较：直接在比较式里做 cast，遇到非数字文本会在
+  -- INSERT 之前抛裸 22P02，而那时还到不了 route 触发器的受控异常映射，
+  -- 新创建器的错误合同就不完整了（审核 P2-2）。
+  v_settlement_amount numeric;
 begin
   if coalesce(auth.role(),'')<>'service_role' then return jsonb_build_object('ok',false,'code','HOME_FIXED_REQUEST_SERVICE_ROLE_REQUIRED','message','service_role is required'); end if;
   if p_user_id is null or p_external_event_id is null or p_external_reference_id is null or p_card_instrument_id is null
@@ -528,6 +649,11 @@ begin
     v_original_amount := (v_payload->>'original_amount')::numeric;
   exception when others then
     return jsonb_build_object('ok',false,'code','HOME_FIXED_REQUEST_ORIGINAL_AMOUNT_INVALID','message','payload snapshot original_amount is missing or not numeric');
+  end;
+  begin
+    v_settlement_amount := (v_payload->>'settlement_amount')::numeric;
+  exception when others then
+    return jsonb_build_object('ok',false,'code','HOME_FIXED_REQUEST_PAYLOAD_MISMATCH','message','payload snapshot settlement_amount is not numeric');
   end;
   v_original_currency := upper(trim(coalesce(v_payload->>'original_currency','')));
   if v_original_amount is null or v_original_amount<=0 or v_original_currency not in ('JPY','CNY') then
@@ -574,7 +700,7 @@ begin
      or v_payload->>'card_instrument_id' is distinct from p_card_instrument_id::text or v_payload->>'charge_date' is distinct from p_charge_date::text
      or v_payload->>'suggested_fixed_month' is distinct from p_suggested_fixed_month::text or v_payload->>'target_fixed_month' is distinct from p_target_fixed_month::text
      or v_payload->>'funding_date' is distinct from p_funding_date::text or coalesce(v_payload->>'school_attempt_payload_fingerprint','') !~ '^[0-9a-f]{64}$'
-     or (v_payload->>'settlement_amount')::numeric is distinct from p_amount
+     or v_settlement_amount is distinct from p_amount
      or upper(trim(coalesce(v_payload->>'settlement_currency',''))) is distinct from v_currency then
     return jsonb_build_object('ok',false,'code','HOME_FIXED_REQUEST_PAYLOAD_MISMATCH','message','fixed request payload snapshot does not match canonical input');
   end if;
@@ -1291,6 +1417,18 @@ commit;
 -- 部署后验证
 -- ===========================================================================
 --
+-- 零、基线断言本身要能证伪（E3）
+--   第 0 步那组断言如果任何情况下都通过，等于没写。在 rollback-only 事务里
+--   逐条构造漂移并确认它们**会失败**：
+--     a. 随便 create or replace 其中一个函数（加一行注释即可改变 prosrc）
+--        → 期望 ABORT: … 的生产定义已漂移
+--     b. 先 add column original_amount 再跑本文件 → 期望 ABORT: … 可能是半部署状态
+--     c. 改掉 projection amount_check 的定义 → 期望 ABORT: projection amount_check 已漂移
+--     d. 改掉 route_fields_check → 期望 ABORT: route_fields_check 已漂移
+--   **d 若不失败，先别怀疑生产，先确认 md5 断言哈希的对象是不是
+--   pg_get_constraintdef(oid)** —— 那两个 md5 是审核给的，本文件对它哈希的是什么
+--   做了假设。
+--
 -- 一、逐行 diff（E2）—— 先做这项，diff 不符就别往下验
 --   与 ~/aozora-security-20260827/cash-baseline/ 下 2026-09-03 的五份导出逐行比，
 --   期望的功能改动数（注释与换行重排另计）：
@@ -1343,8 +1481,12 @@ commit;
 -- 五、该失败的仍然失败（E4，rollback-only，错误码必须精确匹配）
 --   新增守卫：
 --     a. 快照缺 original_amount                → HOME_FIXED_REQUEST_ORIGINAL_AMOUNT_INVALID
+--     a2. 快照 original_amount 为非数字文本     → 同上（**不得泄漏裸 22P02**）
 --     b. 快照 original_currency='USD'          → 同上
 --     c. 快照 settlement_amount ≠ 入参 p_amount → HOME_FIXED_REQUEST_PAYLOAD_MISMATCH
+--     c2. 快照 settlement_amount 为非数字文本   → 同上（审核 P2-2 的修复，
+--         **必须验**：修复前这里会在 INSERT 之前抛裸 22P02，
+--         而那时还到不了 route 触发器的受控异常映射）
 --     d. 创建后 service_role 改 original_amount → 42501 FIXED_CARD_REQUEST_EVIDENCE_IMMUTABLE
 --        ← **这条是首版 P1-3 的直接修复，必须验**
 --     e. projection 的 original 与 request 不符 → EXTERNAL_FIXED_PROJECTION_ORIGINAL_MISMATCH
@@ -1379,33 +1521,26 @@ commit;
 --     3. evidence 正常返回，original/settlement 两组字段各自正确
 --
 -- ===========================================================================
--- 我没能验证的假设（交审时的攻击点，按危险程度排序）
+-- 假设与其结论
 -- ===========================================================================
 --
--- 1. **home_external_requests_correction_guard 会不会挡住第 3 步的回填。**
---    它是本表的 BEFORE UPDATE/DELETE、SECURITY DEFINER 触发器，我**没有它的
---    函数体**。回填 UPDATE 的是 3b926e75…（rejected、非 correction 行），
---    若该守卫对任何 UPDATE 一律拒绝，本文件第 3 步就跑不完，整个事务回滚。
---    **部署前必须先 pg_get_functiondef 看这个触发器。**
---    若确实被挡：备选是在同一事务内以 owner 身份临时 disable 该触发器完成回填
---    再 enable（受控迁移的常规做法），但那属于权限边界动作，须另行批准。
+-- 首版列的第 1～4 条已由 2026-09-03 第二轮审核逐条实证，**不再是假设**：
 --
--- 2. **回填 UPDATE 会触发 route validate 触发器的完整校验。**
---    该触发器是 BEFORE INSERT/UPDATE，回填时跑的还是**旧版**（第 5 步在第 3 步
---    之后），所以不可变比较里没有新列，row() 不变 → 不会被冻结拦。
---    但它仍会重跑卡校验、schedule 校验、payload 校验。对 3b926e75 应当全部成立
---    （西武卡 offset 未变、快照未动），**但我没有实证**。
+--   1. **correction guard 不会挡回填。** 实际触发器函数是
+--      home_guard_correction_replacement_request()（md5
+--      c6b8a615dad439fc7f8f036dd60724eb），只在 old.correction_id is not null
+--      时执行不可变检查。3b926e75 是 rejected 的非 Correction-P 行，不会被拦，
+--      **无需 disable 任何触发器**。
+--   2. **回填经旧 route trigger 可通过。** 对 3b926e75 逐项只读预演全部成立：
+--      卡存在 / owner / 币种 / active / route enabled、schedule
+--      2026-10-01 与 2026-10-25、payload 的 funding/card/charge/suggested/target
+--      五键一致、fingerprint 为 64 位 hex。
+--   3. **创建器语义 diff 通过。** 除声明的四类变化外无隐藏改动，
+--      参数名/顺序/类型/默认值/返回类型/安全属性均未变。
+--   4. **异常交互通过。** 内层块把 cast 异常转成 23514，外层只捕 22P02
+--      （invalid_text_representation），不会被错误改写成 Correction-P 错误码。
 --
--- 3. **创建器的换行重排。** 生产定义是压缩单行风格，我为可读性重排了。
---    参数名、类型、默认值、顺序均未变（签名不变，create or replace 生效），
---    但重排会让文本 diff 非常吵，容易掩盖真正的语义改动。
---    **请用语义比对，或先把两边统一格式化再 diff。**
---
--- 4. **第 5 步新加的快照绑定块与既有 exception handler 的交互。**
---    route validate 触发器末尾有
---    `exception when invalid_text_representation then ... CORRECTION_P_...`。
---    我的数值转换包在自己的 begin/exception when others 里，不会落到那个处理器，
---    但这一点只是我的推理，未实测。
+-- 以下三条仍然是未验证的假设，编号沿用首版：
 --
 -- 5. **Cash 前端对 CNY projection 固定项的渲染与筛选。**
 --    docs/lessons.md D2 已记：CNY 前端仍调通用的
@@ -1425,4 +1560,3 @@ commit;
 --    payment_group = 渠道名、is_active。第八节的 fixture 需要现造。
 --
 -- ===========================================================================
-
