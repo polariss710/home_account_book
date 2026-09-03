@@ -309,12 +309,26 @@ home_external_fixed_projections_funding_lifecycle_check
 而本系统的 JPY 还款动作（把钱存入扣款卡）**不产生任何交易记录**，
 所以 `funding_status` 恒为 `unfunded`。这不是异常。
 
-CNY 侧不同：`home_update_cny_fixed_item_status` 标记已付时会经
-`home_upsert_cny_fixed_transaction` 自动生成流水，那笔流水可以充当
-`funding_transaction_id`。因此工行卡的 projection 有条件真正推进到 funded，
-与西武卡不对称。
+~~CNY 侧不同：`home_update_cny_fixed_item_status` 标记已付时会经~~
+~~`home_upsert_cny_fixed_transaction` 自动生成流水，那笔流水可以充当~~
+~~`funding_transaction_id`。因此工行卡的 projection 有条件真正推进到 funded，~~
+~~与西武卡不对称。~~
 
-出处：2026-08-31 Phase 3F 设计。
+**2026-09-03 证伪。** 上面这段推断的前提是「projection 项标记已付会走
+`home_update_cny_fixed_item_status`」，而该函数对 projection 项**先行拒绝**
+（`HOME_PROJECTION_FIXED_ITEM_STATUS_FORBIDDEN`，Phase 3F 加的），根本走不到
+`home_upsert_cny_fixed_transaction`。
+
+projection 项实际走 `home_confirm_projection_fixed_item_status`，它只改固定项
+status，不生成交易，也不动 projection 的 `funding_status`。
+**所以两张卡在 funding lifecycle 上是对称的，都恒为 `unfunded`。**
+
+顺带一个未解的坑：CNY 前端目前仍调通用的 `home_update_cny_fixed_item_status`，
+没有 projection 专用入口。因此**将来的 CNY projection 项从现有 CNY 页面点「已付」
+会被拒**，需要补前端分岔。
+
+出处：2026-08-31 Phase 3F 设计；2026-09-03 工行卡跨币种审核时由 Codex 生产实证推翻。
+教训本身：**「A 会生成流水，所以 B 可以用它」这种推断，要先确认 B 真的能走到 A。**
 
 ### D3. `month_key` 是还款月，不是消费月
 
@@ -376,3 +390,49 @@ codex 部署 Step A；第二次是改了 Step D 的验收标准注释后直接�
 
 出处：Phase 3F 部署时列了 7 项保护性验证（普通 writer 仍拒绝、DELETE 仍禁止、
 GUC=on 改 amount/due_date 仍拒绝等），全部通过才算数。
+
+### E6. 加一个业务列，同一轮必须做完四件事，缺一条就是半成品
+
+```
+1. 加列 + CHECK
+2. **纳入该表的不可变冻结**（触发器里那组字段比较）
+3. **更新所有 writer**——用 grep 找全，不要凭印象数
+4. **与 payload / 快照绑定**，若该事实来自外部系统
+```
+
+判断「做完没有」的动作，不是回想，是三条查询：
+
+```sql
+-- 谁会写这张表
+select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.prosrc ~ 'insert into public.<表名>';
+
+-- 冻结触发器里有没有新列
+select pg_get_functiondef(p.oid) from pg_proc p
+where p.proname = '<该表的 validate 触发器函数>';
+
+-- 谁能绕过 RLS 改它
+select relrowsecurity, relforcerowsecurity from pg_class where relname = '<表名>';
+```
+
+第三条尤其关键：**表若是 RLS 非 FORCE，service_role 带 UPDATE 表级权限就能直接
+改，CHECK 拦不住「改成另一个合法值」。** 只有触发器里的不可变比较能拦。
+
+出处：2026-09-03 一天之内同类缺陷被审核拦下**两次**。
+
+- 第一次 `home_card_instruments.funding_month_offset`：文件自己声明该列
+  「设定后不应更改」，却不纳入 `home_validate_card_instrument` 的冻结集。
+- 第二次 `home_external_transaction_requests.original_amount / original_currency`：
+  语义写「此后不可变」，却不纳入
+  `home_validate_external_request_payment_route()` 的不可变比较；
+  同时漏改两个 writer（`home_create_external_fixed_transaction_request` 与
+  `home_prepare_external_transaction_correction_p_core`），
+  也没把列值与 `payload_snapshot` 绑定。
+
+第二次尤其没有借口——第一次的教训当天就写进了那个文件的头部注释，
+而且是我自己写的。**「知道规则但写的时候没想起来」在本项目已经是复发模式**
+（另见 A3 的三次），所以这条给出的是查询而不是叮嘱。
+
+附带一条：**加了约束就等于给所有 writer 加了前置条件。** 第二次那个约束一旦落地，
+在 writer 补齐之前，Gate 已开的生产提交路径会立刻 23514。
+「先加约束、后补 writer」不是可接受的中间态，是中断窗口。

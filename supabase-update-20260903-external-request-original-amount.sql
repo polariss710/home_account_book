@@ -1,3 +1,20 @@
+-- ###########################################################################
+-- ##  作废，禁止执行 —— 2026-09-03 审核驳回（P1-1 / P1-3）
+-- ##
+-- ##  本文件加的约束要求 fixed 请求必须有 original_amount / original_currency，
+-- ##  但两个 writer 都不写这两列：
+-- ##    home_create_external_fixed_transaction_request
+-- ##    home_prepare_external_transaction_correction_p_core
+-- ##  School 固定卡 Gate 已开，执行本文件会让西武卡提交立刻 23514——
+-- ##  这不是中间态，是生产中断。文件里「第 3 步会补上入参」那句是错的。
+-- ##
+-- ##  另：新增两列未纳入 home_validate_external_request_payment_route() 的
+-- ##  不可变比较，service_role 可在创建后随意改；也未与 payload_snapshot 绑定。
+-- ##
+-- ##  替代方案：Cash 单侧一个事务原子落地，original 两列从 payload_snapshot
+-- ##  读取（那四个键 School 早就在传）。本文件保留仅为审核轨迹。
+-- ###########################################################################
+
 -- 跨库固定请求的双金额模型 —— 为 JPY 消费 / CNY 结算的工行卡做准备（第 1 步 / 共 3 步）
 --
 -- 日期：2026-09-03
