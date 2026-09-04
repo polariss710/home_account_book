@@ -24,6 +24,16 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
+2026-09-05 ICBC cross-currency deployment:
+
+- Published the urgent single-item frontend from exact commit `fb1a307` (Pages run `33897011753`), then published `145f4c3` after the bulk SQL passed rollback acceptance (run `33897596795`). The requested School JPY item was changed to paid through the UI.
+- Deployed bulk projection skipping; isolated JPY/CNY mixed scopes returned updated=1/skipped=1. Non-projection missing-account, insufficient-balance and both statement guards passed. ACLs and CNY NULL proconfig were preserved; rollback fixture residue was zero.
+- Deployed card catalog LEFT JOIN, optional household template, then catalog funding_month_offset, in that order. Catalog ACL remains exactly `{postgres=X/postgres}`. LEFT JOIN rollback prosrc MD5: `5d7de5ebd366a535367fff859be17f1c`. Existing Seibu card data and other card-table schema were unchanged.
+- Created the authorized Alipay CNY channel and ICBC card without a household template. Six schedule cases passed; ICBC route enabled at 2026-09-05 02:00:44 JST.
+- School frontend `9a78d06` and Edge request v10 / sync v13 were deployed. Schema reload was followed by an actual new-signature HTTP RPC negative case and the complete UI submit/reject/resubmit/approve chain.
+- A clearly marked codex-test expense in 2099-09 remains as acceptance evidence: attempt 1 rejected, attempt 2 approved_fixed, School paid, one CNY fixed item in 2099-10. No Cash transaction was created. No test cleanup was attempted.
+- Known unverified f/g guard-removal cases, Cash anon ACL cleanup, and School's pre-existing 12 TypeScript errors remain separate; none is reported as passed here.
+
 2026-08-31 Phase 3F anon ACL correction:
 
 - Revoked the direct `anon` EXECUTE grant from `home_confirm_projection_fixed_item_status(uuid,text)`. Production now reports `anon=false`, `authenticated=true`, and ACL `{postgres, authenticated, service_role}`; the function owner, `SECURITY DEFINER` mode, fixed `search_path`, and body were unchanged.
