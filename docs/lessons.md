@@ -391,6 +391,45 @@ codex 部署 Step A；第二次是改了 Step D 的验收标准注释后直接�
 出处：Phase 3F 部署时列了 7 项保护性验证（普通 writer 仍拒绝、DELETE 仍禁止、
 GUC=on 改 amount/due_date 仍拒绝等），全部通过才算数。
 
+### E9. 跨库 saga 要**双向** trace，回写链和提交链一样长
+
+改跨库流程时，把调用链画出来**画两遍**：
+
+```
+提交方向  School prepare → Edge → Cash create → Cash approve
+回写方向  Cash 结果 → Edge → School mark_submitted / mark_rejected / callback
+```
+
+**第二条链和第一条一样长，一样多校验，一样会因为新字段而失败。**
+只 trace 第一条，会得出「改 N 处就够了」的结论，然后在审核里被打回。
+
+出处：2026-09-04 工行卡跨币种。我从 08-31 起做的阻塞点清单——先说 3 处、
+复查后改成 9 处——**从头到尾没有一条是回写链上的**。审核查出两条 P1：
+
+- `school_apply_expense_cash_fixed_attempt_transition_v2` 把结算金额/币种
+  同时传给 original 与 settlement 两组参数，跨币种时回调收到的 original
+  与 attempt 存的对不上 → `SCHOOL_EXPENSE_CASH_FIXED_PAYLOAD_CONFLICT`，
+  **submitted 标不了、rejected 也回写不了**
+- `school_apply_expense_cash_fixed_callback_v3` 的 approved 分支仍锁死
+  「固定项币种必须 JPY」「原币必须等于结算币」「原币金额必须等于结算金额」
+
+第二条的后果尤其重：**Cash 已批准而 School 无法确认，而 Cash 批准不可逆。**
+一个只做了提交方向的改动，会把系统推进到正好是「最不该到达」的那个状态。
+
+找全的方法不是回想，是从**结果表**倒着查谁写它：
+
+```sql
+-- 谁会更新 School 侧那张记录跨库状态的表
+select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.prosrc ~ 'update public.school_expense_records'
+  and p.prosrc ~ 'cash_request_status';
+```
+
+与 [E6](#e6) 是同一族：E6 说「加了列要找全所有 writer」，本条说
+「改了跨库事实要找全**两个方向**的所有 writer」。E6 的查询按表找，
+本条的查询按状态字段找。
+
 ### E8. 归档基线的文件名日期，不等于它反映的生产时点
 
 `~/aozora-security-20260827/cash-baseline/` 下的导出同时服务 School 与 Cash 两个
