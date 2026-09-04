@@ -18,6 +18,7 @@ import {
   reactivateTemplate,
   saveMonthItem,
   settleFixedAdvanceRepayment,
+  applySkippedProjectionItems,
   updateMonthItemsStatus,
   updateMonthItemStatus,
 } from "#supabase";
@@ -326,8 +327,18 @@ function bindMonthItemControls() {
       const [direction, status] = button.dataset.bulkItemStatus.split(":");
       const result = await updateMonthItemsStatus(direction, status);
       if (!result) return;
+      // 批量 writer 有意跳过 School projection 项，这里逐条补上，用户仍只点一次。
+      // 理由见 supabase.js 里 confirmProjectionItemsStatus 的注释。
+      const suffix = await applySkippedProjectionItems(
+        result,
+        direction === "income" ? appState.page?.income_items : appState.page?.expense_items,
+        status,
+      );
       await loadFixedMonthPage();
-      setActionMessage(result.message || `固定项状态已更新 ${Number(result.updated_count || 0)} 条。`, "success");
+      setActionMessage(
+        `${result.message || `固定项状态已更新 ${Number(result.updated_count || 0)} 条。`}${suffix}`,
+        "success",
+      );
       render();
     });
   });

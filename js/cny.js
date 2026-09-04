@@ -16,6 +16,7 @@ import {
   saveCnyTransaction,
   updateAccount,
   updateCnyFixedItem,
+  applySkippedProjectionItems,
   updateCnyFixedItemsStatus,
   updateCnyFixedItemStatus,
   updateCnyToJpyFx,
@@ -344,7 +345,13 @@ function bindBulkFixedItemControls() {
       const [direction, status] = button.dataset.cnyBulkFixedStatus.split(":");
       const result = await updateCnyFixedItemsStatus(direction, status);
       if (!result) return;
-      await refreshAfterMutation(cnyBulkStatusMessage(result), "success");
+      // 批量 writer 有意跳过 School projection 项，这里逐条补上，用户仍只点一次。
+      const suffix = await applySkippedProjectionItems(
+        result,
+        direction === "income" ? appState.cnyFixedPage?.income_items : appState.cnyFixedPage?.expense_items,
+        status,
+      );
+      await refreshAfterMutation(`${cnyBulkStatusMessage(result)}${suffix}`, "success");
     };
   });
 }

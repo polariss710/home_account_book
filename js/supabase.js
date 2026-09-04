@@ -536,6 +536,61 @@ export async function updateCnyFixedItem(record) {
   return handleRpcResult(data, "人民币固定项更新失败。");
 }
 
+// 批量之后补 School projection 项。
+//
+// 两个批量 writer **有意不碰** projection 项——那道 GUC 守卫
+// （home_fixed_month_items_projection_guard）要求 projection 的写入显式且窄，
+// 把批量路径放进那扇门等于放宽守卫边界。所以 DB 层只处理普通项、报出跳过条数，
+// 剩下的由这里逐条走专用 writer 补上。用户仍然只点一次。
+//
+// 两种币种的 projection 项走同一个 RPC——那个函数币种无关，只改状态、不产流水。
+//
+// ⚠️ 跨两次调用**不是原子的**：批量成功之后这里某条失败，会停在
+// 「普通项已付、这条 School 项未付」。失败是可见的（那条的下拉还是原状态）
+// 且会被报出来，不会静默。人民币那边本来就是逐条循环、本来就非原子；
+// 日元那边这是新引入的，属于换来「一键仍是一键」的代价。
+export async function confirmProjectionItemsStatus(items, status) {
+  let updated = 0;
+  const failed = [];
+  for (const item of items || []) {
+    const { data, error } = await appState.supabaseClient.rpc(
+      "home_confirm_projection_fixed_item_status",
+      { p_item_id: item.id, p_status: status },
+    );
+    // 这里不调 handleRpcResult：它会 setActionMessage，循环里每条都弹一次，
+    // 最后只剩最后一条可见。改为收集失败项，由调用方一次报完。
+    if (error || data?.ok === false) {
+      failed.push(item.name || item.id);
+      continue;
+    }
+    updated += 1;
+  }
+  return { updated, failed };
+}
+
+// 供两个「一键」按钮共用：批量返回里若报了跳过条数，就把列表里的 School 项
+// 逐条补上，并返回一段追加到成功信息后面的文字。
+//
+// items 传当月该方向的完整列表（不是界面筛选后的），由调用方从各自的 appState 取。
+export async function applySkippedProjectionItems(batchResult, items, status) {
+  const skipped = Number(batchResult?.skipped_projection_count || 0);
+  if (skipped <= 0) return "";
+
+  const schoolItems = (items || []).filter((item) => item?.accounting_scope === "school");
+  if (schoolItems.length === 0) {
+    // DB 说跳过了 N 条，前端列表里却一条 School 项都没有——两边看到的范围不一致
+    // （筛选、缓存、或者刚好有并发改动）。**不要静默吞掉**，否则用户会以为
+    // 一键已经处理完了。
+    return `；另有 ${skipped} 条 School 项被跳过，请刷新后单独处理`;
+  }
+
+  const { updated, failed } = await confirmProjectionItemsStatus(schoolItems, status);
+  if (failed.length > 0) {
+    return `；School 项 ${updated} 条已更新，${failed.length} 条失败（${failed.join("、")}）`;
+  }
+  return `；另含 School 项 ${updated} 条`;
+}
+
 // 与 updateMonthItemStatus 同一套分岔，理由见那里。人民币这边目前还没有 School
 // projection 项（工行卡尚未建立），但一旦建了就会走到这里，所以两边一起改——
 // 只改日元那边，等工行卡上线又是同一个坑再踩一次。
