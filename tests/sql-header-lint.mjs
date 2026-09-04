@@ -8,9 +8,31 @@
 // 而肉眼完全看不出来（周围全是中文，缺个 -- 不显眼），也没有任何检查会碰它——
 // 本机没有离线的 PostgreSQL 解析器，`psql -f` 又需要连库。
 //
-// 所以退而求其次：**头部区（第一条 \set 或 begin; 之前）的每一行，
-// 要么是空行，要么必须以 -- 开头。** 这不能替代真正的语法检查，
-// 但恰好覆盖了那个反复编辑、最容易出错的区域。
+// ---------------------------------------------------------------------------
+// 判据（第三版。前两版都是被自己的误报或漏检推翻的）
+// ---------------------------------------------------------------------------
+//
+//   有 \set / begin; 标记的文件 → **严格**：标记之前每个非空行都必须以 -- 开头
+//   没有该标记的老文件         → **启发式**：不以 -- 开头却含中日韩字符的行可疑
+//
+// 为什么这么分：
+//
+//   第一版对所有文件用严格规则，被 supabase-update-20260529-fixed-10.sql 误报。
+//   那种老文件没有事务包裹、第一行直接是 drop function，于是「标记之前」等于整个
+//   文件，正常 SQL 全被判成裸行。
+//
+//   第二版改成纯启发式（含中文 + 不含引号），躲开了误报，却**漏检**——
+//   审核 2026-09-05 用本仓库的真实例子打穿：
+//   supabase-update-20260904-card-household-template-optional.sql 第 28 行
+//     direction='expense'、accounting_scope='household'、payment_group 等于还款渠道名
+//   是中文散文，但含 'expense' 的引号，被「跳过含引号的行」放走。
+//   纯 ASCII 的注释行（`-- see also foo.sql`）掉前缀同样漏检。
+//
+//   第三版的要点：**新格式文件根本不需要启发式。** 它的头部边界是确定的，
+//   直接严格要求即可，ASCII 与含引号的散文一并覆盖。启发式退化成只给没有边界
+//   标记的老文件兜底——那里仍会漏检含引号的中文散文，但那些文件不再新增编辑。
+//
+// 块注释 /* */ 在头部区是合法写法，单独放行。
 
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
@@ -21,39 +43,73 @@ function check(condition, message) {
   assertionCount += 1;
 }
 
+// 不以 -- 开头却含中日韩字符 —— 只用于老文件兜底。
+const CJK = /[一-鿿　-〿＀-￯]/;
+
+function findHeaderEnd(lines) {
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmed = lines[i].trim();
+    if (trimmed.startsWith("\\set") || trimmed === "begin;") return i;
+  }
+  return -1;
+}
+
+function bareLinesStrict(lines, headerEnd) {
+  const bare = [];
+  let inBlockComment = false;
+  for (let i = 0; i < headerEnd; i += 1) {
+    const trimmed = lines[i].trim();
+    if (inBlockComment) {
+      if (trimmed.includes("*/")) inBlockComment = false;
+      continue;
+    }
+    if (!trimmed || trimmed.startsWith("--")) continue;
+    if (trimmed.startsWith("/*")) {
+      if (!trimmed.includes("*/")) inBlockComment = true;
+      continue;
+    }
+    bare.push(`${i + 1}: ${lines[i].slice(0, 60)}`);
+  }
+  return bare;
+}
+
+function bareLinesHeuristic(lines) {
+  const bare = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmed = lines[i].trim();
+    if (!trimmed || trimmed.startsWith("--")) continue;
+    if (!CJK.test(trimmed)) continue;
+    // 老文件没有确定的头部边界，必须容忍中文字符串字面量与美元引用块。
+    // 代价就是含引号的中文散文会漏检——这个缺口只存在于老格式文件。
+    if (trimmed.includes("'") || trimmed.includes('"') || trimmed.includes("$$")) continue;
+    bare.push(`${i + 1}: ${lines[i].slice(0, 60)}`);
+  }
+  return bare;
+}
+
 const files = (await readdir(".")).filter(
   (name) => name.startsWith("supabase-update-") && name.endsWith(".sql"),
 ).sort();
 
 check(files.length > 0, "至少能找到一个迁移文件");
 
+let strictCount = 0;
 for (const name of files) {
   const lines = (await readFile(name, "utf8")).split("\n");
+  const headerEnd = findHeaderEnd(lines);
+  const strict = headerEnd > 0;
+  if (strict) strictCount += 1;
 
-  // 判据不是「在头部区」，而是「这一行像散文」。
-  //
-  // 初稿按 SQL 关键字划头部区，连着误报两次：一个老文件第一行就是 drop function，
-  // 另一个用了 lock table 而我的关键字表里没有。**追关键字是无底洞。**
-  //
-  // 换个角度：本项目的说明文字是中文，SQL 是 ASCII。所以
-  // 「不以 -- 开头、却含中日韩字符」的行，几乎必然是掉了前缀的注释。
-  //
-  // 唯一的合法例外是**中文字符串字面量**（错误信息里有中文），它们必然带引号，
-  // 所以再排除含引号的行。这两条合起来误报率极低，而且不依赖任何关键字表。
-  const CJK = /[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/;
-  const bare = [];
-  for (let i = 0; i < lines.length; i += 1) {
-    const trimmed = lines[i].trim();
-    if (!trimmed || trimmed.startsWith("--")) continue;
-    if (!CJK.test(trimmed)) continue;
-    if (trimmed.includes("'") || trimmed.includes('"')) continue;
-    bare.push(`${i + 1}: ${lines[i].slice(0, 60)}`);
-  }
+  const bare = strict ? bareLinesStrict(lines, headerEnd) : bareLinesHeuristic(lines);
 
   check(
     bare.length === 0,
-    `${name} 头部区有未加 -- 的裸行，部署时会是语法错误：\n    ${bare.join("\n    ")}`,
+    `${name} 头部区有未加 -- 的裸行（${strict ? "严格" : "启发式"}判据），`
+      + `部署时会是语法错误：\n    ${bare.join("\n    ")}`,
   );
 }
 
-console.log(`SQL_HEADER_LINT_PASS ${assertionCount}/${assertionCount}（${files.length} 个迁移文件）`);
+console.log(
+  `SQL_HEADER_LINT_PASS ${assertionCount}/${assertionCount}`
+    + `（${files.length} 个迁移文件，其中 ${strictCount} 个走严格判据）`,
+);
