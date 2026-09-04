@@ -343,7 +343,8 @@ async function saveItemPatch(id, patch) {
 }
 
 async function saveItemStatus(id, status) {
-  const result = await updateMonthItemStatus(id, status);
+  // School projection 项要走专用 writer，把 item 一起传下去让 supabase.js 分岔。
+  const result = await updateMonthItemStatus(id, status, findMonthItem(id));
   if (!result) {
     await loadFixedMonthPage();
     render();

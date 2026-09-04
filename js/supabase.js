@@ -412,8 +412,26 @@ export async function saveMonthItem(record) {
   return upsert("home_fixed_month_items", withUser(allowedRecord));
 }
 
-export async function updateMonthItemStatus(id, status) {
-  const { data, error } = await appState.supabaseClient.rpc("home_update_fixed_month_item_status", {
+// School projection 固定项（accounting_scope='school'）不能走普通状态 writer——
+// 日元与人民币两个通用 writer 都会先行拒绝，报
+// HOME_PROJECTION_FIXED_ITEM_STATUS_FORBIDDEN。它们有专用的
+// home_confirm_projection_fixed_item_status，币种无关、只改状态、不生成流水。
+//
+// Phase 3F 把 DB 侧这个专用 writer 建好了，但前端一直没接上去，所以生产里那条
+// 「教室费用 / 2026-08 / 202,991 JPY」从界面点不动（2026-09-04 用户实测确认）。
+// **这不是工行卡带来的问题，日元这边早就有。**
+//
+// 分岔放在本模块，是因为 AGENTS.md 规定所有 .rpc() 只能出现在这里。调用方负责
+// 把它本来就拿在手上的那条 item 传进来，而不是让本模块反过来去翻页面状态。
+function isSchoolProjectionItem(item) {
+  return item?.accounting_scope === "school";
+}
+
+export async function updateMonthItemStatus(id, status, item = null) {
+  const rpcName = isSchoolProjectionItem(item)
+    ? "home_confirm_projection_fixed_item_status"
+    : "home_update_fixed_month_item_status";
+  const { data, error } = await appState.supabaseClient.rpc(rpcName, {
     p_item_id: id,
     p_status: status,
   });
@@ -518,8 +536,14 @@ export async function updateCnyFixedItem(record) {
   return handleRpcResult(data, "人民币固定项更新失败。");
 }
 
-export async function updateCnyFixedItemStatus(id, status) {
-  const { data, error } = await appState.supabaseClient.rpc("home_update_cny_fixed_item_status", {
+// 与 updateMonthItemStatus 同一套分岔，理由见那里。人民币这边目前还没有 School
+// projection 项（工行卡尚未建立），但一旦建了就会走到这里，所以两边一起改——
+// 只改日元那边，等工行卡上线又是同一个坑再踩一次。
+export async function updateCnyFixedItemStatus(id, status, item = null) {
+  const rpcName = isSchoolProjectionItem(item)
+    ? "home_confirm_projection_fixed_item_status"
+    : "home_update_cny_fixed_item_status";
+  const { data, error } = await appState.supabaseClient.rpc(rpcName, {
     p_item_id: id,
     p_status: status,
   });

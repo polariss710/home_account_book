@@ -328,7 +328,8 @@ async function saveFixedItemPatch(id, patch) {
 }
 
 async function saveFixedItemStatus(id, status) {
-  const result = await updateCnyFixedItemStatus(id, status);
+  // 同 render.js：School projection 项走专用 writer。
+  const result = await updateCnyFixedItemStatus(id, status, findFixedItem(id));
   if (!result) {
     await loadAppData();
     render();
