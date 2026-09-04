@@ -325,9 +325,15 @@ function bindMonthItemControls() {
   document.querySelectorAll("[data-bulk-item-status]").forEach((button) => {
     button.addEventListener("click", async () => {
       const [direction, status] = button.dataset.bulkItemStatus.split(":");
-      // **在第一次 await 之前固定操作范围。** 批量请求往返期间用户可能切换账期，
-      // 之后再读 appState.page 拿到的是另一个月的项目，补写会打到错误的月份上。
-      const operatingMonth = appState.activeMonth;
+      // **页面数据与当前账期必须一致才允许批量。**
+      // monthPicker 先改 activeMonth、再 await 加载，加载期间旧列表仍挂在屏幕上。
+      // 那个窗口里点批量：批量按新月份下发，而补写用的是旧列表的 ID。
+      // 只把两者提前读取堵不住——它们本身就已经不一致了（审核 P1，两次都栽在这）。
+      if (appState.pageMonth !== appState.activeMonth) {
+        setActionMessage("账期数据尚未加载完成，请稍候再试。", "error");
+        return;
+      }
+      const operatingMonth = appState.pageMonth;
       const projectionTargets =
         (direction === "income" ? appState.page?.income_items : appState.page?.expense_items) || [];
       const result = await updateMonthItemsStatus(direction, status);

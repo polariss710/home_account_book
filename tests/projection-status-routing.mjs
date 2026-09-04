@@ -146,7 +146,14 @@ for (const [name, source, anchor] of bulkHandlers) {
     `${name} 的一键按钮在批量之后补写 School 项`,
   );
 
-  const monthIdx = handler.indexOf("const operatingMonth = appState.activeMonth;");
+  // 闸门：页面数据的来源月份必须等于当前账期才允许开始批量。
+  // 只「提前读取」堵不住——monthPicker 先改 activeMonth、再 await 加载，
+  // 那个窗口里两个值本身就已经不一致（审核 P1 第二次）。
+  check(
+    /!== appState\.activeMonth\) \{[\s\S]{0,140}账期数据尚未加载完成/.test(handler),
+    `${name} 在启动批量前核对页面数据属于当前账期`,
+  );
+  const monthIdx = handler.search(/const operatingMonth = appState\.(pageMonth|cnyFixedPageMonth);/);
   const targetsIdx = handler.indexOf("const projectionTargets =");
   const awaitIdx = handler.search(/const result = await update\w*Status\(/);
   check(monthIdx > -1 && awaitIdx > monthIdx, `${name} 在第一次 await 之前固定账期`);

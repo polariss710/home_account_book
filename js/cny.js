@@ -343,9 +343,15 @@ function bindBulkFixedItemControls() {
   document.querySelectorAll("[data-cny-bulk-fixed-status]").forEach((button) => {
     button.onclick = async () => {
       const [direction, status] = button.dataset.cnyBulkFixedStatus.split(":");
-      // 与 render.js 同理：在第一次 await 之前固定操作范围，否则等待期间切月会让
-      // 补写打到错误月份的项目 ID 上（审核 P1，两边都复现过）。
-      const operatingMonth = appState.activeMonth;
+      // **页面数据与当前账期必须一致才允许批量。**
+      // monthPicker 先改 activeMonth、再 await 加载，加载期间旧列表仍挂在屏幕上。
+      // 那个窗口里点批量：批量按新月份下发，而补写用的是旧列表的 ID。
+      // 只把两者提前读取堵不住——它们本身就已经不一致了（审核 P1，两次都栽在这）。
+      if (appState.cnyFixedPageMonth !== appState.activeMonth) {
+        setActionMessage("账期数据尚未加载完成，请稍候再试。", "error");
+        return;
+      }
+      const operatingMonth = appState.cnyFixedPageMonth;
       const projectionTargets =
         (direction === "income"
           ? appState.cnyFixedPage?.income_items

@@ -2,6 +2,10 @@ import { monthKey } from "#utils";
 
 export const appState = {
   activeMonth: monthKey(new Date()),
+  // 已加载的固定收支页各自属于哪个月。activeMonth 会先于加载完成而改变，
+  // 批量操作靠这两个字段判断手上的列表是否属于当前账期（审核 P1）。
+  pageMonth: null,
+  cnyFixedPageMonth: null,
   activeYear: new Date().getFullYear(),
   activeView: "dashboard",
   page: null,

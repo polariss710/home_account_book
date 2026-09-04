@@ -150,16 +150,22 @@ export async function loadYearSummary(year = appState.activeYear) {
 
 export async function loadFixedMonthPage() {
   if (!isCloudReady()) return;
+  // 记下这份数据实际是按哪个月拉的。appState.activeMonth 在 monthPicker 里会
+  // **先于** loadAppData 改掉，加载期间旧列表仍挂在屏幕上——不记录来源月份，
+  // 就无从判断手上这份数据是否属于当前账期。（审核 P1，2026-09-05）
+  const requestedMonth = appState.activeMonth;
   const { data, error } = await appState.supabaseClient.rpc("home_get_fixed_month_page", {
-    p_month_key: appState.activeMonth,
+    p_month_key: requestedMonth,
     p_currency: "JPY",
   });
   if (error) {
     setActionMessage(`固定收支读取失败：${error.message}`, "error");
     appState.page = null;
+    appState.pageMonth = null;
     return;
   }
   appState.page = data;
+  appState.pageMonth = requestedMonth;
 }
 
 async function loadJpyAccountPage() {
@@ -190,16 +196,20 @@ async function loadCnyAccountPage() {
 
 async function loadCnyFixedPage() {
   if (!isCloudReady()) return;
+  // 同 loadFixedMonthPage：记下来源月份。
+  const requestedMonth = appState.activeMonth;
   const { data, error } = await appState.supabaseClient.rpc("home_get_fixed_month_page", {
-    p_month_key: appState.activeMonth,
+    p_month_key: requestedMonth,
     p_currency: "CNY",
   });
   if (error) {
     setActionMessage(`人民币固定收支读取失败：${error.message}`, "error");
     appState.cnyFixedPage = null;
+    appState.cnyFixedPageMonth = null;
     return;
   }
   appState.cnyFixedPage = data;
+  appState.cnyFixedPageMonth = requestedMonth;
 }
 
 export async function generateFixedMonth() {
