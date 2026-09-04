@@ -568,27 +568,39 @@ export async function confirmProjectionItemsStatus(items, status) {
   return { updated, failed };
 }
 
-// 供两个「一键」按钮共用：批量返回里若报了跳过条数，就把列表里的 School 项
-// 逐条补上，并返回一段追加到成功信息后面的文字。
+// 供两个「一键」按钮共用：批量返回里若报了跳过条数，就把这些 School 项逐条补上，
+// 并返回一段追加到成功信息后面的文字。
 //
-// items 传当月该方向的完整列表（不是界面筛选后的），由调用方从各自的 appState 取。
-export async function applySkippedProjectionItems(batchResult, items, status) {
+// ⚠️ **items 与 expectedMonth 必须由调用方在第一次 await 之前就固定下来。**
+// 批量请求往返期间用户可能切换账期，那时 appState 已经指向另一个月；若在这里
+// 重新读页面状态，补写会打到**错误月份的项目 ID** 上。
+// （2026-09-04 审核以 P1 复现：8 月点批量、等待中切到 9 月，补写 ID 来自 9 月。）
+export async function applySkippedProjectionItems(batchResult, items, status, expectedMonth) {
   const skipped = Number(batchResult?.skipped_projection_count || 0);
   if (skipped <= 0) return "";
 
-  const schoolItems = (items || []).filter((item) => item?.accounting_scope === "school");
-  if (schoolItems.length === 0) {
-    // DB 说跳过了 N 条，前端列表里却一条 School 项都没有——两边看到的范围不一致
-    // （筛选、缓存、或者刚好有并发改动）。**不要静默吞掉**，否则用户会以为
-    // 一键已经处理完了。
-    return `；另有 ${skipped} 条 School 项被跳过，请刷新后单独处理`;
+  // 即使集合已经固定，也要再校验一次账期：用户已经切走时不做无声的后台写入，
+  // 让他回到原账期再点一次，比在他没看着的月份上改状态要好。
+  if (expectedMonth && appState.activeMonth !== expectedMonth) {
+    return `；${skipped} 条 School 项未补写（操作期间已切换账期），请回到 ${expectedMonth} 后重试`;
   }
 
+  const schoolItems = (items || []).filter((item) => item?.accounting_scope === "school");
   const { updated, failed } = await confirmProjectionItemsStatus(schoolItems, status);
-  if (failed.length > 0) {
-    return `；School 项 ${updated} 条已更新，${failed.length} 条失败（${failed.join("、")}）`;
+
+  // 逐项报告，三种情况可以同时出现。
+  //
+  // 特别是最后一条：DB 说跳过了 N 条，而列表里只找到 M 条（M 可能大于 0）。
+  // 初版只处理了 M === 0，于是 N=2 / M=1 时会补一条然后报「另含 School 项 1 条」，
+  // 把剩下那条静默吞掉——**非空列表不等于完整列表**（审核 P2）。
+  const parts = [];
+  if (updated > 0) parts.push(`School 项 ${updated} 条已更新`);
+  if (failed.length > 0) parts.push(`${failed.length} 条失败（${failed.join("、")}）`);
+  const unaccounted = skipped - schoolItems.length;
+  if (unaccounted > 0) {
+    parts.push(`另有 ${unaccounted} 条未在当前列表中，请刷新后单独处理`);
   }
-  return `；另含 School 项 ${updated} 条`;
+  return parts.length ? `；${parts.join("，")}` : "";
 }
 
 // 与 updateMonthItemStatus 同一套分岔，理由见那里。人民币这边目前还没有 School

@@ -343,13 +343,21 @@ function bindBulkFixedItemControls() {
   document.querySelectorAll("[data-cny-bulk-fixed-status]").forEach((button) => {
     button.onclick = async () => {
       const [direction, status] = button.dataset.cnyBulkFixedStatus.split(":");
+      // 与 render.js 同理：在第一次 await 之前固定操作范围，否则等待期间切月会让
+      // 补写打到错误月份的项目 ID 上（审核 P1，两边都复现过）。
+      const operatingMonth = appState.activeMonth;
+      const projectionTargets =
+        (direction === "income"
+          ? appState.cnyFixedPage?.income_items
+          : appState.cnyFixedPage?.expense_items) || [];
       const result = await updateCnyFixedItemsStatus(direction, status);
       if (!result) return;
       // 批量 writer 有意跳过 School projection 项，这里逐条补上，用户仍只点一次。
       const suffix = await applySkippedProjectionItems(
         result,
-        direction === "income" ? appState.cnyFixedPage?.income_items : appState.cnyFixedPage?.expense_items,
+        projectionTargets,
         status,
+        operatingMonth,
       );
       await refreshAfterMutation(`${cnyBulkStatusMessage(result)}${suffix}`, "success");
     };

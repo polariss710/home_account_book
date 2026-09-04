@@ -1,3 +1,18 @@
+-- ###########################################################################
+-- ##  不完整，暂勿部署 —— 2026-09-04 审核 P2：运维卡目录会漏掉该卡
+-- ##
+-- ##  生产 home_get_card_route_catalog(uuid) 用的是
+-- ##      INNER JOIN home_fixed_templates ft ON ft.id = c.household_statement_template_id
+-- ##  解除 NOT NULL 之后，**没有家庭模板的卡会从这个运维目录里整行消失**。
+-- ##
+-- ##  本文件只改了列与校验器，没覆盖这个 reader。需要配套把它改成 LEFT JOIN
+-- ##  并定义空模板时那几列的取值语义——而我手上没有它的生产定义，已请求基线。
+-- ##
+-- ##  影响范围：School 侧的卡列表直接读 home_card_instruments，**不受影响**
+-- ##  （审核已确认）。所以这是运维视图的缺口，不是业务路径的缺口，
+-- ##  但「建了一张卡却在目录里看不见」正是那种事后极难想到要去查的问题。
+-- ###########################################################################
+
 -- 信用卡的家庭账单模板改为可选 —— 去掉「每张卡都有家庭消费」这个单卡时代的假设
 --
 -- 日期：2026-09-04
@@ -54,15 +69,23 @@
 -- 对 Phase 3E 的影响
 -- ===========================================================================
 --
--- Phase 3E（信用卡账单确认）按「卡绑定的 household_statement_template_id + 用户
--- + 目标月」唯一定位家庭项，找不到就返回 HOME_CARD_STATEMENT_HOUSEHOLD_ITEM_MISSING。
--- 模板为 NULL 时那个查找不会命中，因此**失败关闭**——不会误算出一个家庭余额。
+**2026-09-04 审核已实证**，「不会匹配任意模板」这个判断成立，但返回形状我推断错了：
+
+--   preview  用 `i.template_id = v_card.household_statement_template_id`，
+--            NULL 命中零条。前置检查通过时返回 **ok=true、can_confirm=false**，
+--            blockers 里含 HOME_CARD_STATEMENT_HOUSEHOLD_ITEM_MISSING。
+--            **不是抛错，是一个「不能确认」的正常返回。**
+--   confirm  调用上面那个 preview 并检查 can_confirm，
+--            **在创建 cycle、改动家庭项金额之前就拒绝**。
+--   reopen   按已有 cycle 及其家庭项 ID 查找，不按模板模糊匹配。
+--            NULL 模板的新卡没有 cycle，返回 HOME_CARD_STATEMENT_CYCLE_NOT_FOUND。
 --
--- 而且这条链路至今**没有任何前端入口**（confirm / preview / reopen 三个 RPC 在
+-- 所以确实**失败关闭**、不会误算出家庭余额，但**不能说「所有失败都叫
+-- HOUSEHOLD_ITEM_MISSING」**——School manifest 校验发生在家庭项查找之前，
+-- 跨币种或其他事实不匹配时会先返回 manifest 错误。
+--
+-- 这条链路至今**没有任何前端入口**（confirm / preview / reopen 三个 RPC 在
 -- Cash 前端零引用），两张卡都没真正用过。工行卡也已确认不接。
---
--- ⚠️ 但我**没有读过** home_preview_card_statement / home_confirm_card_statement
--- 的函数体，上面这段是从 Phase 3E 文档第 25 行推断的。见文末假设第 1 条。
 --
 -- ===========================================================================
 -- 回滚
@@ -287,25 +310,27 @@ commit;
 -- 我没能验证的假设（交审时的攻击点）
 -- ===========================================================================
 --
--- 1. **Phase 3E 三个函数遇到 NULL 模板的实际行为。** 我推断它按
---    「模板 id + 用户 + 目标月」查找、查不到就返回
---    HOME_CARD_STATEMENT_HOUSEHOLD_ITEM_MISSING，属失败关闭。
---    但这是从 docs/home-phase3e-card-statement-confirm-reopen-20260819.md:25
---    推断的，**我没有读过 home_preview_card_statement / home_confirm_card_statement /
---    home_reopen_card_statement 的函数体**。
---    请确认 NULL 不会导致别的分支（比如把 NULL 当成「匹配任意模板」）。
---    这三个函数至今无前端入口，风险低，但值得一查。
+-- 首版列的前三条已由 2026-09-04 审核实证，**不再是假设**：
 --
--- 2. **还有没有别的地方读这一列。** 我在 Cash 仓库 grep 过，只命中 Phase 3E 的文档
---    与那个 statement 生成脚本。但磁盘不等于生产（lessons B1），
---    请用 catalog 查一遍谁的 prosrc 引用了 household_statement_template_id。
+--   1. Phase 3E 对 NULL 的行为已查清，见上面「对 Phase 3E 的影响」一节
+--      （返回形状我原来推断错了，已订正）。
+--   2. 全库 prosrc 搜索，直接引用该列的函数共**四个**：
+--        home_validate_card_instrument      ← 本文件已改
+--        home_build_card_statement_preview  ← Phase 3E，失败关闭，不改
+--        home_validate_card_statement_cycle ← Phase 3E，不改
+--        home_get_card_route_catalog        ← **INNER JOIN，会漏卡，见文首阻断说明**
+--      我原先只在仓库 grep 过，漏掉了后两个——磁盘不等于生产（lessons B1）。
+--   3. FK 确为 **ON DELETE RESTRICT**，模板被引用时删不掉，
+--      所以不会出现「模板被删导致变成 NULL」与「本来就没模板」混淆的情况。
 --
--- 3. **该列的 FK 是否为 ON DELETE RESTRICT 之类。** 可空之后，「模板被删」与
---    「卡本来就没模板」会变成两种都是 NULL 的状态吗？不会——FK 是 RESTRICT
---    的话模板根本删不掉。但我没查过它的实际 FK 定义。
+-- 仍然成立的：
 --
 -- 4. 建工行卡本身**不在本文件范围**。本文件只解开那道约束，卡与支付宝渠道是
 --    单独一轮的业务数据操作，且卡的 cutoff/funding/offset 一旦被引用即冻结，
 --    要一次填对。
+--
+-- 5. **home_get_card_route_catalog 改成 LEFT JOIN 之后，空模板那几列返回什么**
+--    ——是 NULL、还是某种占位文案？这决定运维视图上那一行长什么样，
+--    需要看到它的定义与调用方才能定。已请求基线。
 --
 -- ===========================================================================

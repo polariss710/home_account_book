@@ -106,17 +106,55 @@ check(
 
 // --- 3. 前端补写与不一致告警 ------------------------------------------------
 check(
-  /export async function applySkippedProjectionItems\(batchResult, items, status\)/.test(supabaseSource),
-  "存在批量后补写的共用入口",
+  /export async function applySkippedProjectionItems\(batchResult, items, status, expectedMonth\)/.test(supabaseSource),
+  "存在批量后补写的共用入口，且接收固定下来的账期",
 );
 check(
   /请刷新后单独处理/.test(supabaseSource),
-  "DB 报了跳过但列表里没有 School 项时要出声，不能静默当成已处理完",
+  "跳过条数与列表对不上时要出声，不能静默当成已处理完",
 );
-for (const [name, source] of [["render.js", renderSource], ["cny.js", cnySource]]) {
+// 审核 P2：初版只处理 schoolItems.length === 0，于是「跳过 2 条、列表里 1 条」
+// 会补一条然后报「另含 1 条」，把剩下那条吞掉。**非空列表不等于完整列表。**
+check(
+  /const unaccounted = skipped - schoolItems\.length;/.test(supabaseSource),
+  "按差额报告未处理项，而不是只判断列表是否为空",
+);
+
+// --- 4. 跨月误写（审核 P1）--------------------------------------------------
+//
+// 批量请求往返期间用户可能切换账期。若在 await 之后才去读 appState，拿到的是
+// 另一个月的项目，补写就会打到错误月份的 ID 上。审核以离线 capture 复现过：
+// 批量请求月份 2026-08，补写 ID 却来自 9 月。
+check(
+  /if \(expectedMonth && appState\.activeMonth !== expectedMonth\)/.test(supabaseSource),
+  "补写前校验账期未被切走",
+);
+// 顺序断言必须先划定**批量 handler 的区间**再比索引：两个文件里更早的单条更新
+// 函数也含 `const result = await update…Status(`，对全文找首个匹配会撞上它。
+// 本测试初稿就栽在这上面。
+const bulkHandlers = [
+  ["render.js", renderSource, "data-bulk-item-status"],
+  ["cny.js", cnySource, "data-cny-bulk-fixed-status"],
+];
+for (const [name, source, anchor] of bulkHandlers) {
+  const start = source.indexOf(anchor);
+  check(start > 0, `${name} 找得到批量按钮的绑定`);
+  const handler = source.slice(start, start + 1400);
+
   check(
-    /applySkippedProjectionItems\(\s*\n?\s*result,/.test(source),
+    /applySkippedProjectionItems\(\s*\n?\s*result,\s*\n?\s*projectionTargets,/.test(handler),
     `${name} 的一键按钮在批量之后补写 School 项`,
+  );
+
+  const monthIdx = handler.indexOf("const operatingMonth = appState.activeMonth;");
+  const targetsIdx = handler.indexOf("const projectionTargets =");
+  const awaitIdx = handler.search(/const result = await update\w*Status\(/);
+  check(monthIdx > -1 && awaitIdx > monthIdx, `${name} 在第一次 await 之前固定账期`);
+  check(targetsIdx > -1 && awaitIdx > targetsIdx, `${name} 在第一次 await 之前固定目标集合`);
+  // 固定之后就不许再从 appState 重新读列表
+  check(
+    !/await update\w*Status\([\s\S]{0,400}appState\.(page|cnyFixedPage)\?\.\w+_items/.test(handler),
+    `${name} 补写时不再重新读取页面状态`,
   );
 }
 

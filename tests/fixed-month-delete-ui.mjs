@@ -101,7 +101,7 @@ check(cnySource.includes("关联流水不会被同步删除"), "CNY confirmation
 //
 // 2026-09-03 曾一度把前两条替换成纯一致性检查，被审核驳回——理由即上面那条对
 // pages.yml 的实际核查。
-const expectedVersion = "20260904-projection-status-writer-1";
+const expectedVersion = "20260904-projection-bulk-skip-1";
 const indexVersion = indexSource.match(/\?v=(\d{8}-[a-z0-9-]+)/)?.[1];
 const configVersion = configSource.match(/APP_VERSION\s*=\s*"(\d{8}-[a-z0-9-]+)"/)?.[1];
 check(indexVersion === expectedVersion, "index asset version advanced");

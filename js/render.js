@@ -325,14 +325,20 @@ function bindMonthItemControls() {
   document.querySelectorAll("[data-bulk-item-status]").forEach((button) => {
     button.addEventListener("click", async () => {
       const [direction, status] = button.dataset.bulkItemStatus.split(":");
+      // **在第一次 await 之前固定操作范围。** 批量请求往返期间用户可能切换账期，
+      // 之后再读 appState.page 拿到的是另一个月的项目，补写会打到错误的月份上。
+      const operatingMonth = appState.activeMonth;
+      const projectionTargets =
+        (direction === "income" ? appState.page?.income_items : appState.page?.expense_items) || [];
       const result = await updateMonthItemsStatus(direction, status);
       if (!result) return;
       // 批量 writer 有意跳过 School projection 项，这里逐条补上，用户仍只点一次。
       // 理由见 supabase.js 里 confirmProjectionItemsStatus 的注释。
       const suffix = await applySkippedProjectionItems(
         result,
-        direction === "income" ? appState.page?.income_items : appState.page?.expense_items,
+        projectionTargets,
         status,
+        operatingMonth,
       );
       await loadFixedMonthPage();
       setActionMessage(
