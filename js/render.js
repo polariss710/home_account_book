@@ -23,6 +23,10 @@ import {
   updateMonthItemStatus,
 } from "#supabase";
 
+// 垫付与补回的重入锁。两者都会改账户余额，且按钮在每次 render() 后重新绑定，
+// 所以锁必须放在模块级——挂在按钮上会随 DOM 一起被换掉。
+let fixedAdvanceInFlight = false;
+
 export function render() {
   renderShell();
   renderDashboard();
@@ -284,6 +288,7 @@ function bindMonthItemControls() {
   });
   document.querySelectorAll("[data-create-fixed-advance]").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (fixedAdvanceInFlight) return;
       const controls = button.closest("[data-advance-controls]");
       const accountId = controls?.querySelector("[data-fixed-advance-account]")?.value || "";
       const transactedAt = controls?.querySelector("[data-fixed-advance-date]")?.value || "";
@@ -291,35 +296,51 @@ function bindMonthItemControls() {
         setActionMessage("请先选择垫付账户和垫付日期。", "error");
         return;
       }
-      const result = await createFixedAdvancePayment({
-        payment_group: decodeURIComponent(button.dataset.createFixedAdvance || ""),
-        account_id: accountId,
-        transacted_at: transactedAt,
-        note: "",
-      });
-      if (!result) return;
-      await loadAppData();
-      setActionMessage(result.message || "固定支出垫付已生成。", "success");
-      render();
+      fixedAdvanceInFlight = true;
+      button.disabled = true;
+      try {
+        const result = await createFixedAdvancePayment({
+          payment_group: decodeURIComponent(button.dataset.createFixedAdvance || ""),
+          account_id: accountId,
+          transacted_at: transactedAt,
+          note: "",
+        });
+        if (!result) return;
+        await loadAppData();
+        setActionMessage(result.message || "固定支出垫付已生成。", "success");
+        render();
+      } finally {
+        fixedAdvanceInFlight = false;
+        // 成功时 render() 已经把这个按钮换成新节点了，这行只对失败路径有意义。
+        button.disabled = false;
+      }
     });
   });
   document.querySelectorAll("[data-settle-fixed-advance]").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (fixedAdvanceInFlight) return;
       const controls = button.closest("[data-advance-controls]");
       const repaidAt = controls?.querySelector("[data-fixed-advance-date]")?.value || "";
       if (!repaidAt) {
         setActionMessage("请先选择补回日期。", "error");
         return;
       }
-      const result = await settleFixedAdvanceRepayment({
-        advance_id: button.dataset.settleFixedAdvance,
-        repaid_at: repaidAt,
-        note: "",
-      });
-      if (!result) return;
-      await loadAppData();
-      setActionMessage(result.message || "固定垫付已补回。", "success");
-      render();
+      fixedAdvanceInFlight = true;
+      button.disabled = true;
+      try {
+        const result = await settleFixedAdvanceRepayment({
+          advance_id: button.dataset.settleFixedAdvance,
+          repaid_at: repaidAt,
+          note: "",
+        });
+        if (!result) return;
+        await loadAppData();
+        setActionMessage(result.message || "固定垫付已补回。", "success");
+        render();
+      } finally {
+        fixedAdvanceInFlight = false;
+        button.disabled = false;
+      }
     });
   });
   document.querySelectorAll("[data-bulk-item-status]").forEach((button) => {

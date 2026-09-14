@@ -4,9 +4,14 @@ import { createFixedTransfer, isCloudReady, loadAppData } from "#supabase";
 import { setActionMessage } from "#ui";
 import { escapeHtml, formData, money } from "#utils";
 
+// 调拨的重入锁。必须在第一个 await 之前设置——这一笔会改账户余额，
+// 双击的代价比多等一下大得多。
+let fixedTransferInFlight = false;
+
 export function bindFixedTransferEvents(afterSave) {
   els.fixedTransferForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (fixedTransferInFlight) return;
     if (!isCloudReady()) {
       setActionMessage("请先登录后再保存固定资金调拨。", "error");
       return;
@@ -25,18 +30,26 @@ export function bindFixedTransferEvents(afterSave) {
       return;
     }
 
-    const result = await createFixedTransfer({
-      transaction_type: transactionType,
-      account_id: data.account_id,
-      transacted_at: data.transacted_at,
-      note: data.note.trim(),
-    });
-    if (!result) return;
+    fixedTransferInFlight = true;
+    els.fixedTransferSubmitBtn.disabled = true;
+    try {
+      const result = await createFixedTransfer({
+        transaction_type: transactionType,
+        account_id: data.account_id,
+        transacted_at: data.transacted_at,
+        note: data.note.trim(),
+      });
+      if (!result) return;
 
-    await loadAppData();
-    resetFixedTransferForm();
-    setActionMessage(result.message || "固定资金调拨已保存，日元账户余额已更新。", "success");
-    afterSave();
+      await loadAppData();
+      resetFixedTransferForm();
+      setActionMessage(result.message || "固定资金调拨已保存，日元账户余额已更新。", "success");
+      afterSave();
+    } finally {
+      fixedTransferInFlight = false;
+      // 按钮该不该可点由结算状态决定，不能无条件恢复成可点。
+      renderFixedTransferStatus();
+    }
   });
 }
 
