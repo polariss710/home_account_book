@@ -127,6 +127,39 @@ service_role 查 `home_card_instruments`。该表 ACL 为
 该入口一旦被前端调用必然 500。改为 `home_list_school_fixed_route_cards()`，
 只返回 id / name / settlement_currency / cash_route_enabled 四个字段。
 
+### A7. `permission denied for table` 不等于权限配置有问题，先确认请求是谁发的
+
+报错文本指向权限，但它只说明「执行这条语句的角色没有该权限」，
+**没说那个角色是谁**。
+
+判据顺序（反了会白走几轮）：
+
+```
+1. 先查目标角色的 relacl —— 它到底有没有这个权限
+2. 权限完整  → 立刻转向认证 / 身份路径，不要再找权限缺口
+3. 权限确实缺 → 才进入 ACL / RLS / 列权限的排查
+```
+
+配套的两条辨别：
+
+- RLS 的 `WITH CHECK` 拒绝**同样是 42501**，消息是
+  `new row violates row-level security policy`。
+  **不能靠 SQLSTATE 区分这两者，只能看消息文本。**
+- `USING` 过滤（读不到行）不报错、返回 0 行，与上面两者都不同。
+
+出处：2026-09-14 日元零散流水保存失败。报错
+`permission denied for table home_jpy_transactions`，我据此设了三个分支
+——缺 UPDATE / 缺 INSERT / 两者全撤——**全部猜错**。
+生产实测 `authenticated=arwdm/postgres` 权限完整，
+而 `anon=rm/postgres` 恰好只有 SELECT。用户重新登录后保存与删除同时恢复，
+证实故障请求是以 anon 身份发出的：前端 `isCloudReady()`（`js/supabase.js:44`）
+只检查本地缓存的 `currentUser`，session 实际失效时界面仍显示已登录，
+请求却降级为 anon。
+
+**教训的另一半**：我的报告正文里其实列过「故障现场的请求实际以其他角色发出」
+这条可能，但分支表里三个全是权限组合。
+**列在正文而没进判据表，等于没列。**
+
 ---
 
 ## B. 磁盘 SQL 与生产的关系
@@ -681,3 +714,49 @@ income 变 `received`、linkage 变 1，于是三条全 false，又一次假阳�
 
 推论，与 [E7](#e7) / [E8](#e8) 同一母题：**跨 AI 传递的每一个具体值，
 都要能说出它是从哪一列读出来的。** 说不出列名，就是还没读懂那份文件。
+
+### E12. 删一行 SQL 条件之前，先看那一行的完整原文（含行尾）
+
+多条件 `if` 的**最后一个条件**，行尾常常带着 `then`：
+
+```sql
+   or a is distinct from b
+   or c is distinct from d then      -- ← then 在这一行的末尾
+  raise exception ...;
+```
+
+`grep -v '<条件>'` 删整行会**把 then 一起删掉**，`if` 失去结构。
+同类还有行尾的 `loop`、`)`、`,`、`;`。
+
+动手前的检查动作：
+
+```bash
+grep -n '<待删条件>' <file>     # 看完整行，不要只看条件部分
+grep -c '<待删条件>' <file>     # 确认唯一性
+```
+
+正确的改法是**精确行替换**，不是整行删除：
+
+```diff
+-   or c is distinct from d then
++   then
+```
+
+出处：2026-09-14 School `school_apply_expense_cash_fixed_callback_v3`
+删除日期判断。我的实施方案写的是 `grep -v` 加硬闸「期望 1 删 0 增」，
+而该行末尾带 `then`，照做必然产生语法错误。执行方在部署前发现并停下。
+**我读过那一行，却把 `then` 记成在下一行。**
+
+### E13. 判据写错不可怕，没有判据才可怕
+
+[E10](#e10) 说「判据的正确性完全是提出方的责任，执行方只能验证判据是否满足」。
+本条是它的反面补充：**即使判据写错了，有判据本身仍然有价值** ——
+错的判据会让执行方停下来问，而没有判据会让错误直接进生产。
+
+出处：2026-09-14 同上。我设的硬闸是「diff 必须恰好 1 删 0 增，否则立即停止」，
+**这个阈值是错的**（正确是 1 删 1 增，见 [E12](#e12)）。
+但正因为有这道闸，执行方没有自作主张改成 1 删 1 增，而是停下来请求确认 ——
+于是那个会导致语法错误的 `grep -v` 在部署前被拦住。
+
+推论：**写硬停止条件时宁可写严。**
+严的判据误报时只是多一轮确认；松的判据漏报时，代价是生产事故。
