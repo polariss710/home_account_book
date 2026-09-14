@@ -24,6 +24,20 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
+2026-09-14 C rev8 database deployment (frontend push pending):
+
+- Deployed the approved funding/surplus calculations, income-reduction trigger,
+  month locks, repayment gate, amount RPC and cross-month pending reader.
+- Both helpers are VOLATILE INVOKER, explicitly user-scoped and reject missing or
+  mismatched auth.uid; existing function security attributes and ACLs are unchanged.
+- Preflight and postdeployment synthetic-user tests ended in ROLLBACK. Both
+  authenticated and existing DEFINER call paths passed the guard/snapshot checks.
+  Three real-data fingerprints match before/after; no test data was committed.
+- Commit-dependent contention scenarios and dual-session lock waiting remain
+  unverified. F8's accepted direct-write concurrency limitation remains.
+- Frontend commit `4560070` remains local, awaiting separate push authorization.
+  Full evidence and remaining limitations: [deployment report](c-rev8-deployment-20260914.md).
+
 2026-09-14 write-path auth classification and JPY casual insert contract
 (UI version `20260914-write-auth-classify-1`):
 

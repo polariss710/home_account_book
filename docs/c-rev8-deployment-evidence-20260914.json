@@ -1,0 +1,1876 @@
+{
+  "baseline": {
+    "functions": [
+      {
+        "oid": "18474",
+        "name": "home_generate_fixed_month",
+        "signature": "p_month_key text, p_currency text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": null,
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "a14039d661e8533e795c91faeb93597b",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_generate_fixed_month(p_month_key text, p_currency text DEFAULT 'JPY'::text)\n RETURNS jsonb\n LANGUAGE sql\nAS $function$\nwith eligible_templates as (\n  select\n    t.*,\n    case\n      when t.due_day is null then null\n      else (\n        to_date(p_month_key || '-01', 'YYYY-MM-DD')\n        + (least(t.due_day, extract(day from (to_date(p_month_key || '-01', 'YYYY-MM-DD') + interval '1 month - 1 day'))::integer) - 1) * interval '1 day'\n      )::date\n    end as generated_due_date,\n    case\n      when t.fixed_type = 'short_term' and t.start_month is not null then\n        ((extract(year from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer)\n        - (extract(year from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer)\n        + 1)\n      else null\n    end as generated_term_no\n  from home_fixed_templates t\n  where t.user_id = auth.uid()\n    and t.currency = p_currency\n    and t.is_active\n    and (t.start_month is null or t.start_month <= p_month_key)\n    and (t.end_month is null or t.end_month >= p_month_key)\n    and (\n      t.fixed_type = 'long_term'\n      or t.total_terms is null\n      or t.start_month is null\n      or (\n        ((extract(year from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer)\n        - (extract(year from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer)\n        + 1) between 1 and t.total_terms\n      )\n    )\n),\nexisting_items as (\n  select i.template_id\n  from eligible_templates t\n  join home_fixed_month_items i\n    on i.user_id = auth.uid()\n   and i.month_key = p_month_key\n   and i.currency = p_currency\n   and i.template_id = t.id\n),\ninserted_items as (\n  insert into home_fixed_month_items (\n    user_id,\n    template_id,\n    month_key,\n    currency,\n    direction,\n    name,\n    amount,\n    status,\n    account_id,\n    payment_group,\n    due_date,\n    term_no,\n    total_terms,\n    note\n  )\n  select\n    t.user_id,\n    t.id,\n    p_month_key,\n    t.currency,\n    t.direction,\n    t.name,\n    t.default_amount,\n    'unpaid',\n    t.default_account_id,\n    t.payment_group,\n    t.generated_due_date,\n    t.generated_term_no,\n    t.total_terms,\n    ''\n  from eligible_templates t\n  where not exists (\n    select 1\n    from existing_items i\n    where i.template_id = t.id\n  )\n  on conflict do nothing\n  returning id, template_id\n)\nselect jsonb_build_object(\n  'eligible_count', (select count(*) from eligible_templates),\n  'existing_count', (select count(*) from existing_items),\n  'inserted_count', (select count(*) from inserted_items),\n  'all_generated', (\n    (select count(*) from eligible_templates) > 0\n    and (select count(*) from eligible_templates) = (select count(*) from existing_items)\n  ),\n  'eligible_templates', coalesce((\n    select jsonb_agg(jsonb_build_object('id', id, 'name', name) order by sort_order, created_at, name)\n    from eligible_templates\n  ), '[]'::jsonb),\n  'existing_template_ids', coalesce((\n    select jsonb_agg(template_id)\n    from existing_items\n  ), '[]'::jsonb),\n  'inserted_template_ids', coalesce((\n    select jsonb_agg(template_id)\n    from inserted_items\n  ), '[]'::jsonb)\n);\n$function$\n"
+      },
+      {
+        "oid": "18581",
+        "name": "home_sync_fixed_month_items",
+        "signature": "p_month_key text, p_currency text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "b9f7d111c4993465b2187dbd6df62f4b",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_sync_fixed_month_items(p_month_key text, p_currency text DEFAULT 'JPY'::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare v_updated_count integer:=0;\nbegin\n  if public.home_fixed_scope_has_external_projection(p_month_key,p_currency) then return jsonb_build_object('ok',false,'code','HOME_PROJECTION_FIXED_ITEM_SYNC_FORBIDDEN','message','范围内包含School信用卡projection固定项，不能使用普通月份/模板同步writer。'); end if;\n  if public.home_fixed_scope_has_card_statement(p_month_key,p_currency) then return jsonb_build_object('ok',false,'code','HOME_CARD_STATEMENT_ITEM_SYNC_FORBIDDEN','message','范围内包含信用卡statement关联固定项，不能使用普通月份/模板同步writer。'); end if;\n  with month_context as(select extract(year from month_start)::int year_no,extract(month from month_start)::int month_no,extract(day from(month_start+interval '1 month - 1 day'))::int days_in_month from(select to_date(p_month_key||'-01','YYYY-MM-DD') month_start)d),\n  updated_items as(update public.home_fixed_month_items i set direction=t.direction,name=t.name,amount=t.default_amount,account_id=t.default_account_id,payment_group=t.payment_group,due_date=case when t.due_day is null then null else make_date(c.year_no,c.month_no,least(t.due_day,c.days_in_month)) end,term_no=case when t.fixed_type='short_term' and t.start_month is not null and t.total_terms is not null then((substring(p_month_key,1,4)::int-substring(t.start_month,1,4)::int)*12+(substring(p_month_key,6,2)::int-substring(t.start_month,6,2)::int)+1) else null end,total_terms=case when t.fixed_type='short_term' then t.total_terms else null end from public.home_fixed_templates t cross join month_context c where i.template_id=t.id and i.user_id=auth.uid() and t.user_id=auth.uid() and i.month_key=p_month_key and i.currency=p_currency and t.currency=p_currency returning i.id)\n  select count(*) into v_updated_count from updated_items;\n  return jsonb_build_object('updated_count',v_updated_count);\nend;\n$function$\n"
+      },
+      {
+        "oid": "18626",
+        "name": "home_check_fixed_paid_balance",
+        "signature": "p_month_key text, p_currency text, p_target_item_id uuid, p_target_status text, p_bulk_direction text, p_bulk_status text",
+        "prosecdef": false,
+        "provolatile": "s",
+        "proconfig": null,
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "de0a914f36c30c8db034bd04d9fbb4bc",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_check_fixed_paid_balance(p_month_key text, p_currency text DEFAULT 'JPY'::text, p_target_item_id uuid DEFAULT NULL::uuid, p_target_status text DEFAULT NULL::text, p_bulk_direction text DEFAULT NULL::text, p_bulk_status text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE\nAS $function$\ndeclare\n  v_actual_income numeric := 0;\n  v_actual_expense numeric := 0;\nbegin\n  if p_target_status is not null and p_target_status not in ('unpaid', 'paid', 'settled') then\n    return jsonb_build_object('ok', false, 'message', '固定项状态无效。');\n  end if;\n\n  if p_bulk_status is not null and p_bulk_status not in ('unpaid', 'paid', 'settled') then\n    return jsonb_build_object('ok', false, 'message', '固定项状态无效。');\n  end if;\n\n  if p_bulk_direction is not null and p_bulk_direction not in ('income', 'expense') then\n    return jsonb_build_object('ok', false, 'message', '固定项收支方向无效。');\n  end if;\n\n  with month_items as (\n    select\n      i.*,\n      case\n        when i.linked_jpy_transaction_id is not null then 'paid'\n        when p_target_item_id is not null and i.id = p_target_item_id then p_target_status\n        when p_bulk_direction is not null and i.direction = p_bulk_direction then p_bulk_status\n        else i.status\n      end as next_status\n    from home_fixed_month_items i\n    where i.user_id = auth.uid()\n      and i.month_key = p_month_key\n      and i.currency = p_currency\n  ),\n  paid_expense_groups as (\n    select\n      coalesce(payment_group, '未分组') as payment_group,\n      home_round_up_1000(coalesce(sum(amount), 0)) as paid_amount\n    from month_items\n    where direction = 'expense'\n      and next_status in ('paid', 'settled')\n    group by coalesce(payment_group, '未分组')\n  )\n  select\n    coalesce(sum(amount) filter (where direction = 'income' and next_status in ('paid', 'settled')), 0),\n    coalesce((select sum(paid_amount) from paid_expense_groups), 0)\n  into v_actual_income, v_actual_expense\n  from month_items;\n\n  if v_actual_income < v_actual_expense then\n    return jsonb_build_object(\n      'ok', false,\n      'message', format('当前收入不足，请补充赤字后结算。当前已收 %s，取整后已付支出 %s。', v_actual_income, v_actual_expense),\n      'actual_income', v_actual_income,\n      'actual_expense', v_actual_expense\n    );\n  end if;\n\n  return jsonb_build_object(\n    'ok', true,\n    'message', '收入足以覆盖已付固定支出。',\n    'actual_income', v_actual_income,\n    'actual_expense', v_actual_expense\n  );\nend;\n$function$\n"
+      },
+      {
+        "oid": "19683",
+        "name": "home_assign_accounting_scope",
+        "signature": "",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "b7d924f323d84e68c414d799439995cf",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_assign_accounting_scope()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE v_scope text;\nBEGIN\n  IF TG_TABLE_NAME='home_external_transaction_requests' THEN\n    IF NEW.external_source='aozora_school' THEN NEW.accounting_scope:='school'; END IF;\n  ELSIF TG_TABLE_NAME='home_jpy_transactions' THEN\n    IF NEW.external_source='aozora_school' OR coalesce(NEW.created_by_external,false) THEN NEW.accounting_scope:='school';\n    ELSIF NEW.linked_fixed_month_item_id IS NOT NULL THEN\n      SELECT i.accounting_scope INTO v_scope FROM public.home_fixed_month_items i WHERE i.id=NEW.linked_fixed_month_item_id AND i.user_id=NEW.user_id;\n      NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n    ELSIF NEW.linked_cny_transaction_id IS NOT NULL THEN\n      SELECT c.accounting_scope INTO v_scope FROM public.home_cny_transactions c WHERE c.id=NEW.linked_cny_transaction_id AND c.user_id=NEW.user_id;\n      NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n    END IF;\n  ELSIF TG_TABLE_NAME='home_cny_transactions' THEN\n    IF NEW.external_source='aozora_school' OR coalesce(NEW.created_by_external,false) THEN NEW.accounting_scope:='school';\n    ELSIF NEW.linked_fixed_month_item_id IS NOT NULL THEN\n      SELECT i.accounting_scope INTO v_scope FROM public.home_fixed_month_items i WHERE i.id=NEW.linked_fixed_month_item_id AND i.user_id=NEW.user_id;\n      NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n    ELSIF NEW.linked_jpy_transaction_id IS NOT NULL THEN\n      SELECT j.accounting_scope INTO v_scope FROM public.home_jpy_transactions j WHERE j.id=NEW.linked_jpy_transaction_id AND j.user_id=NEW.user_id;\n      NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n    END IF;\n  ELSIF TG_TABLE_NAME='home_fixed_month_items' AND NEW.template_id IS NOT NULL THEN\n    SELECT t.accounting_scope INTO v_scope FROM public.home_fixed_templates t WHERE t.id=NEW.template_id AND t.user_id=NEW.user_id;\n    NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n  END IF;\n  NEW.accounting_scope:=coalesce(NEW.accounting_scope,'household');\n  RETURN NEW;\nEND\n$function$\n"
+      },
+      {
+        "oid": "18617",
+        "name": "home_create_fixed_transfer",
+        "signature": "p_month_key text, p_currency text, p_transaction_type text, p_account_id uuid, p_transacted_at date, p_amount numeric, p_note text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": null,
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "fc04c725c24ccd3e43ef6e2fb668c428",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_create_fixed_transfer(p_month_key text, p_currency text, p_transaction_type text, p_account_id uuid, p_transacted_at date, p_amount numeric DEFAULT NULL::numeric, p_note text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\nAS $function$\ndeclare\n  v_description text;\n  v_direction text;\n  v_payment_group text;\n  v_jpy_transaction_id uuid := gen_random_uuid();\n  v_fixed_item_id uuid := gen_random_uuid();\n  v_status jsonb;\n  v_amount numeric := 0;\nbegin\n  if p_transaction_type not in ('fixed_in', 'fixed_out') then\n    return jsonb_build_object('ok', false, 'message', '固定资金调拨类型无效。');\n  end if;\n\n  if not exists (\n    select 1\n    from home_accounts\n    where id = p_account_id\n      and user_id = auth.uid()\n      and currency = p_currency\n      and is_active\n  ) then\n    return jsonb_build_object('ok', false, 'message', '没有找到可使用的日元账户。');\n  end if;\n\n  if to_char(p_transacted_at, 'YYYY-MM') <> p_month_key then\n    return jsonb_build_object('ok', false, 'message', '固定资金调拨日期必须在当前账期内。');\n  end if;\n\n  v_status := home_fixed_settlement_status(p_month_key, p_currency);\n  v_amount := coalesce((v_status ->> 'transfer_amount')::numeric, 0);\n\n  if p_transaction_type = 'fixed_out' and coalesce(v_status ->> 'state', '') <> 'deficit' then\n    return jsonb_build_object('ok', false, 'message', '本月结算没有赤字，不需要补充。');\n  end if;\n\n  if p_transaction_type = 'fixed_in' and coalesce(v_status ->> 'state', '') <> 'surplus' then\n    return jsonb_build_object('ok', false, 'message', '本月结算没有盈余，不能转入。');\n  end if;\n\n  if v_amount <= 0 then\n    return jsonb_build_object('ok', false, 'message', '本月固定收支结算已平衡，不需要调拨。');\n  end if;\n\n  v_description := home_fixed_transfer_name(p_transaction_type);\n  v_direction := home_fixed_transfer_direction(p_transaction_type);\n  v_payment_group := case when p_transaction_type = 'fixed_in' then v_description else null end;\n\n  if exists (\n    select 1\n    from home_fixed_month_items\n    where user_id = auth.uid()\n      and month_key = p_month_key\n      and currency = p_currency\n      and direction = v_direction\n      and name = v_description\n  ) then\n    return jsonb_build_object('ok', false, 'message', format('本月已存在%s，请先删除后重新生成。', v_description));\n  end if;\n\n  insert into home_jpy_transactions (\n    id,\n    user_id,\n    transaction_type,\n    account_id,\n    transfer_account_id,\n    currency,\n    transacted_at,\n    amount,\n    description,\n    note,\n    created_at\n  )\n  values (\n    v_jpy_transaction_id,\n    auth.uid(),\n    p_transaction_type,\n    p_account_id,\n    null,\n    p_currency,\n    p_transacted_at,\n    v_amount,\n    v_description,\n    coalesce(p_note, ''),\n    now()\n  );\n\n  insert into home_fixed_month_items (\n    id,\n    user_id,\n    template_id,\n    month_key,\n    currency,\n    direction,\n    name,\n    amount,\n    status,\n    account_id,\n    payment_group,\n    due_date,\n    term_no,\n    total_terms,\n    note,\n    linked_jpy_transaction_id,\n    created_at\n  )\n  values (\n    v_fixed_item_id,\n    auth.uid(),\n    null,\n    p_month_key,\n    p_currency,\n    v_direction,\n    v_description,\n    v_amount,\n    'paid',\n    p_account_id,\n    v_payment_group,\n    p_transacted_at,\n    null,\n    null,\n    coalesce(p_note, ''),\n    v_jpy_transaction_id,\n    now()\n  );\n\n  update home_jpy_transactions\n  set linked_fixed_month_item_id = v_fixed_item_id\n  where id = v_jpy_transaction_id\n    and user_id = auth.uid();\n\n  return jsonb_build_object(\n    'ok', true,\n    'message', format('%s已生成，金额 %s。', v_description, v_amount),\n    'amount', v_amount,\n    'fixed_item_id', v_fixed_item_id,\n    'jpy_transaction_id', v_jpy_transaction_id\n  );\nend;\n$function$\n"
+      },
+      {
+        "oid": "18631",
+        "name": "home_fixed_settlement_status",
+        "signature": "p_month_key text, p_currency text",
+        "prosecdef": false,
+        "provolatile": "s",
+        "proconfig": null,
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "e5b0ba745054593cba558275b654ffbe",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_fixed_settlement_status(p_month_key text, p_currency text DEFAULT 'JPY'::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE\nAS $function$\ndeclare\n  v_planned_income numeric := 0;\n  v_planned_expense numeric := 0;\n  v_actual_income numeric := 0;\n  v_actual_expense numeric := 0;\n  v_balance numeric := 0;\nbegin\n  with month_items as (\n    select\n      i.*,\n      case\n        when i.linked_jpy_transaction_id is not null then 'paid'\n        else i.status\n      end as effective_status\n    from home_fixed_month_items i\n    where i.user_id = auth.uid()\n      and i.month_key = p_month_key\n      and i.currency = p_currency\n  ),\n  planned_expense_groups as (\n    select\n      coalesce(payment_group, '未分组') as payment_group,\n      home_round_up_1000(coalesce(sum(amount), 0)) as planned_amount\n    from month_items\n    where direction = 'expense'\n    group by coalesce(payment_group, '未分组')\n  ),\n  paid_expense_groups as (\n    select\n      coalesce(payment_group, '未分组') as payment_group,\n      home_round_up_1000(coalesce(sum(amount), 0)) as paid_amount\n    from month_items\n    where direction = 'expense'\n      and effective_status in ('paid', 'settled')\n    group by coalesce(payment_group, '未分组')\n  )\n  select\n    coalesce(sum(amount) filter (where direction = 'income'), 0),\n    coalesce((select sum(planned_amount) from planned_expense_groups), 0),\n    coalesce(sum(amount) filter (where direction = 'income' and effective_status in ('paid', 'settled')), 0),\n    coalesce((select sum(paid_amount) from paid_expense_groups), 0)\n  into v_planned_income, v_planned_expense, v_actual_income, v_actual_expense\n  from month_items;\n\n  v_balance := v_planned_income - v_planned_expense;\n\n  return jsonb_build_object(\n    'planned_income', v_planned_income,\n    'planned_expense', v_planned_expense,\n    'actual_income', v_actual_income,\n    'actual_expense', v_actual_expense,\n    'balance', v_balance,\n    'state', case\n      when v_balance < 0 then 'deficit'\n      when v_balance > 0 then 'surplus'\n      else 'balanced'\n    end,\n    'transaction_type', case\n      when v_balance < 0 then 'fixed_out'\n      when v_balance > 0 then 'fixed_in'\n      else null\n    end,\n    'transfer_amount', abs(v_balance),\n    'message', case\n      when v_balance < 0 then format('结算赤字 %s。', abs(v_balance))\n      when v_balance > 0 then format('结算盈余 %s。', v_balance)\n      else '本月固定收支结算已平衡。'\n    end\n  );\nend;\n$function$\n"
+      },
+      {
+        "oid": "18470",
+        "name": "home_get_fixed_month_page",
+        "signature": "p_month_key text, p_currency text",
+        "prosecdef": false,
+        "provolatile": "s",
+        "proconfig": null,
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "2086dc6ba92c36114bd5175dc8f385f1",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_get_fixed_month_page(p_month_key text, p_currency text DEFAULT 'JPY'::text)\n RETURNS jsonb\n LANGUAGE sql\n STABLE\nAS $function$\nwith advance_records as (\n  select\n    ap.*,\n    a.name as advance_account_name\n  from public.home_fixed_advance_payments ap\n  left join public.home_accounts a on a.id = ap.account_id\n    and a.user_id = auth.uid()\n  where ap.user_id = auth.uid()\n    and ap.month_key = p_month_key\n    and ap.currency = p_currency\n),\nmonth_items as (\n  select\n    i.*,\n    ar.id as advance_id,\n    ar.status as advance_status,\n    ar.account_id as advance_account_id,\n    ar.advance_account_name,\n    ar.amount as advance_amount,\n    ar.paid_at as advance_paid_at,\n    ar.repaid_at as advance_repaid_at\n  from public.home_fixed_month_items i\n  left join advance_records ar on ar.payment_group = coalesce(i.payment_group, '未分组')\n    and i.direction = 'expense'\n  where i.user_id = auth.uid()\n    and i.month_key = p_month_key\n    and i.currency = p_currency\n),\npaid_expense_groups as (\n  select\n    coalesce(payment_group, '未分组') as payment_group,\n    public.home_round_up_1000(coalesce(sum(amount), 0)) as paid_amount\n  from month_items\n  where direction = 'expense'\n    and status in ('paid', 'settled')\n  group by coalesce(payment_group, '未分组')\n),\nplanned_expense_groups as (\n  select\n    coalesce(payment_group, '未分组') as payment_group,\n    public.home_round_up_1000(coalesce(sum(amount), 0)) as planned_amount\n  from month_items\n  where direction = 'expense'\n  group by coalesce(payment_group, '未分组')\n),\nunpaid_expense_groups as (\n  select\n    coalesce(payment_group, '未分组') as payment_group,\n    public.home_round_up_1000(coalesce(sum(amount), 0)) as unpaid_amount\n  from month_items\n  where direction = 'expense'\n    and status = 'unpaid'\n  group by coalesce(payment_group, '未分组')\n),\nmetrics as (\n  select\n    coalesce(sum(amount) filter (where direction = 'income'), 0) as planned_income,\n    coalesce((select sum(planned_amount) from planned_expense_groups), 0) as planned_expense,\n    coalesce(sum(amount) filter (where direction = 'income' and status in ('paid', 'settled')), 0) as actual_income,\n    coalesce((select sum(paid_amount) from paid_expense_groups), 0) as actual_expense,\n    coalesce(sum(amount) filter (where direction = 'income' and status = 'unpaid'), 0) as unreceived_income,\n    coalesce((select sum(unpaid_amount) from unpaid_expense_groups), 0) as unpaid_expense\n  from month_items\n),\nexpense_groups as (\n  select\n    coalesce(payment_group, '未分组') as payment_group,\n    public.home_round_up_1000(coalesce(sum(amount), 0)) as total,\n    public.home_round_up_1000(coalesce(sum(amount) filter (where status in ('paid', 'settled')), 0)) as paid,\n    public.home_round_up_1000(coalesce(sum(amount) filter (where status = 'unpaid'), 0)) as unpaid\n  from month_items\n  where direction = 'expense'\n  group by coalesce(payment_group, '未分组')\n),\nexpense_sections as (\n  select\n    coalesce(payment_group, '未分组') as payment_group,\n    min(due_date) as first_due_date,\n    public.home_round_up_1000(coalesce(sum(amount), 0)) as total,\n    public.home_round_up_1000(coalesce(sum(amount) filter (where status in ('paid', 'settled')), 0)) as paid,\n    public.home_round_up_1000(coalesce(sum(amount) filter (where status = 'unpaid'), 0)) as unpaid,\n    (array_agg(advance_id) filter (where advance_id is not null))[1] as advance_id,\n    (array_agg(advance_status) filter (where advance_status is not null))[1] as advance_status,\n    (array_agg(advance_account_id) filter (where advance_account_id is not null))[1] as advance_account_id,\n    (array_agg(advance_account_name) filter (where advance_account_name is not null))[1] as advance_account_name,\n    (array_agg(advance_amount) filter (where advance_amount is not null))[1] as advance_amount,\n    (array_agg(advance_paid_at) filter (where advance_paid_at is not null))[1] as advance_paid_at,\n    (array_agg(advance_repaid_at) filter (where advance_repaid_at is not null))[1] as advance_repaid_at,\n    jsonb_agg(\n      (to_jsonb(month_items) - 'accounting_scope')\n        || jsonb_build_object('accounting_scope', month_items.accounting_scope)\n      order by due_date, created_at, name\n    ) as items\n  from month_items\n  where direction = 'expense'\n  group by coalesce(payment_group, '未分组')\n)\nselect jsonb_build_object(\n  'metrics', jsonb_build_object(\n    'income', (select planned_income from metrics),\n    'expense', (select planned_expense from metrics),\n    'balance', (select planned_income - planned_expense from metrics),\n    'planned_income', (select planned_income from metrics),\n    'planned_expense', (select planned_expense from metrics),\n    'planned_balance', (select planned_income - planned_expense from metrics),\n    'actual_income', (select actual_income from metrics),\n    'actual_expense', (select actual_expense from metrics),\n    'actual_balance', (select actual_income - actual_expense from metrics),\n    'unreceived_income', (select unreceived_income from metrics),\n    'unpaid_expense', (select unpaid_expense from metrics)\n  ),\n  'fixed_settlement_status', public.home_fixed_settlement_status(p_month_key, p_currency),\n  'expense_groups', coalesce((\n    select jsonb_agg(to_jsonb(expense_groups) order by payment_group)\n    from expense_groups\n  ), '[]'::jsonb),\n  'income_items', coalesce((\n    select jsonb_agg(\n      (to_jsonb(month_items) - 'accounting_scope')\n        || jsonb_build_object('accounting_scope', month_items.accounting_scope)\n      order by created_at, name\n    )\n    from month_items\n    where direction = 'income'\n  ), '[]'::jsonb),\n  'expense_items', coalesce((\n    select jsonb_agg(\n      (to_jsonb(month_items) - 'accounting_scope')\n        || jsonb_build_object('accounting_scope', month_items.accounting_scope)\n      order by payment_group, due_date, created_at, name\n    )\n    from month_items\n    where direction = 'expense'\n  ), '[]'::jsonb),\n  'expense_sections', coalesce((\n    select jsonb_agg(to_jsonb(expense_sections) order by first_due_date nulls last, payment_group)\n    from expense_sections\n  ), '[]'::jsonb),\n  'templates', coalesce((\n    select jsonb_agg(\n      (to_jsonb(t) - 'accounting_scope')\n        || jsonb_build_object('accounting_scope', t.accounting_scope)\n      order by sort_order, created_at, name\n    )\n    from public.home_fixed_templates t\n    where t.user_id = auth.uid()\n      and t.currency = p_currency\n      and t.is_active\n  ), '[]'::jsonb),\n  'stopped_templates', coalesce((\n    select jsonb_agg(\n      (to_jsonb(t) - 'accounting_scope')\n        || jsonb_build_object('accounting_scope', t.accounting_scope)\n      order by sort_order, created_at, name\n    )\n    from public.home_fixed_templates t\n    where t.user_id = auth.uid()\n      and t.currency = p_currency\n      and not t.is_active\n  ), '[]'::jsonb),\n  'accounts', coalesce((\n    select jsonb_agg(to_jsonb(a) order by sort_order, created_at, name)\n    from public.home_accounts a\n    where a.user_id = auth.uid()\n      and a.currency = p_currency\n      and a.is_active\n  ), '[]'::jsonb),\n  'payment_channels', coalesce((\n    select jsonb_agg(to_jsonb(c) order by sort_order, created_at, name)\n    from public.home_payment_channels c\n    where c.user_id = auth.uid()\n      and c.currency = p_currency\n      and c.is_active\n  ), '[]'::jsonb)\n);\n$function$\n"
+      },
+      {
+        "oid": "19212",
+        "name": "home_settle_fixed_advance_repayment",
+        "signature": "p_advance_id uuid, p_repaid_at date, p_note text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": null,
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "9a3306b0c28f1a7039dc830246dc1fad",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_settle_fixed_advance_repayment(p_advance_id uuid, p_repaid_at date, p_note text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\nAS $function$\ndeclare\n  v_advance public.home_fixed_advance_payments%rowtype;\n  v_transaction_id uuid := gen_random_uuid();\nbegin\n  select *\n  into v_advance\n  from public.home_fixed_advance_payments\n  where id = p_advance_id\n    and user_id = auth.uid();\n\n  if not found then\n    return jsonb_build_object('ok', false, 'message', '没有找到可补回的固定垫付记录。');\n  end if;\n\n  if v_advance.status = 'repaid' then\n    return jsonb_build_object('ok', false, 'message', '这笔固定垫付已经补回。');\n  end if;\n\n  if to_char(p_repaid_at, 'YYYY-MM') <> v_advance.month_key then\n    return jsonb_build_object('ok', false, 'message', '补回日期必须在垫付账期内。');\n  end if;\n\n  insert into public.home_jpy_transactions (\n    id,\n    user_id,\n    transaction_type,\n    account_id,\n    transfer_account_id,\n    currency,\n    transacted_at,\n    amount,\n    description,\n    note,\n    created_at\n  )\n  values (\n    v_transaction_id,\n    auth.uid(),\n    'fixed_advance_in',\n    v_advance.account_id,\n    null,\n    v_advance.currency,\n    p_repaid_at,\n    v_advance.amount,\n    format('%s 固定垫付补回', v_advance.payment_group),\n    coalesce(p_note, v_advance.note, ''),\n    now()\n  );\n\n  update public.home_fixed_advance_payments\n  set\n    status = 'repaid',\n    repaid_at = p_repaid_at,\n    in_transaction_id = v_transaction_id\n  where id = v_advance.id\n    and user_id = auth.uid();\n\n  return jsonb_build_object(\n    'ok', true,\n    'message', format('%s 固定垫付已按原金额补回，金额 %s。', v_advance.payment_group, v_advance.amount),\n    'advance_id', v_advance.id,\n    'jpy_transaction_id', v_transaction_id,\n    'amount', v_advance.amount\n  );\nend;\n$function$\n"
+      },
+      {
+        "oid": "18627",
+        "name": "home_reset_plain_fixed_expenses_if_deficit",
+        "signature": "p_month_key text, p_currency text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": null,
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "f828df50947b0306140f8f3ef2e11ce7",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_reset_plain_fixed_expenses_if_deficit(p_month_key text, p_currency text DEFAULT 'JPY'::text)\n RETURNS jsonb\n LANGUAGE plpgsql\nAS $function$\ndeclare\n  v_check jsonb;\n  v_updated_count integer := 0;\nbegin\n  v_check := public.home_check_fixed_paid_balance(p_month_key, p_currency);\n\n  if coalesce((v_check ->> 'ok')::boolean, false) then\n    return jsonb_build_object(\n      'reset_expense_status', false,\n      'reset_count', 0,\n      'message', '删除后固定收支仍满足已付结算条件。'\n    );\n  end if;\n\n  update public.home_fixed_month_items i\n  set status = 'unpaid'\n  where i.user_id = auth.uid()\n    and i.month_key = p_month_key\n    and i.currency = p_currency\n    and i.direction = 'expense'\n    and i.linked_jpy_transaction_id is null\n    and i.status <> 'unpaid'\n    -- Phase 3F：School 投影项不参与赤字重置\n    and not public.home_fixed_item_has_external_projection(i.id)\n    and not exists (\n      select 1\n      from public.home_fixed_advance_payments ap\n      where ap.user_id = auth.uid()\n        and ap.month_key = i.month_key\n        and ap.currency = i.currency\n        and ap.payment_group = coalesce(i.payment_group, '未分组')\n    );\n\n  get diagnostics v_updated_count = row_count;\n\n  return jsonb_build_object(\n    'reset_expense_status', true,\n    'reset_count', v_updated_count,\n    'message', '删除后固定收支重新出现赤字，未进入垫付流程的普通固定支出已改回未付。'\n  );\nend;\n$function$\n"
+      },
+      {
+        "oid": "21382",
+        "name": "home_guard_projection_linked_fixed_item",
+        "signature": "",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "f25578b211be192e59a4108af76ece8b",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_guard_projection_linked_fixed_item()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nbegin\n  if exists (select 1 from public.home_external_fixed_payment_projections p where p.fixed_month_item_id=old.id) then\n    if tg_op='DELETE' then\n      raise exception using errcode='42501',message='HOME_PROJECTION_FIXED_ITEM_DELETE_FORBIDDEN';\n    end if;\n    -- Phase 3F：仅 home_confirm_projection_fixed_item_status 可改 status\n    if current_setting('home.phase3f_projection_status_write',true) is distinct from 'on'\n       or (to_jsonb(new)-'status') is distinct from (to_jsonb(old)-'status') then\n      raise exception using errcode='42501',message='HOME_PROJECTION_FIXED_ITEM_UPDATE_FORBIDDEN';\n    end if;\n  end if;\n  if exists (select 1 from public.home_card_statement_cycles c where c.household_remainder_fixed_item_id=old.id) then\n    if tg_op='DELETE' then\n      raise exception using errcode='42501',message='HOME_CARD_STATEMENT_ITEM_DELETE_FORBIDDEN';\n    end if;\n    if current_setting('home.phase3e_statement_item_write',true) is distinct from 'on'\n       or (to_jsonb(new)-'amount') is distinct from (to_jsonb(old)-'amount') then\n      raise exception using errcode='42501',message='HOME_CARD_STATEMENT_ITEM_UPDATE_FORBIDDEN';\n    end if;\n  end if;\n  return case when tg_op='DELETE' then old else new end;\nend;\n$function$\n"
+      },
+      {
+        "oid": "19211",
+        "name": "home_create_fixed_advance_payment",
+        "signature": "p_month_key text, p_currency text, p_payment_group text, p_account_id uuid, p_transacted_at date, p_note text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "b5d40b34f45e21149e54017904da9255",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_create_fixed_advance_payment(p_month_key text, p_currency text, p_payment_group text, p_account_id uuid, p_transacted_at date, p_note text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare v_group text:=coalesce(nullif(trim(p_payment_group),''),'未分组'); v_amount numeric:=0;\n  v_transaction_id uuid:=gen_random_uuid(); v_advance_id uuid:=gen_random_uuid(); v_item_count integer:=0;\nbegin\n  if p_currency<>'JPY' then return jsonb_build_object('ok',false,'message','固定垫付目前只支持日元。'); end if;\n  if to_char(p_transacted_at,'YYYY-MM')<>p_month_key then return jsonb_build_object('ok',false,'message','垫付日期必须在当前账期内。'); end if;\n  if not exists(select 1 from public.home_accounts where id=p_account_id and user_id=auth.uid() and currency=p_currency and is_active) then return jsonb_build_object('ok',false,'message','没有找到可使用的日元垫付账户。'); end if;\n  if public.home_fixed_advance_group_has_card_statement(p_month_key,p_currency,v_group) then\n    return jsonb_build_object('ok',false,'code','HOME_CARD_STATEMENT_GROUP_ADVANCE_FORBIDDEN','message','该支付分组包含信用卡statement关联固定项，Phase 3F前不能垫付。');\n  end if;\n  if public.home_fixed_scope_has_external_projection(p_month_key,p_currency,'expense',v_group) then\n    return jsonb_build_object('ok',false,'code','HOME_PROJECTION_FIXED_ITEM_ADVANCE_FORBIDDEN','message','该支付分组包含School信用卡projection固定项，Phase 3F前不能垫付。');\n  end if;\n  if exists(select 1 from public.home_fixed_advance_payments where user_id=auth.uid() and month_key=p_month_key and currency=p_currency and payment_group=v_group) then return jsonb_build_object('ok',false,'message','本账期该支付分组已经生成过垫付记录。'); end if;\n  select count(*),public.home_round_up_1000(coalesce(sum(amount),0)) into v_item_count,v_amount from public.home_fixed_month_items where user_id=auth.uid() and month_key=p_month_key and currency=p_currency and direction='expense' and linked_jpy_transaction_id is null and coalesce(payment_group,'未分组')=v_group;\n  if v_item_count<=0 or v_amount<=0 then return jsonb_build_object('ok',false,'message','该支付分组没有可垫付的固定支出。'); end if;\n  insert into public.home_jpy_transactions(id,user_id,transaction_type,account_id,transfer_account_id,currency,transacted_at,amount,description,note,created_at)\n  values(v_transaction_id,auth.uid(),'fixed_advance_out',p_account_id,null,p_currency,p_transacted_at,v_amount,format('%s 固定支出垫付',v_group),coalesce(p_note,''),now());\n  insert into public.home_fixed_advance_payments(id,user_id,month_key,currency,payment_group,account_id,amount,status,paid_at,out_transaction_id,note,created_at)\n  values(v_advance_id,auth.uid(),p_month_key,p_currency,v_group,p_account_id,v_amount,'pending',p_transacted_at,v_transaction_id,coalesce(p_note,''),now());\n  update public.home_fixed_month_items set status='paid' where user_id=auth.uid() and month_key=p_month_key and currency=p_currency and direction='expense' and linked_jpy_transaction_id is null and coalesce(payment_group,'未分组')=v_group;\n  return jsonb_build_object('ok',true,'message',format('%s 固定支出已垫付，金额 %s。',v_group,v_amount),'advance_id',v_advance_id,'jpy_transaction_id',v_transaction_id,'amount',v_amount,'item_count',v_item_count);\nend;\n$function$\n"
+      },
+      {
+        "oid": "18615",
+        "name": "home_update_fixed_month_item_status",
+        "signature": "p_item_id uuid, p_status text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "3399fa34598cd0c9ca63aed01bfa770f",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_update_fixed_month_item_status(p_item_id uuid, p_status text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare v_item public.home_fixed_month_items%rowtype; v_check jsonb;\nbegin\n  if p_status not in ('unpaid','paid','settled') then return jsonb_build_object('ok',false,'message','固定项状态无效。'); end if;\n  select * into v_item from public.home_fixed_month_items where id=p_item_id and user_id=auth.uid();\n  if not found then return jsonb_build_object('ok',false,'message','没有找到可更新的固定项。'); end if;\n  if public.home_fixed_item_has_external_projection(v_item.id) then return jsonb_build_object('ok',false,'code','HOME_PROJECTION_FIXED_ITEM_STATUS_FORBIDDEN','message','School信用卡projection固定项不能使用普通状态writer。'); end if;\n  if public.home_fixed_item_has_card_statement(v_item.id) then return jsonb_build_object('ok',false,'code','HOME_CARD_STATEMENT_ITEM_STATUS_FORBIDDEN','message','信用卡statement关联固定项不能使用普通状态writer。'); end if;\n  if v_item.linked_jpy_transaction_id is not null then return jsonb_build_object('ok',false,'message','调拨记录状态固定为已付。'); end if;\n  if v_item.direction='expense' and exists(select 1 from public.home_fixed_advance_payments ap where ap.user_id=auth.uid() and ap.month_key=v_item.month_key and ap.currency=v_item.currency and ap.payment_group=coalesce(v_item.payment_group,'未分组')) then return jsonb_build_object('ok',false,'message','该固定支出分组已进入垫付流程，状态不能单独修改。'); end if;\n  if v_item.direction='expense' and p_status in ('paid','settled') then v_check:=public.home_check_fixed_paid_balance(v_item.month_key,v_item.currency,p_item_id,p_status); if not coalesce((v_check->>'ok')::boolean,false) then return v_check; end if; end if;\n  update public.home_fixed_month_items set status=p_status where id=p_item_id and user_id=auth.uid() and linked_jpy_transaction_id is null;\n  return jsonb_build_object('ok',true,'message','固定项状态已更新。','updated_count',1);\nend;\n$function$\n"
+      },
+      {
+        "oid": "18616",
+        "name": "home_update_fixed_month_items_status",
+        "signature": "p_month_key text, p_currency text, p_direction text, p_status text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "21cbffacdc60fd6e3cde575615c229a6",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_update_fixed_month_items_status(p_month_key text, p_currency text, p_direction text, p_status text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare v_updated_count integer:=0; v_skipped integer:=0; v_check jsonb;\nbegin\n  if p_direction not in ('income','expense') then return jsonb_build_object('ok',false,'message','固定项收支方向无效。'); end if;\n  if p_status not in ('unpaid','paid','settled') then return jsonb_build_object('ok',false,'message','固定项状态无效。'); end if;\n  -- ① 原来这里是整批拒绝。改为跳过：projection 项由前端随后单独走\n  --    home_confirm_projection_fixed_item_status，那是它们唯一合法的入口。\n  if public.home_fixed_scope_has_card_statement(p_month_key,p_currency,p_direction) then return jsonb_build_object('ok',false,'code','HOME_CARD_STATEMENT_ITEM_BULK_STATUS_FORBIDDEN','message','范围内包含信用卡statement关联固定项，不能使用批量状态writer。'); end if;\n  if p_direction='expense' and p_status in ('paid','settled') then v_check:=public.home_check_fixed_paid_balance(p_month_key,p_currency,null,null,p_direction,p_status); if not coalesce((v_check->>'ok')::boolean,false) then return v_check; end if; end if;\n  -- ③ 先数清楚这次会跳过几条，返回里报出去，前端据此决定要不要补那一步\n  select count(*) into v_skipped\n  from public.home_fixed_month_items i\n  where i.user_id=auth.uid() and i.month_key=p_month_key and i.currency=p_currency\n    and i.direction=p_direction\n    and public.home_fixed_item_has_external_projection(i.id);\n  -- ② 排除 projection 项\n  update public.home_fixed_month_items i set status=p_status where i.user_id=auth.uid() and i.month_key=p_month_key and i.currency=p_currency and i.direction=p_direction and i.linked_jpy_transaction_id is null and not public.home_fixed_item_has_external_projection(i.id) and not(p_direction='expense' and exists(select 1 from public.home_fixed_advance_payments ap where ap.user_id=auth.uid() and ap.month_key=i.month_key and ap.currency=i.currency and ap.payment_group=coalesce(i.payment_group,'未分组')));\n  get diagnostics v_updated_count=row_count;\n  return jsonb_build_object('ok',true,'message','固定项状态已批量更新。','updated_count',v_updated_count,'skipped_projection_count',v_skipped);\nend;\n$function$\n"
+      },
+      {
+        "oid": "22920",
+        "name": "home_guard_fixed_month_item_delete_contract",
+        "signature": "",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "876ce6ba9abdd2212789ce2d72f3bca1",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_guard_fixed_month_item_delete_contract()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare\n  v_authorization_id uuid;\n  v_check jsonb;\n  v_pair_transaction_id uuid;\nbegin\n  -- 先读不删：pair_transaction_id 需要在 eligibility 之前拿到，而消费\n  -- authorization 必须留在 eligibility 之后，否则无授权删除的错误码会变。\n  select a.pair_transaction_id\n  into v_pair_transaction_id\n  from public.home_fixed_month_item_delete_authorizations a\n  where a.transaction_id = pg_current_xact_id()\n    and a.fixed_month_item_id = old.id\n    and a.actor_id = old.user_id\n    and a.operation_type = 'delete'\n    and a.currency = old.currency\n  limit 1;\n\n  v_check := public.home_check_fixed_month_item_delete_eligibility(\n    old, old.user_id, v_pair_transaction_id);\n  if not coalesce((v_check ->> 'ok')::boolean, false) then\n    raise exception using\n      errcode = '42501',\n      message = coalesce(v_check ->> 'code', 'HOME_FIXED_ITEM_DELETE_INTERNAL_CONTRACT_ERROR');\n  end if;\n\n  delete from public.home_fixed_month_item_delete_authorizations a\n  where a.transaction_id = pg_current_xact_id()\n    and a.fixed_month_item_id = old.id\n    and a.actor_id = old.user_id\n    and a.operation_type = 'delete'\n    and a.currency = old.currency\n  returning a.authorization_id into v_authorization_id;\n\n  if v_authorization_id is null then\n    raise exception using\n      errcode = '42501',\n      message = 'HOME_FIXED_ITEM_DELETE_AUTHORIZATION_REQUIRED';\n  end if;\n\n  return old;\nend;\n$function$\n"
+      },
+      {
+        "oid": "18618",
+        "name": "home_delete_fixed_month_item",
+        "signature": "p_item_id uuid",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "04817c41dedc86167bf7de663353f584",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_delete_fixed_month_item(p_item_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare\n  v_actor_id uuid := auth.uid();\nbegin\n  if v_actor_id is null then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_ITEM_DELETE_UNAUTHENTICATED',\n      'message', '请先登录后再删除固定项。'\n    );\n  end if;\n\n  return public.home_delete_fixed_month_item_core(p_item_id, v_actor_id, 'JPY');\nend;\n$function$\n"
+      },
+      {
+        "oid": "24153",
+        "name": "home_confirm_projection_fixed_item_status",
+        "signature": "p_item_id uuid, p_status text",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "07ccde44caff3410ad3d83afe55c4df8",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_confirm_projection_fixed_item_status(p_item_id uuid, p_status text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare\n  v_item public.home_fixed_month_items%rowtype;\nbegin\n  if p_status not in ('unpaid','paid','settled') then\n    return jsonb_build_object('ok',false,'message','固定项状态无效。');\n  end if;\n\n  select * into v_item\n  from public.home_fixed_month_items\n  where id=p_item_id and user_id=auth.uid();\n\n  if not found then\n    return jsonb_build_object('ok',false,'message','没有找到可更新的固定项。');\n  end if;\n\n  if not public.home_fixed_item_has_external_projection(v_item.id) then\n    return jsonb_build_object(\n      'ok',false,\n      'code','HOME_NOT_PROJECTION_FIXED_ITEM',\n      'message','该固定项不是School投影项，请使用普通状态writer。');\n  end if;\n\n  if public.home_fixed_item_has_card_statement(v_item.id) then\n    return jsonb_build_object(\n      'ok',false,\n      'code','HOME_CARD_STATEMENT_ITEM_STATUS_FORBIDDEN',\n      'message','信用卡statement关联固定项不能使用本writer。');\n  end if;\n\n  if v_item.linked_jpy_transaction_id is not null then\n    return jsonb_build_object('ok',false,'message','调拨记录状态固定为已付。');\n  end if;\n\n  if v_item.status = p_status then\n    return jsonb_build_object('ok',true,'message','状态未变化。','updated_count',0);\n  end if;\n\n  perform set_config('home.phase3f_projection_status_write','on',true);\n\n  update public.home_fixed_month_items\n  set status=p_status\n  where id=v_item.id and user_id=auth.uid();\n\n  perform set_config('home.phase3f_projection_status_write','off',true);\n\n  return jsonb_build_object(\n    'ok',true,\n    'message','School投影固定项状态已更新。',\n    'updated_count',1,\n    'item_id',v_item.id,\n    'status',p_status);\nend;\n$function$\n"
+      },
+      {
+        "oid": "24170",
+        "name": "home_delete_fixed_month_item_core",
+        "signature": "p_item_id uuid, p_actor_id uuid, p_expected_currency text, p_pair_transaction_id uuid",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "ec8aafb1d75ba80d0347d6aa7cde0217",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_delete_fixed_month_item_core(p_item_id uuid, p_actor_id uuid, p_expected_currency text DEFAULT NULL::text, p_pair_transaction_id uuid DEFAULT NULL::uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare\n  v_item public.home_fixed_month_items%rowtype;\n  v_check jsonb;\n  v_deleted_count integer := 0;\n  v_expected_currency text := nullif(upper(btrim(coalesce(p_expected_currency, ''))), '');\n  v_authorization_id uuid := gen_random_uuid();\n  v_core_nonce uuid := gen_random_uuid();\n  v_transaction_id xid8;\nbegin\n  if p_actor_id is null then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_ITEM_DELETE_UNAUTHENTICATED',\n      'message', '请先登录后再删除固定项。'\n    );\n  end if;\n\n  if p_item_id is null then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_ITEM_ALREADY_ABSENT',\n      'message', '该固定项已不存在，请刷新页面。'\n    );\n  end if;\n\n  select * into v_item\n  from public.home_fixed_month_items i\n  where i.id = p_item_id\n    and i.user_id = p_actor_id\n    and (v_expected_currency is null or i.currency = v_expected_currency)\n  for update;\n\n  if not found then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_ITEM_ALREADY_ABSENT',\n      'message', '该固定项已不存在，请刷新页面。'\n    );\n  end if;\n\n  v_check := public.home_check_fixed_month_item_delete_eligibility(\n    v_item, p_actor_id, p_pair_transaction_id);\n  if not coalesce((v_check ->> 'ok')::boolean, false) then\n    return v_check;\n  end if;\n\n  v_transaction_id := pg_current_xact_id();\n\n  insert into public.home_fixed_month_item_delete_authorizations(\n    authorization_id,\n    transaction_id,\n    fixed_month_item_id,\n    actor_id,\n    operation_type,\n    currency,\n    core_nonce,\n    pair_transaction_id\n  ) values (\n    v_authorization_id,\n    v_transaction_id,\n    v_item.id,\n    p_actor_id,\n    'delete',\n    v_item.currency,\n    v_core_nonce,\n    p_pair_transaction_id\n  );\n\n  delete from public.home_fixed_month_items i\n  where i.id = v_item.id\n    and i.user_id = p_actor_id;\n  get diagnostics v_deleted_count = row_count;\n\n  if v_deleted_count <> 1 then\n    raise exception using\n      errcode = '55000',\n      message = 'HOME_FIXED_ITEM_DELETE_INTERNAL_CONTRACT_ERROR';\n  end if;\n\n  if exists (\n    select 1\n    from public.home_fixed_month_item_delete_authorizations a\n    where a.authorization_id = v_authorization_id\n  ) then\n    raise exception using\n      errcode = '55000',\n      message = 'HOME_FIXED_ITEM_DELETE_AUTHORIZATION_NOT_CONSUMED';\n  end if;\n\n  return jsonb_build_object(\n    'ok', true,\n    'code', 'HOME_FIXED_ITEM_DELETED',\n    'deleted_count', 1,\n    'item_id', v_item.id,\n    'currency', v_item.currency,\n    'message', case\n      when v_item.currency = 'CNY' then '人民币固定项已删除。'\n      else '固定项已删除。'\n    end\n  );\nend;\n$function$\n"
+      },
+      {
+        "oid": "18619",
+        "name": "home_delete_jpy_transaction",
+        "signature": "p_transaction_id uuid",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "5aea2b7fe9c6de760bae864ca331820f",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_delete_jpy_transaction(p_transaction_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare\n  v_transaction public.home_jpy_transactions%rowtype;\n  v_linked_fixed_month_item_id uuid;\n  v_item public.home_fixed_month_items%rowtype;\n  v_reset jsonb := jsonb_build_object('reset_expense_status', false);\n  v_linked_deleted boolean := false;\n  v_message text := '已删除。';\n  v_core jsonb;\nbegin\n  select *\n  into v_transaction\n  from public.home_jpy_transactions\n  where id = p_transaction_id\n  for update;\n\n  if not found then\n    return jsonb_build_object('ok', false, 'message', '没有找到可删除的日元流水。');\n  end if;\n\n  if v_transaction.created_by_external is true\n     or nullif(btrim(v_transaction.external_source), '') is not null\n     or v_transaction.external_source_id is not null\n     or nullif(btrim(v_transaction.external_event_type), '') is not null\n     or nullif(btrim(v_transaction.external_idempotency_key), '') is not null\n     or nullif(btrim(v_transaction.external_reference_type), '') is not null\n     or v_transaction.external_reference_id is not null\n     or nullif(btrim(v_transaction.external_note), '') is not null\n     or nullif(btrim(v_transaction.external_payload_hash), '') is not null\n     or v_transaction.external_created_at is not null then\n    return jsonb_build_object(\n      'ok', false, 'code', 'EXTERNAL_TRANSACTION_IMMUTABLE',\n      'message', 'EXTERNAL_TRANSACTION_IMMUTABLE'\n    );\n  end if;\n\n  if v_transaction.user_id is distinct from auth.uid() then\n    return jsonb_build_object('ok', false, 'message', '没有找到可删除的日元流水。');\n  end if;\n\n  if v_transaction.transaction_type in ('fixed_advance_out', 'fixed_advance_in') then\n    return jsonb_build_object('ok', false, 'message', '固定垫付流水由固定收支流程控制，不能在零散收支中删除。');\n  end if;\n\n  v_linked_fixed_month_item_id := public.home_resolve_fixed_transfer_item_id(v_transaction);\n\n  if v_linked_fixed_month_item_id is not null then\n    select *\n    into v_item\n    from public.home_fixed_month_items\n    where id = v_linked_fixed_month_item_id\n      and user_id = auth.uid();\n\n    if not found then\n      return jsonb_build_object('ok', false, 'message', '调拨流水链接的固定项不存在，请检查旧数据后再删除。');\n    end if;\n\n    -- 2026-09-01 Step D：经窄 DEFINER 入口删除配对固定项。\n    -- 本函数是 INVOKER，无权直接调 postgres-only 的 core；窄入口内部从\n    -- auth.uid() 取 actor 并校验配对关系，再转调 core。\n    v_core := public.home_delete_fixed_transfer_pair_item(\n      v_linked_fixed_month_item_id,\n      v_transaction.id\n    );\n\n    -- 失败原样上抛。projection / statement / correction / funded / 垫付等\n    -- 保护命中时必须让整个删除失败；同一事务内 return 会连带回滚，\n    -- 流水不会被误删。\n    if not coalesce((v_core ->> 'ok')::boolean, false) then\n      return v_core;\n    end if;\n\n    v_linked_deleted := true;\n  elsif v_transaction.transaction_type in ('fixed_in', 'fixed_out') then\n    v_message := '已删除日元流水，但旧数据链接不完整，未能唯一匹配固定项。';\n  end if;\n\n  delete from public.home_jpy_transactions\n  where id = v_transaction.id\n    and user_id = auth.uid();\n\n  if v_linked_deleted then\n    v_reset := public.home_reset_plain_fixed_expenses_if_deficit(v_item.month_key, v_item.currency);\n  end if;\n\n  return jsonb_build_object(\n    'ok', true,\n    'deleted_count', 1,\n    'linked_deleted', v_linked_deleted,\n    'reset_expense_status', coalesce((v_reset ->> 'reset_expense_status')::boolean, false),\n    'message', case\n      when v_linked_deleted and coalesce((v_reset ->> 'reset_expense_status')::boolean, false)\n        then '已同步删除固定收支记录；删除后重新出现赤字，普通固定支出已改回未付。'\n      when v_linked_deleted\n        then '已同步删除固定收支记录。'\n      else v_message\n    end\n  );\nend;\n$function$\n"
+      }
+    ],
+    "triggers": [
+      {
+        "oid": "19684",
+        "name": "home_fixed_month_items_assign_accounting_scope",
+        "tgfoid": "19683",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER home_fixed_month_items_assign_accounting_scope BEFORE INSERT ON public.home_fixed_month_items FOR EACH ROW EXECUTE FUNCTION home_assign_accounting_scope()"
+      },
+      {
+        "oid": "21383",
+        "name": "home_fixed_month_items_projection_guard",
+        "tgfoid": "21382",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER home_fixed_month_items_projection_guard BEFORE DELETE OR UPDATE ON public.home_fixed_month_items FOR EACH ROW EXECUTE FUNCTION home_guard_projection_linked_fixed_item()"
+      },
+      {
+        "oid": "22921",
+        "name": "zz_home_fixed_month_items_delete_contract_guard",
+        "tgfoid": "22920",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER zz_home_fixed_month_items_delete_contract_guard BEFORE DELETE ON public.home_fixed_month_items FOR EACH ROW EXECUTE FUNCTION home_guard_fixed_month_item_delete_contract()"
+      }
+    ]
+  },
+  "dependencies": {
+    "users": [
+      "8596a708-d99f-4264-8f8c-5b89af9254b6"
+    ],
+    "tables": [
+      {
+        "acl": [
+          "postgres=arwdDxtm/postgres",
+          "anon=arwdDxtm/postgres",
+          "authenticated=arwdDxtm/postgres",
+          "service_role=arwdDxtm/postgres"
+        ],
+        "rls": true,
+        "name": "home_accounts",
+        "insert": true,
+        "select": true,
+        "update": true,
+        "force_rls": false
+      },
+      {
+        "acl": [
+          "postgres=arwdDxtm/postgres",
+          "anon=arwdDxtm/postgres",
+          "authenticated=arwdDxtm/postgres",
+          "service_role=arwdDxtm/postgres"
+        ],
+        "rls": true,
+        "name": "home_fixed_advance_payments",
+        "insert": true,
+        "select": true,
+        "update": true,
+        "force_rls": false
+      },
+      {
+        "acl": [
+          "postgres=arwdDxtm/postgres",
+          "anon=arwxtm/postgres",
+          "authenticated=arwxtm/postgres",
+          "service_role=arwxtm/postgres"
+        ],
+        "rls": true,
+        "name": "home_fixed_month_items",
+        "insert": true,
+        "select": true,
+        "update": true,
+        "force_rls": false
+      },
+      {
+        "acl": [
+          "postgres=arwdDxtm/postgres",
+          "anon=rm/postgres",
+          "authenticated=arwdm/postgres",
+          "service_role=arwdDxtm/postgres"
+        ],
+        "rls": true,
+        "name": "home_jpy_transactions",
+        "insert": true,
+        "select": true,
+        "update": true,
+        "force_rls": false
+      }
+    ],
+    "functions": [
+      {
+        "md5": "acf633ea148c444ab6ab3c25687fbb27",
+        "oid": "24154",
+        "name": "home_check_fixed_month_item_delete_eligibility",
+        "owner": "postgres",
+        "proacl": [
+          "postgres=X/postgres"
+        ],
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "prosecdef": true,
+        "signature": "p_item home_fixed_month_items, p_actor_id uuid, p_pair_transaction_id uuid",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_check_fixed_month_item_delete_eligibility(p_item home_fixed_month_items, p_actor_id uuid, p_pair_transaction_id uuid DEFAULT NULL::uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nbegin\n  if p_actor_id is null then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_ITEM_DELETE_UNAUTHENTICATED',\n      'message', '请先登录后再删除固定项。'\n    );\n  end if;\n\n  if p_item.id is null or p_item.user_id is distinct from p_actor_id then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_ITEM_ALREADY_ABSENT',\n      'message', '该固定项已不存在，请刷新页面。'\n    );\n  end if;\n\n  -- 配对删除场景跳过状态检查：固定调拨项由 home_create_fixed_transfer 创建，\n  -- 状态写死 paid，永远无法满足「仅 unpaid」。\n  if p_pair_transaction_id is null and p_item.status is distinct from 'unpaid' then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_ITEM_DELETE_STATUS_FORBIDDEN',\n      'message', '仅未支付的普通固定项可以删除。已支付或已结算项目请先撤销支付或使用纠正流程。'\n    );\n  end if;\n\n  if exists (\n    select 1\n    from public.home_external_fixed_payment_projections p\n    where p.fixed_month_item_id = p_item.id\n      and (\n        p.projection_status = 'corrected'\n        or p.supersedes_projection_id is not null\n        or exists (\n          select 1\n          from public.home_external_fixed_payment_projections replacement\n          where replacement.supersedes_projection_id = p.id\n        )\n      )\n  ) then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_CORRECTION_FIXED_ITEM_DELETE_FORBIDDEN',\n      'message', '该固定项属于纠正或replacement链路，不能直接删除。'\n    );\n  end if;\n\n  if exists (\n    select 1\n    from public.home_external_fixed_payment_projections p\n    where p.fixed_month_item_id = p_item.id\n      and (\n        p.funding_status is distinct from 'unfunded'\n        or p.funding_account_id is not null\n        or p.funding_transaction_id is not null\n        or p.funded_at is not null\n      )\n  ) then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FUNDED_FIXED_ITEM_DELETE_FORBIDDEN',\n      'message', '该固定项已经进入资金处理流程，不能直接删除。'\n    );\n  end if;\n\n  if exists (\n    select 1\n    from public.home_external_fixed_payment_projections p\n    where p.fixed_month_item_id = p_item.id\n  ) then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_PROJECTION_FIXED_ITEM_DELETE_FORBIDDEN',\n      'message', '该固定项来自外部固定支付链路，不能直接删除。'\n    );\n  end if;\n\n  if exists (\n    select 1\n    from public.home_card_statement_cycles c\n    where c.household_remainder_fixed_item_id = p_item.id\n  ) or exists (\n    select 1\n    from public.home_card_statement_cycle_revisions r\n    where r.household_remainder_fixed_item_id = p_item.id\n  ) then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_STATEMENT_FIXED_ITEM_DELETE_FORBIDDEN',\n      'message', '该固定项已经进入账单处理流程，不能直接删除。'\n    );\n  end if;\n\n  if p_item.direction = 'expense' and exists (\n    select 1\n    from public.home_fixed_advance_payments a\n    where a.user_id = p_item.user_id\n      and a.month_key = p_item.month_key\n      and a.currency = p_item.currency\n      and a.payment_group = coalesce(p_item.payment_group, '未分组')\n  ) then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_ADVANCE_FIXED_ITEM_DELETE_FORBIDDEN',\n      'message', '该固定项所在支付分组已经进入垫付流程，不能直接删除。'\n    );\n  end if;\n\n  -- 关联流水检查。\n  -- 普通场景（p_pair_transaction_id 为 NULL）：任何关联即拒绝，与基线一致。\n  -- 配对场景：仅放行所传的那一笔 JPY 流水，其余关联一律拒绝——不能笼统豁免，\n  -- 否则固定项关联流水 X 时删流水 Y 会误删。\n  if (\n       p_item.linked_jpy_transaction_id is not null\n       and (p_pair_transaction_id is null\n            or p_item.linked_jpy_transaction_id is distinct from p_pair_transaction_id)\n     )\n     or p_item.linked_cny_transaction_id is not null\n     or exists (\n       select 1\n       from public.home_jpy_transactions t\n       where t.linked_fixed_month_item_id = p_item.id\n         and (p_pair_transaction_id is null\n              or t.id is distinct from p_pair_transaction_id)\n     )\n     or exists (\n       select 1\n       from public.home_cny_transactions t\n       where t.linked_fixed_month_item_id = p_item.id\n     ) then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_LINKED_PAYMENT_FIXED_ITEM_DELETE_FORBIDDEN',\n      'message', '该固定项已经关联Cash流水，不能直接删除。'\n    );\n  end if;\n\n  return jsonb_build_object(\n    'ok', true,\n    'code', 'HOME_FIXED_ITEM_DELETE_ELIGIBLE'\n  );\nend;\n$function$\n",
+        "provolatile": "v"
+      },
+      {
+        "md5": "09d6fe7ad7207ec47089f7843c34a7a7",
+        "oid": "24255",
+        "name": "home_delete_fixed_transfer_pair_item",
+        "owner": "postgres",
+        "proacl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "prosecdef": true,
+        "signature": "p_item_id uuid, p_pair_transaction_id uuid",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_delete_fixed_transfer_pair_item(p_item_id uuid, p_pair_transaction_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare\n  v_actor uuid := auth.uid();\n  v_item public.home_fixed_month_items%rowtype;\n  v_txn public.home_jpy_transactions%rowtype;\nbegin\n  if v_actor is null then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_ITEM_DELETE_UNAUTHENTICATED',\n      'message', '请先登录后再删除固定项。'\n    );\n  end if;\n\n  if p_item_id is null or p_pair_transaction_id is null then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_TRANSFER_PAIR_INVALID',\n      'message', '配对删除需要同时指定固定项与流水。'\n    );\n  end if;\n\n  -- 流水：必须属于本人，且是固定资金调拨\n  select * into v_txn\n  from public.home_jpy_transactions\n  where id = p_pair_transaction_id\n    and user_id = v_actor;\n\n  if not found then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_TRANSFER_PAIR_INVALID',\n      'message', '配对流水不存在或不属于当前用户。'\n    );\n  end if;\n\n  if v_txn.transaction_type not in ('fixed_in', 'fixed_out') then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_TRANSFER_PAIR_INVALID',\n      'message', '配对流水不是固定资金调拨，不能使用本入口。'\n    );\n  end if;\n\n  -- 固定项：必须属于本人\n  select * into v_item\n  from public.home_fixed_month_items\n  where id = p_item_id\n    and user_id = v_actor;\n\n  if not found then\n    -- 用 PAIR_INVALID 而非 ALREADY_ABSENT：本入口的语义是「校验配对关系」，\n    -- 而 user_id = auth.uid() 是查询条件的一部分。项不存在与项属于他人在\n    -- 这里不作区分，也不应区分——区分会泄露「该 id 确实存在但不属于你」。\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_TRANSFER_PAIR_INVALID',\n      'message', '配对固定项不存在或不属于当前用户。'\n    );\n  end if;\n\n  -- 必须构成真实配对：两个方向都成立。\n  -- 生产核查确认 5 组配对全部双向完整，无单向情形，故用 AND。\n  -- 详见文件头设计说明三。\n  if not (\n       v_item.linked_jpy_transaction_id is not distinct from v_txn.id\n       and v_txn.linked_fixed_month_item_id is not distinct from v_item.id\n     ) then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_TRANSFER_PAIR_INVALID',\n      'message', '该固定项与所传流水不构成配对关系。'\n    );\n  end if;\n\n  if v_item.currency is distinct from v_txn.currency then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_TRANSFER_PAIR_INVALID',\n      'message', '配对双方币种不一致。'\n    );\n  end if;\n\n  -- 其余七条检查全部交给 core，本入口不做任何豁免\n  return public.home_delete_fixed_month_item_core(\n    v_item.id,\n    v_actor,\n    v_item.currency,\n    v_txn.id\n  );\nend;\n$function$\n",
+        "provolatile": "v"
+      },
+      {
+        "md5": "d02e8faaabd1602ed627d78f82fbda2f",
+        "oid": "18629",
+        "name": "home_resolve_fixed_transfer_item_id",
+        "owner": "postgres",
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "proconfig": null,
+        "prosecdef": false,
+        "signature": "p_transaction home_jpy_transactions",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_resolve_fixed_transfer_item_id(p_transaction home_jpy_transactions)\n RETURNS uuid\n LANGUAGE plpgsql\nAS $function$\ndeclare\n  v_direction text;\n  v_name text;\n  v_month_key text;\n  v_candidate_id uuid;\n  v_candidate_count integer;\nbegin\n  if p_transaction.linked_fixed_month_item_id is not null then\n    return p_transaction.linked_fixed_month_item_id;\n  end if;\n\n  v_direction := home_fixed_transfer_direction(p_transaction.transaction_type);\n  v_name := home_fixed_transfer_name(p_transaction.transaction_type);\n  v_month_key := to_char(p_transaction.transacted_at, 'YYYY-MM');\n\n  if v_direction is null or v_name is null then\n    return null;\n  end if;\n\n  select count(*), (array_agg(i.id))[1]\n  into v_candidate_count, v_candidate_id\n  from home_fixed_month_items i\n  where i.user_id = auth.uid()\n    and i.currency = p_transaction.currency\n    and i.month_key = v_month_key\n    and i.direction = v_direction\n    and i.name = v_name\n    and i.amount = p_transaction.amount\n    and i.linked_jpy_transaction_id is null\n    and (i.account_id is null or i.account_id = p_transaction.account_id);\n\n  if v_candidate_count = 1 then\n    update home_fixed_month_items\n    set linked_jpy_transaction_id = p_transaction.id\n    where id = v_candidate_id\n      and user_id = auth.uid();\n\n    update home_jpy_transactions\n    set linked_fixed_month_item_id = v_candidate_id\n    where id = p_transaction.id\n      and user_id = auth.uid();\n\n    return v_candidate_id;\n  end if;\n\n  return null;\nend;\n$function$\n",
+        "provolatile": "v"
+      },
+      {
+        "md5": "45f0b6d4816cf9884c1fa442965f578e",
+        "oid": "18613",
+        "name": "home_round_up_1000",
+        "owner": "postgres",
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "proconfig": null,
+        "prosecdef": false,
+        "signature": "p_amount numeric",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_round_up_1000(p_amount numeric)\n RETURNS numeric\n LANGUAGE sql\n IMMUTABLE\nAS $function$\n  select case\n    when coalesce(p_amount, 0) <= 0 then 0\n    else ceil(coalesce(p_amount, 0) / 1000) * 1000\n  end;\n$function$\n",
+        "provolatile": "i"
+      }
+    ],
+    "constraints": [
+      {
+        "name": "home_fixed_month_items_account_id_fkey",
+        "table": "home_fixed_month_items",
+        "definition": "FOREIGN KEY (account_id) REFERENCES home_accounts(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "home_fixed_month_items_accounting_scope_check",
+        "table": "home_fixed_month_items",
+        "definition": "CHECK ((accounting_scope = ANY (ARRAY['household'::text, 'school'::text])))"
+      },
+      {
+        "name": "home_fixed_month_items_currency_check",
+        "table": "home_fixed_month_items",
+        "definition": "CHECK ((currency = ANY (ARRAY['JPY'::text, 'CNY'::text])))"
+      },
+      {
+        "name": "home_fixed_month_items_direction_check",
+        "table": "home_fixed_month_items",
+        "definition": "CHECK ((direction = ANY (ARRAY['income'::text, 'expense'::text])))"
+      },
+      {
+        "name": "home_fixed_month_items_linked_cny_transaction_id_fkey",
+        "table": "home_fixed_month_items",
+        "definition": "FOREIGN KEY (linked_cny_transaction_id) REFERENCES home_cny_transactions(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "home_fixed_month_items_linked_jpy_transaction_id_fkey",
+        "table": "home_fixed_month_items",
+        "definition": "FOREIGN KEY (linked_jpy_transaction_id) REFERENCES home_jpy_transactions(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "home_fixed_month_items_pkey",
+        "table": "home_fixed_month_items",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "name": "home_fixed_month_items_status_check",
+        "table": "home_fixed_month_items",
+        "definition": "CHECK ((status = ANY (ARRAY['unpaid'::text, 'paid'::text, 'settled'::text])))"
+      },
+      {
+        "name": "home_fixed_month_items_template_id_fkey",
+        "table": "home_fixed_month_items",
+        "definition": "FOREIGN KEY (template_id) REFERENCES home_fixed_templates(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "home_fixed_month_items_user_id_fkey",
+        "table": "home_fixed_month_items",
+        "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "home_jpy_transactions_account_id_fkey",
+        "table": "home_jpy_transactions",
+        "definition": "FOREIGN KEY (account_id) REFERENCES home_accounts(id) ON DELETE CASCADE"
+      },
+      {
+        "name": "home_jpy_transactions_accounting_scope_check",
+        "table": "home_jpy_transactions",
+        "definition": "CHECK ((accounting_scope = ANY (ARRAY['household'::text, 'school'::text])))"
+      },
+      {
+        "name": "home_jpy_transactions_amount_check",
+        "table": "home_jpy_transactions",
+        "definition": "CHECK ((((transaction_type = 'investment_pnl'::text) AND (amount <> (0)::numeric)) OR ((transaction_type <> 'investment_pnl'::text) AND (amount > (0)::numeric))))"
+      },
+      {
+        "name": "home_jpy_transactions_check",
+        "table": "home_jpy_transactions",
+        "definition": "CHECK ((((transaction_type = 'transfer'::text) AND (transfer_account_id IS NOT NULL) AND (transfer_account_id <> account_id)) OR ((transaction_type <> 'transfer'::text) AND (transfer_account_id IS NULL))))"
+      },
+      {
+        "name": "home_jpy_transactions_currency_check",
+        "table": "home_jpy_transactions",
+        "definition": "CHECK ((currency = 'JPY'::text))"
+      },
+      {
+        "name": "home_jpy_transactions_external_required_check",
+        "table": "home_jpy_transactions",
+        "definition": "CHECK (((created_by_external IS NOT TRUE) OR ((external_source = 'aozora_school'::text) AND (external_source_id IS NOT NULL) AND (external_idempotency_key IS NOT NULL) AND (external_reference_id IS NOT NULL) AND (currency = 'JPY'::text) AND (amount > (0)::numeric) AND (transfer_account_id IS NULL) AND (linked_fixed_month_item_id IS NULL) AND (linked_cny_transaction_id IS NULL) AND (((external_reference_type = 'school_income_records'::text) AND (external_event_type = ANY (ARRAY['tuition_income_received'::text, 'income_received'::text])) AND (transaction_type = 'income'::text)) OR ((external_reference_type = 'school_expense_records'::text) AND (external_event_type = 'expense_paid'::text) AND (transaction_type = 'expense'::text))))))"
+      },
+      {
+        "name": "home_jpy_transactions_linked_cny_transaction_id_fkey",
+        "table": "home_jpy_transactions",
+        "definition": "FOREIGN KEY (linked_cny_transaction_id) REFERENCES home_cny_transactions(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "home_jpy_transactions_linked_fixed_month_item_id_fkey",
+        "table": "home_jpy_transactions",
+        "definition": "FOREIGN KEY (linked_fixed_month_item_id) REFERENCES home_fixed_month_items(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "home_jpy_transactions_pkey",
+        "table": "home_jpy_transactions",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "name": "home_jpy_transactions_school_source_scope_check",
+        "table": "home_jpy_transactions",
+        "definition": "CHECK (((external_source IS DISTINCT FROM 'aozora_school'::text) OR (accounting_scope = 'school'::text)))"
+      },
+      {
+        "name": "home_jpy_transactions_transaction_type_check",
+        "table": "home_jpy_transactions",
+        "definition": "CHECK ((transaction_type = ANY (ARRAY['income'::text, 'expense'::text, 'transfer'::text, 'fx_in'::text, 'fx_out'::text, 'fixed_in'::text, 'fixed_out'::text, 'fixed_advance_out'::text, 'fixed_advance_in'::text, 'investment_pnl'::text])))"
+      },
+      {
+        "name": "home_jpy_transactions_transfer_account_id_fkey",
+        "table": "home_jpy_transactions",
+        "definition": "FOREIGN KEY (transfer_account_id) REFERENCES home_accounts(id) ON DELETE CASCADE"
+      },
+      {
+        "name": "home_jpy_transactions_user_id_fkey",
+        "table": "home_jpy_transactions",
+        "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+      },
+      {
+        "name": "home_fixed_advance_payments_account_id_fkey",
+        "table": "home_fixed_advance_payments",
+        "definition": "FOREIGN KEY (account_id) REFERENCES home_accounts(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "home_fixed_advance_payments_accounting_scope_check",
+        "table": "home_fixed_advance_payments",
+        "definition": "CHECK ((accounting_scope = ANY (ARRAY['household'::text, 'school'::text])))"
+      },
+      {
+        "name": "home_fixed_advance_payments_amount_check",
+        "table": "home_fixed_advance_payments",
+        "definition": "CHECK ((amount > (0)::numeric))"
+      },
+      {
+        "name": "home_fixed_advance_payments_currency_check",
+        "table": "home_fixed_advance_payments",
+        "definition": "CHECK ((currency = 'JPY'::text))"
+      },
+      {
+        "name": "home_fixed_advance_payments_in_transaction_id_fkey",
+        "table": "home_fixed_advance_payments",
+        "definition": "FOREIGN KEY (in_transaction_id) REFERENCES home_jpy_transactions(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "home_fixed_advance_payments_month_group_unique",
+        "table": "home_fixed_advance_payments",
+        "definition": "UNIQUE (user_id, month_key, currency, payment_group)"
+      },
+      {
+        "name": "home_fixed_advance_payments_out_transaction_id_fkey",
+        "table": "home_fixed_advance_payments",
+        "definition": "FOREIGN KEY (out_transaction_id) REFERENCES home_jpy_transactions(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "home_fixed_advance_payments_pkey",
+        "table": "home_fixed_advance_payments",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "name": "home_fixed_advance_payments_status_check",
+        "table": "home_fixed_advance_payments",
+        "definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'repaid'::text])))"
+      },
+      {
+        "name": "home_fixed_advance_payments_user_id_fkey",
+        "table": "home_fixed_advance_payments",
+        "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+      }
+    ]
+  },
+  "history": {
+    "query": "select jsonb_build_object(\n'1_paid_month_mismatch',(select count(*) from public.home_fixed_advance_payments where to_char(paid_at,'YYYY-MM') is distinct from month_key),\n'2_repaid_link_checks',(select jsonb_build_object(\n'missing_repaid_at',count(*) filter(where a.repaid_at is null),\n'missing_txn_ref',count(*) filter(where a.in_transaction_id is null),\n'dangling_txn',count(*) filter(where a.in_transaction_id is not null and t.id is null),\n'wrong_type',count(*) filter(where t.id is not null and t.transaction_type is distinct from 'fixed_advance_in'),\n'wrong_user',count(*) filter(where t.id is not null and t.user_id is distinct from a.user_id),\n'wrong_account',count(*) filter(where t.id is not null and t.account_id is distinct from a.account_id),\n'wrong_currency',count(*) filter(where t.id is not null and t.currency is distinct from a.currency),\n'wrong_amount',count(*) filter(where t.id is not null and t.amount is distinct from a.amount),\n'wrong_date',count(*) filter(where t.id is not null and t.transacted_at is distinct from a.repaid_at))\nfrom public.home_fixed_advance_payments a left join public.home_jpy_transactions t on t.id=a.in_transaction_id where a.status='repaid'),\n'3_shared_in_transaction',(select count(*) from (select in_transaction_id from public.home_fixed_advance_payments where status='repaid' and in_transaction_id is not null group by in_transaction_id having count(*)>1) s),\n'4a_fixed_links_to_repayment',(select count(distinct i.id) from public.home_fixed_month_items i join public.home_jpy_transactions t on t.id=i.linked_jpy_transaction_id where t.transaction_type='fixed_advance_in'),\n'4b_repayment_links_to_fixed',(select count(*) from public.home_jpy_transactions where transaction_type='fixed_advance_in' and linked_fixed_month_item_id is not null),\n'4c_repayment_nonreciprocal',(select count(*) from public.home_jpy_transactions t left join public.home_fixed_month_items i on i.id=t.linked_fixed_month_item_id where t.transaction_type='fixed_advance_in' and t.linked_fixed_month_item_id is not null and (i.id is null or i.linked_jpy_transaction_id is distinct from t.id)),\n'5_orphan_repayment',(select count(*) from public.home_jpy_transactions t where t.transaction_type='fixed_advance_in' and not exists(select 1 from public.home_fixed_advance_payments a where a.in_transaction_id=t.id)),\n'6_pending_has_repayment',(select count(*) from public.home_fixed_advance_payments where status='pending' and (in_transaction_id is not null or repaid_at is not null))\n);",
+    "result": "{\"5_orphan_repayment\": 0, \"2_repaid_link_checks\": {\"wrong_date\": 0, \"wrong_type\": 0, \"wrong_user\": 0, \"dangling_txn\": 0, \"wrong_amount\": 0, \"wrong_account\": 0, \"wrong_currency\": 0, \"missing_txn_ref\": 0, \"missing_repaid_at\": 0}, \"1_paid_month_mismatch\": 0, \"3_shared_in_transaction\": 0, \"6_pending_has_repayment\": 0, \"4c_repayment_nonreciprocal\": 0, \"4a_fixed_links_to_repayment\": 0, \"4b_repayment_links_to_fixed\": 0}\n"
+  },
+  "fingerprints_before": {
+    "columns": [
+      {
+        "type": "uuid",
+        "table": "home_accounts",
+        "column": "id",
+        "default": "gen_random_uuid()",
+        "nullable": "NO"
+      },
+      {
+        "type": "uuid",
+        "table": "home_accounts",
+        "column": "user_id",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_accounts",
+        "column": "currency",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_accounts",
+        "column": "name",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_accounts",
+        "column": "account_type",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "numeric",
+        "table": "home_accounts",
+        "column": "opening_balance",
+        "default": "0",
+        "nullable": "NO"
+      },
+      {
+        "type": "boolean",
+        "table": "home_accounts",
+        "column": "is_active",
+        "default": "true",
+        "nullable": "NO"
+      },
+      {
+        "type": "integer",
+        "table": "home_accounts",
+        "column": "sort_order",
+        "default": "0",
+        "nullable": "NO"
+      },
+      {
+        "type": "timestamp with time zone",
+        "table": "home_accounts",
+        "column": "created_at",
+        "default": "now()",
+        "nullable": "NO"
+      },
+      {
+        "type": "boolean",
+        "table": "home_accounts",
+        "column": "allow_school_requests",
+        "default": "false",
+        "nullable": "NO"
+      },
+      {
+        "type": "uuid",
+        "table": "home_fixed_advance_payments",
+        "column": "id",
+        "default": "gen_random_uuid()",
+        "nullable": "NO"
+      },
+      {
+        "type": "uuid",
+        "table": "home_fixed_advance_payments",
+        "column": "user_id",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_fixed_advance_payments",
+        "column": "month_key",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_fixed_advance_payments",
+        "column": "currency",
+        "default": "'JPY'::text",
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_fixed_advance_payments",
+        "column": "payment_group",
+        "default": "'未分组'::text",
+        "nullable": "NO"
+      },
+      {
+        "type": "uuid",
+        "table": "home_fixed_advance_payments",
+        "column": "account_id",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "numeric",
+        "table": "home_fixed_advance_payments",
+        "column": "amount",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_fixed_advance_payments",
+        "column": "status",
+        "default": "'pending'::text",
+        "nullable": "NO"
+      },
+      {
+        "type": "date",
+        "table": "home_fixed_advance_payments",
+        "column": "paid_at",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "date",
+        "table": "home_fixed_advance_payments",
+        "column": "repaid_at",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "uuid",
+        "table": "home_fixed_advance_payments",
+        "column": "out_transaction_id",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "uuid",
+        "table": "home_fixed_advance_payments",
+        "column": "in_transaction_id",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "home_fixed_advance_payments",
+        "column": "note",
+        "default": "''::text",
+        "nullable": "NO"
+      },
+      {
+        "type": "timestamp with time zone",
+        "table": "home_fixed_advance_payments",
+        "column": "created_at",
+        "default": "now()",
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_fixed_advance_payments",
+        "column": "accounting_scope",
+        "default": "'household'::text",
+        "nullable": "NO"
+      },
+      {
+        "type": "uuid",
+        "table": "home_fixed_month_items",
+        "column": "id",
+        "default": "gen_random_uuid()",
+        "nullable": "NO"
+      },
+      {
+        "type": "uuid",
+        "table": "home_fixed_month_items",
+        "column": "user_id",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "uuid",
+        "table": "home_fixed_month_items",
+        "column": "template_id",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "home_fixed_month_items",
+        "column": "month_key",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_fixed_month_items",
+        "column": "currency",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_fixed_month_items",
+        "column": "direction",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_fixed_month_items",
+        "column": "name",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "numeric",
+        "table": "home_fixed_month_items",
+        "column": "amount",
+        "default": "0",
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_fixed_month_items",
+        "column": "status",
+        "default": "'unpaid'::text",
+        "nullable": "NO"
+      },
+      {
+        "type": "uuid",
+        "table": "home_fixed_month_items",
+        "column": "account_id",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "home_fixed_month_items",
+        "column": "payment_group",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "date",
+        "table": "home_fixed_month_items",
+        "column": "due_date",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "integer",
+        "table": "home_fixed_month_items",
+        "column": "term_no",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "integer",
+        "table": "home_fixed_month_items",
+        "column": "total_terms",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "home_fixed_month_items",
+        "column": "note",
+        "default": "''::text",
+        "nullable": "NO"
+      },
+      {
+        "type": "timestamp with time zone",
+        "table": "home_fixed_month_items",
+        "column": "created_at",
+        "default": "now()",
+        "nullable": "NO"
+      },
+      {
+        "type": "uuid",
+        "table": "home_fixed_month_items",
+        "column": "linked_jpy_transaction_id",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "uuid",
+        "table": "home_fixed_month_items",
+        "column": "linked_cny_transaction_id",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "home_fixed_month_items",
+        "column": "accounting_scope",
+        "default": "'household'::text",
+        "nullable": "NO"
+      },
+      {
+        "type": "uuid",
+        "table": "home_jpy_transactions",
+        "column": "id",
+        "default": "gen_random_uuid()",
+        "nullable": "NO"
+      },
+      {
+        "type": "uuid",
+        "table": "home_jpy_transactions",
+        "column": "user_id",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_jpy_transactions",
+        "column": "currency",
+        "default": "'JPY'::text",
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_jpy_transactions",
+        "column": "transaction_type",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "uuid",
+        "table": "home_jpy_transactions",
+        "column": "account_id",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "uuid",
+        "table": "home_jpy_transactions",
+        "column": "transfer_account_id",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "date",
+        "table": "home_jpy_transactions",
+        "column": "transacted_at",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "numeric",
+        "table": "home_jpy_transactions",
+        "column": "amount",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_jpy_transactions",
+        "column": "description",
+        "default": "''::text",
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_jpy_transactions",
+        "column": "note",
+        "default": "''::text",
+        "nullable": "NO"
+      },
+      {
+        "type": "timestamp with time zone",
+        "table": "home_jpy_transactions",
+        "column": "created_at",
+        "default": "now()",
+        "nullable": "NO"
+      },
+      {
+        "type": "uuid",
+        "table": "home_jpy_transactions",
+        "column": "linked_fixed_month_item_id",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "uuid",
+        "table": "home_jpy_transactions",
+        "column": "linked_cny_transaction_id",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "home_jpy_transactions",
+        "column": "external_source",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "uuid",
+        "table": "home_jpy_transactions",
+        "column": "external_source_id",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "home_jpy_transactions",
+        "column": "external_event_type",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "home_jpy_transactions",
+        "column": "external_idempotency_key",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "home_jpy_transactions",
+        "column": "external_reference_type",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "uuid",
+        "table": "home_jpy_transactions",
+        "column": "external_reference_id",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "home_jpy_transactions",
+        "column": "external_note",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "home_jpy_transactions",
+        "column": "external_payload_hash",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "timestamp with time zone",
+        "table": "home_jpy_transactions",
+        "column": "external_created_at",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "boolean",
+        "table": "home_jpy_transactions",
+        "column": "created_by_external",
+        "default": "false",
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "home_jpy_transactions",
+        "column": "accounting_scope",
+        "default": "'household'::text",
+        "nullable": "NO"
+      }
+    ],
+    "policies": [
+      {
+        "cmd": "ALL",
+        "qual": "(user_id = auth.uid())",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "home_accounts",
+        "permissive": "PERMISSIVE",
+        "policyname": "home_accounts_user_all",
+        "schemaname": "public",
+        "with_check": "(user_id = auth.uid())"
+      },
+      {
+        "cmd": "ALL",
+        "qual": "(auth.uid() = user_id)",
+        "roles": [
+          "public"
+        ],
+        "tablename": "home_fixed_advance_payments",
+        "permissive": "PERMISSIVE",
+        "policyname": "home_fixed_advance_payments_user_all",
+        "schemaname": "public",
+        "with_check": "(auth.uid() = user_id)"
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "((user_id = auth.uid()) AND home_is_fixed_item_visible_to_business_reader(id))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "home_fixed_month_items",
+        "permissive": "PERMISSIVE",
+        "policyname": "home_fixed_month_items_user_select",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "home_fixed_month_items",
+        "permissive": "PERMISSIVE",
+        "policyname": "home_fixed_month_items_user_insert",
+        "schemaname": "public",
+        "with_check": "(user_id = auth.uid())"
+      },
+      {
+        "cmd": "UPDATE",
+        "qual": "(user_id = auth.uid())",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "home_fixed_month_items",
+        "permissive": "PERMISSIVE",
+        "policyname": "home_fixed_month_items_user_update",
+        "schemaname": "public",
+        "with_check": "(user_id = auth.uid())"
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "(user_id = auth.uid())",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "home_jpy_transactions",
+        "permissive": "PERMISSIVE",
+        "policyname": "home_jpy_transactions_owner_select",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "home_jpy_transactions",
+        "permissive": "PERMISSIVE",
+        "policyname": "home_jpy_transactions_manual_insert",
+        "schemaname": "public",
+        "with_check": "((user_id = auth.uid()) AND (created_by_external IS NOT TRUE) AND (NULLIF(btrim(external_source), ''::text) IS NULL) AND (external_source_id IS NULL) AND (NULLIF(btrim(external_event_type), ''::text) IS NULL) AND (NULLIF(btrim(external_idempotency_key), ''::text) IS NULL) AND (NULLIF(btrim(external_reference_type), ''::text) IS NULL) AND (external_reference_id IS NULL) AND (NULLIF(btrim(external_note), ''::text) IS NULL) AND (NULLIF(btrim(external_payload_hash), ''::text) IS NULL) AND (external_created_at IS NULL))"
+      },
+      {
+        "cmd": "UPDATE",
+        "qual": "((user_id = auth.uid()) AND (created_by_external IS NOT TRUE) AND (NULLIF(btrim(external_source), ''::text) IS NULL) AND (external_source_id IS NULL) AND (NULLIF(btrim(external_event_type), ''::text) IS NULL) AND (NULLIF(btrim(external_idempotency_key), ''::text) IS NULL) AND (NULLIF(btrim(external_reference_type), ''::text) IS NULL) AND (external_reference_id IS NULL) AND (NULLIF(btrim(external_note), ''::text) IS NULL) AND (NULLIF(btrim(external_payload_hash), ''::text) IS NULL) AND (external_created_at IS NULL))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "home_jpy_transactions",
+        "permissive": "PERMISSIVE",
+        "policyname": "home_jpy_transactions_manual_update",
+        "schemaname": "public",
+        "with_check": "((user_id = auth.uid()) AND (created_by_external IS NOT TRUE) AND (NULLIF(btrim(external_source), ''::text) IS NULL) AND (external_source_id IS NULL) AND (NULLIF(btrim(external_event_type), ''::text) IS NULL) AND (NULLIF(btrim(external_idempotency_key), ''::text) IS NULL) AND (NULLIF(btrim(external_reference_type), ''::text) IS NULL) AND (external_reference_id IS NULL) AND (NULLIF(btrim(external_note), ''::text) IS NULL) AND (NULLIF(btrim(external_payload_hash), ''::text) IS NULL) AND (external_created_at IS NULL))"
+      },
+      {
+        "cmd": "DELETE",
+        "qual": "((user_id = auth.uid()) AND (created_by_external IS NOT TRUE) AND (NULLIF(btrim(external_source), ''::text) IS NULL) AND (external_source_id IS NULL) AND (NULLIF(btrim(external_event_type), ''::text) IS NULL) AND (NULLIF(btrim(external_idempotency_key), ''::text) IS NULL) AND (NULLIF(btrim(external_reference_type), ''::text) IS NULL) AND (external_reference_id IS NULL) AND (NULLIF(btrim(external_note), ''::text) IS NULL) AND (NULLIF(btrim(external_payload_hash), ''::text) IS NULL) AND (external_created_at IS NULL))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "home_jpy_transactions",
+        "permissive": "PERMISSIVE",
+        "policyname": "home_jpy_transactions_manual_delete",
+        "schemaname": "public",
+        "with_check": null
+      }
+    ],
+    "fingerprints": {
+      "advances": {
+        "md5": "6f81f2f45cc2865a4ebb5379facb72b0",
+        "count": 3
+      },
+      "fixed_items": {
+        "md5": "e0e2e195321ddbf9f7604ba262709c5e",
+        "count": 92
+      },
+      "transactions": {
+        "md5": "d72e45b2d2882bb0d52e0c7ede09cbf1",
+        "count": 10
+      }
+    },
+    "other_triggers": [
+      {
+        "name": "home_jpy_external_transaction_immutable",
+        "table": "home_jpy_transactions",
+        "enabled": "O",
+        "function": "CREATE OR REPLACE FUNCTION public.home_guard_external_transaction_immutable()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nbegin\n  if old.created_by_external is true\n     or nullif(btrim(old.external_source), '') is not null\n     or old.external_source_id is not null\n     or nullif(btrim(old.external_event_type), '') is not null\n     or nullif(btrim(old.external_idempotency_key), '') is not null\n     or nullif(btrim(old.external_reference_type), '') is not null\n     or old.external_reference_id is not null\n     or nullif(btrim(old.external_note), '') is not null\n     or nullif(btrim(old.external_payload_hash), '') is not null\n     or old.external_created_at is not null then\n    raise exception using\n      errcode = 'P0001',\n      message = 'EXTERNAL_TRANSACTION_IMMUTABLE',\n      detail = format('%s %s is owned by an external-system ledger link', tg_table_name, old.id);\n  end if;\n\n  if tg_op = 'DELETE' then\n    return old;\n  end if;\n  return new;\nend;\n$function$\n",
+        "definition": "CREATE TRIGGER home_jpy_external_transaction_immutable BEFORE DELETE OR UPDATE ON public.home_jpy_transactions FOR EACH ROW EXECUTE FUNCTION home_guard_external_transaction_immutable()"
+      },
+      {
+        "name": "home_jpy_transactions_assign_accounting_scope",
+        "table": "home_jpy_transactions",
+        "enabled": "O",
+        "function": "CREATE OR REPLACE FUNCTION public.home_assign_accounting_scope()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE v_scope text;\nBEGIN\n  IF TG_TABLE_NAME='home_external_transaction_requests' THEN\n    IF NEW.external_source='aozora_school' THEN NEW.accounting_scope:='school'; END IF;\n  ELSIF TG_TABLE_NAME='home_jpy_transactions' THEN\n    IF NEW.external_source='aozora_school' OR coalesce(NEW.created_by_external,false) THEN NEW.accounting_scope:='school';\n    ELSIF NEW.linked_fixed_month_item_id IS NOT NULL THEN\n      SELECT i.accounting_scope INTO v_scope FROM public.home_fixed_month_items i WHERE i.id=NEW.linked_fixed_month_item_id AND i.user_id=NEW.user_id;\n      NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n    ELSIF NEW.linked_cny_transaction_id IS NOT NULL THEN\n      SELECT c.accounting_scope INTO v_scope FROM public.home_cny_transactions c WHERE c.id=NEW.linked_cny_transaction_id AND c.user_id=NEW.user_id;\n      NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n    END IF;\n  ELSIF TG_TABLE_NAME='home_cny_transactions' THEN\n    IF NEW.external_source='aozora_school' OR coalesce(NEW.created_by_external,false) THEN NEW.accounting_scope:='school';\n    ELSIF NEW.linked_fixed_month_item_id IS NOT NULL THEN\n      SELECT i.accounting_scope INTO v_scope FROM public.home_fixed_month_items i WHERE i.id=NEW.linked_fixed_month_item_id AND i.user_id=NEW.user_id;\n      NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n    ELSIF NEW.linked_jpy_transaction_id IS NOT NULL THEN\n      SELECT j.accounting_scope INTO v_scope FROM public.home_jpy_transactions j WHERE j.id=NEW.linked_jpy_transaction_id AND j.user_id=NEW.user_id;\n      NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n    END IF;\n  ELSIF TG_TABLE_NAME='home_fixed_month_items' AND NEW.template_id IS NOT NULL THEN\n    SELECT t.accounting_scope INTO v_scope FROM public.home_fixed_templates t WHERE t.id=NEW.template_id AND t.user_id=NEW.user_id;\n    NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n  END IF;\n  NEW.accounting_scope:=coalesce(NEW.accounting_scope,'household');\n  RETURN NEW;\nEND\n$function$\n",
+        "definition": "CREATE TRIGGER home_jpy_transactions_assign_accounting_scope BEFORE INSERT ON public.home_jpy_transactions FOR EACH ROW EXECUTE FUNCTION home_assign_accounting_scope()"
+      }
+    ]
+  },
+  "visibility": {
+    "query": "select jsonb_build_object(\n'functions',(select jsonb_agg(jsonb_build_object('oid',p.oid,'name',p.proname,'security_definer',p.prosecdef,'owner',pg_get_userbyid(p.proowner),'definition',pg_get_functiondef(p.oid))) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='home_is_fixed_item_visible_to_business_reader'),\n'own_fixed_items_hidden_by_policy',(select count(*) from public.home_fixed_month_items i where i.user_id='8596a708-d99f-4264-8f8c-5b89af9254b6' and not public.home_is_fixed_item_visible_to_business_reader(i.id))\n);",
+    "result": "{\"functions\": [{\"oid\": \"24061\", \"name\": \"home_is_fixed_item_visible_to_business_reader\", \"owner\": \"postgres\", \"definition\": \"CREATE OR REPLACE FUNCTION public.home_is_fixed_item_visible_to_business_reader(p_item_id uuid)\\n RETURNS boolean\\n LANGUAGE sql\\n STABLE SECURITY DEFINER\\n SET search_path TO 'pg_catalog', 'public'\\nAS $function$\\n  select not exists (\\n    select 1 from public.home_external_transaction_corrections c\\n    where c.replacement_fixed_item_id=p_item_id and c.status<>'completed'\\n  );\\n$function$\\n\", \"security_definer\": true}], \"own_fixed_items_hidden_by_policy\": 0}\n"
+  },
+  "preflight": {
+    "file": "/Users/polariss710/Documents/home_account_book/supabase-test-20260914-c-rev8-preflight.sql",
+    "start_utc": "2026-09-14T11:55:35.093541+00:00",
+    "end_utc": "2026-09-14T11:55:36.016531+00:00",
+    "exit_code": 0,
+    "output": "BEGIN\nSET\nSET\nDO\nCREATE FUNCTION\nALTER FUNCTION\nREVOKE\nGRANT\nCREATE FUNCTION\nALTER FUNCTION\nREVOKE\nGRANT\nCREATE FUNCTION\nALTER FUNCTION\nREVOKE\nCREATE TRIGGER\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nALTER FUNCTION\nREVOKE\nGRANT\nINSERT 0 2\n              set_config              \n--------------------------------------\n cd091400-0000-4000-8000-000000000001\n(1 row)\n\n  set_config   \n---------------\n authenticated\n(1 row)\n\nINSERT 0 1\nINSERT 0 1\nSET\nDO\nRESET\nROLLBACK\n\npsql:/Users/polariss710/Documents/home_account_book/supabase-test-20260914-c-rev8-body.sql:130: NOTICE:  C_REV8_C01_C30_PASS\n"
+  },
+  "after_preflight": {
+    "baseline_restored": true,
+    "fingerprints_equal": true,
+    "fingerprints": {
+      "advances": {
+        "md5": "6f81f2f45cc2865a4ebb5379facb72b0",
+        "count": 3
+      },
+      "fixed_items": {
+        "md5": "e0e2e195321ddbf9f7604ba262709c5e",
+        "count": 92
+      },
+      "transactions": {
+        "md5": "d72e45b2d2882bb0d52e0c7ede09cbf1",
+        "count": 10
+      }
+    },
+    "test_users_remaining": "0"
+  },
+  "deploy": {
+    "file": "/Users/polariss710/Documents/home_account_book/supabase-update-20260914-c-rev8-deploy.sql",
+    "start_utc": "2026-09-14T11:56:46.189132+00:00",
+    "end_utc": "2026-09-14T11:56:46.708097+00:00",
+    "exit_code": 0,
+    "output": "BEGIN\nSET\nSET\nDO\nCREATE FUNCTION\nALTER FUNCTION\nREVOKE\nGRANT\nCREATE FUNCTION\nALTER FUNCTION\nREVOKE\nGRANT\nCREATE FUNCTION\nALTER FUNCTION\nREVOKE\nCREATE TRIGGER\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nCREATE FUNCTION\nALTER FUNCTION\nREVOKE\nGRANT\nCOMMIT\n\n"
+  },
+  "postdeploy_test": {
+    "file": "/Users/polariss710/Documents/home_account_book/supabase-test-20260914-c-rev8-postdeploy.sql",
+    "start_utc": "2026-09-14T11:57:00.293320+00:00",
+    "end_utc": "2026-09-14T11:57:00.638996+00:00",
+    "exit_code": 0,
+    "output": "BEGIN\nSET\nSET\nINSERT 0 2\n              set_config              \n--------------------------------------\n cd091400-0000-4000-8000-000000000001\n(1 row)\n\n  set_config   \n---------------\n authenticated\n(1 row)\n\nINSERT 0 1\nINSERT 0 1\nSET\nDO\nRESET\nROLLBACK\n\npsql:/Users/polariss710/Documents/home_account_book/supabase-test-20260914-c-rev8-body.sql:130: NOTICE:  C_REV8_C01_C30_PASS\n"
+  },
+  "reader_deploy": {
+    "file": "/Users/polariss710/Documents/home_account_book/supabase-update-20260914-c-rev8-reader.sql",
+    "start_utc": "2026-09-14T11:57:31.807520+00:00",
+    "end_utc": "2026-09-14T11:57:31.981577+00:00",
+    "exit_code": 0,
+    "output": "BEGIN\nSET\nCREATE FUNCTION\nALTER FUNCTION\nREVOKE\nGRANT\nCOMMIT\n\n"
+  },
+  "reader_check": {
+    "query": "set local role authenticated;\nselect set_config('request.jwt.claim.sub','8596a708-d99f-4264-8f8c-5b89af9254b6',true);\nselect jsonb_build_object(\n'reader_count',(select count(*) from public.home_list_pending_fixed_advances()),\n'expected_count',(select count(*) from public.home_fixed_advance_payments where user_id=auth.uid() and status='pending'),\n'reader_set_matches',not exists(\n(select id from public.home_fixed_advance_payments where user_id=auth.uid() and status='pending' except select advance_id from public.home_list_pending_fixed_advances())\nunion all\n(select advance_id from public.home_list_pending_fixed_advances() except select id from public.home_fixed_advance_payments where user_id=auth.uid() and status='pending')\n));\nreset role;\nselect jsonb_build_object('test_users_remaining',(select count(*) from auth.users where id in ('cd091400-0000-4000-8000-000000000001','cd091400-0000-4000-8000-000000000002')));",
+    "result": "8596a708-d99f-4264-8f8c-5b89af9254b6\n{\"reader_count\": 1, \"expected_count\": 1, \"reader_set_matches\": true}\n{\"test_users_remaining\": 0}\n"
+  },
+  "production_final": {
+    "functions": [
+      {
+        "oid": "18474",
+        "name": "home_generate_fixed_month",
+        "signature": "p_month_key text, p_currency text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": null,
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "a14039d661e8533e795c91faeb93597b",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_generate_fixed_month(p_month_key text, p_currency text DEFAULT 'JPY'::text)\n RETURNS jsonb\n LANGUAGE sql\nAS $function$\nwith eligible_templates as (\n  select\n    t.*,\n    case\n      when t.due_day is null then null\n      else (\n        to_date(p_month_key || '-01', 'YYYY-MM-DD')\n        + (least(t.due_day, extract(day from (to_date(p_month_key || '-01', 'YYYY-MM-DD') + interval '1 month - 1 day'))::integer) - 1) * interval '1 day'\n      )::date\n    end as generated_due_date,\n    case\n      when t.fixed_type = 'short_term' and t.start_month is not null then\n        ((extract(year from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer)\n        - (extract(year from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer)\n        + 1)\n      else null\n    end as generated_term_no\n  from home_fixed_templates t\n  where t.user_id = auth.uid()\n    and t.currency = p_currency\n    and t.is_active\n    and (t.start_month is null or t.start_month <= p_month_key)\n    and (t.end_month is null or t.end_month >= p_month_key)\n    and (\n      t.fixed_type = 'long_term'\n      or t.total_terms is null\n      or t.start_month is null\n      or (\n        ((extract(year from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(p_month_key || '-01', 'YYYY-MM-DD'))::integer)\n        - (extract(year from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer * 12 + extract(month from to_date(t.start_month || '-01', 'YYYY-MM-DD'))::integer)\n        + 1) between 1 and t.total_terms\n      )\n    )\n),\nexisting_items as (\n  select i.template_id\n  from eligible_templates t\n  join home_fixed_month_items i\n    on i.user_id = auth.uid()\n   and i.month_key = p_month_key\n   and i.currency = p_currency\n   and i.template_id = t.id\n),\ninserted_items as (\n  insert into home_fixed_month_items (\n    user_id,\n    template_id,\n    month_key,\n    currency,\n    direction,\n    name,\n    amount,\n    status,\n    account_id,\n    payment_group,\n    due_date,\n    term_no,\n    total_terms,\n    note\n  )\n  select\n    t.user_id,\n    t.id,\n    p_month_key,\n    t.currency,\n    t.direction,\n    t.name,\n    t.default_amount,\n    'unpaid',\n    t.default_account_id,\n    t.payment_group,\n    t.generated_due_date,\n    t.generated_term_no,\n    t.total_terms,\n    ''\n  from eligible_templates t\n  where not exists (\n    select 1\n    from existing_items i\n    where i.template_id = t.id\n  )\n  on conflict do nothing\n  returning id, template_id\n)\nselect jsonb_build_object(\n  'eligible_count', (select count(*) from eligible_templates),\n  'existing_count', (select count(*) from existing_items),\n  'inserted_count', (select count(*) from inserted_items),\n  'all_generated', (\n    (select count(*) from eligible_templates) > 0\n    and (select count(*) from eligible_templates) = (select count(*) from existing_items)\n  ),\n  'eligible_templates', coalesce((\n    select jsonb_agg(jsonb_build_object('id', id, 'name', name) order by sort_order, created_at, name)\n    from eligible_templates\n  ), '[]'::jsonb),\n  'existing_template_ids', coalesce((\n    select jsonb_agg(template_id)\n    from existing_items\n  ), '[]'::jsonb),\n  'inserted_template_ids', coalesce((\n    select jsonb_agg(template_id)\n    from inserted_items\n  ), '[]'::jsonb)\n);\n$function$\n"
+      },
+      {
+        "oid": "18581",
+        "name": "home_sync_fixed_month_items",
+        "signature": "p_month_key text, p_currency text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "76fab71f6ac577c33c732dd9e6603980",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_sync_fixed_month_items(p_month_key text, p_currency text DEFAULT 'JPY'::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare v_updated_count integer:=0;\nbegin\n  perform pg_advisory_xact_lock(hashtextextended(format('home_fixed_surplus:%s:%s:%s',auth.uid(),p_month_key,p_currency),0));\n  if public.home_fixed_scope_has_external_projection(p_month_key,p_currency) then return jsonb_build_object('ok',false,'code','HOME_PROJECTION_FIXED_ITEM_SYNC_FORBIDDEN','message','范围内包含School信用卡projection固定项，不能使用普通月份/模板同步writer。'); end if;\n  if public.home_fixed_scope_has_card_statement(p_month_key,p_currency) then return jsonb_build_object('ok',false,'code','HOME_CARD_STATEMENT_ITEM_SYNC_FORBIDDEN','message','范围内包含信用卡statement关联固定项，不能使用普通月份/模板同步writer。'); end if;\n  with month_context as(select extract(year from month_start)::int year_no,extract(month from month_start)::int month_no,extract(day from(month_start+interval '1 month - 1 day'))::int days_in_month from(select to_date(p_month_key||'-01','YYYY-MM-DD') month_start)d),\n  updated_items as(update public.home_fixed_month_items i set direction=t.direction,name=t.name,amount=t.default_amount,account_id=t.default_account_id,payment_group=t.payment_group,due_date=case when t.due_day is null then null else make_date(c.year_no,c.month_no,least(t.due_day,c.days_in_month)) end,term_no=case when t.fixed_type='short_term' and t.start_month is not null and t.total_terms is not null then((substring(p_month_key,1,4)::int-substring(t.start_month,1,4)::int)*12+(substring(p_month_key,6,2)::int-substring(t.start_month,6,2)::int)+1) else null end,total_terms=case when t.fixed_type='short_term' then t.total_terms else null end from public.home_fixed_templates t cross join month_context c where i.template_id=t.id and i.user_id=auth.uid() and t.user_id=auth.uid() and i.month_key=p_month_key and i.currency=p_currency and t.currency=p_currency returning i.id)\n  select count(*) into v_updated_count from updated_items;\n  return jsonb_build_object('updated_count',v_updated_count);\nend;\n$function$\n"
+      },
+      {
+        "oid": "19683",
+        "name": "home_assign_accounting_scope",
+        "signature": "",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "b7d924f323d84e68c414d799439995cf",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_assign_accounting_scope()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE v_scope text;\nBEGIN\n  IF TG_TABLE_NAME='home_external_transaction_requests' THEN\n    IF NEW.external_source='aozora_school' THEN NEW.accounting_scope:='school'; END IF;\n  ELSIF TG_TABLE_NAME='home_jpy_transactions' THEN\n    IF NEW.external_source='aozora_school' OR coalesce(NEW.created_by_external,false) THEN NEW.accounting_scope:='school';\n    ELSIF NEW.linked_fixed_month_item_id IS NOT NULL THEN\n      SELECT i.accounting_scope INTO v_scope FROM public.home_fixed_month_items i WHERE i.id=NEW.linked_fixed_month_item_id AND i.user_id=NEW.user_id;\n      NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n    ELSIF NEW.linked_cny_transaction_id IS NOT NULL THEN\n      SELECT c.accounting_scope INTO v_scope FROM public.home_cny_transactions c WHERE c.id=NEW.linked_cny_transaction_id AND c.user_id=NEW.user_id;\n      NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n    END IF;\n  ELSIF TG_TABLE_NAME='home_cny_transactions' THEN\n    IF NEW.external_source='aozora_school' OR coalesce(NEW.created_by_external,false) THEN NEW.accounting_scope:='school';\n    ELSIF NEW.linked_fixed_month_item_id IS NOT NULL THEN\n      SELECT i.accounting_scope INTO v_scope FROM public.home_fixed_month_items i WHERE i.id=NEW.linked_fixed_month_item_id AND i.user_id=NEW.user_id;\n      NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n    ELSIF NEW.linked_jpy_transaction_id IS NOT NULL THEN\n      SELECT j.accounting_scope INTO v_scope FROM public.home_jpy_transactions j WHERE j.id=NEW.linked_jpy_transaction_id AND j.user_id=NEW.user_id;\n      NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n    END IF;\n  ELSIF TG_TABLE_NAME='home_fixed_month_items' AND NEW.template_id IS NOT NULL THEN\n    SELECT t.accounting_scope INTO v_scope FROM public.home_fixed_templates t WHERE t.id=NEW.template_id AND t.user_id=NEW.user_id;\n    NEW.accounting_scope:=coalesce(v_scope,NEW.accounting_scope,'household');\n  END IF;\n  NEW.accounting_scope:=coalesce(NEW.accounting_scope,'household');\n  RETURN NEW;\nEND\n$function$\n"
+      },
+      {
+        "oid": "18617",
+        "name": "home_create_fixed_transfer",
+        "signature": "p_month_key text, p_currency text, p_transaction_type text, p_account_id uuid, p_transacted_at date, p_amount numeric, p_note text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": null,
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "c7a9795c1d18f68569485796826ba615",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_create_fixed_transfer(p_month_key text, p_currency text, p_transaction_type text, p_account_id uuid, p_transacted_at date, p_amount numeric DEFAULT NULL::numeric, p_note text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\nAS $function$\ndeclare\n  v_description text;\n  v_direction text;\n  v_payment_group text;\n  v_jpy_transaction_id uuid := gen_random_uuid();\n  v_fixed_item_id uuid := gen_random_uuid();\n  v_status jsonb;\n  v_amount numeric := 0;\nbegin\n  perform pg_advisory_xact_lock(hashtextextended(format('home_fixed_surplus:%s:%s:%s',auth.uid(),p_month_key,p_currency),0));\n  if p_transaction_type not in ('fixed_in', 'fixed_out') then\n    return jsonb_build_object('ok', false, 'message', '固定资金调拨类型无效。');\n  end if;\n\n  if not exists (\n    select 1\n    from home_accounts\n    where id = p_account_id\n      and user_id = auth.uid()\n      and currency = p_currency\n      and is_active\n  ) then\n    return jsonb_build_object('ok', false, 'message', '没有找到可使用的日元账户。');\n  end if;\n\n  if to_char(p_transacted_at, 'YYYY-MM') <> p_month_key then\n    return jsonb_build_object('ok', false, 'message', '固定资金调拨日期必须在当前账期内。');\n  end if;\n\n  v_status := home_fixed_settlement_status(p_month_key, p_currency);\n  if p_transaction_type is distinct from (v_status->>'funding_transaction_type') then\n    return jsonb_build_object('ok',false,'code','HOME_FIXED_TRANSFER_DIRECTION_STALE','message','资金调拨方向已变化，请刷新页面。');\n  end if;\n  v_amount:=case when p_transaction_type='fixed_out' then (v_status->>'funding_transfer_amount')::numeric\n    else (v_status->>'transferable_transfer_amount')::numeric end;\n\n  if p_transaction_type = 'fixed_out' and coalesce(v_status ->> 'funding_state', '') <> 'deficit' then\n    return jsonb_build_object('ok', false, 'message', '本月结算没有赤字，不需要补充。');\n  end if;\n\n  if p_transaction_type = 'fixed_in' and ((v_status->>'funding_required')::numeric>0 or (v_status->>'transferable_surplus')::numeric<1000) then\n    return jsonb_build_object('ok', false, 'message', '本月结算没有盈余，不能转入。');\n  end if;\n\n  if v_amount <= 0 then\n    return jsonb_build_object('ok', false, 'message', '本月固定收支结算已平衡，不需要调拨。');\n  end if;\n\n  v_description := home_fixed_transfer_name(p_transaction_type);\n  v_direction := home_fixed_transfer_direction(p_transaction_type);\n  v_payment_group := case when p_transaction_type = 'fixed_in' then v_description else null end;\n\n  if exists (\n    select 1\n    from home_fixed_month_items\n    where user_id = auth.uid()\n      and month_key = p_month_key\n      and currency = p_currency\n      and direction = v_direction\n      and name = v_description\n  ) then\n    return jsonb_build_object('ok', false, 'message', format('本月已存在%s，请先删除后重新生成。', v_description));\n  end if;\n\n  insert into home_jpy_transactions (\n    id,\n    user_id,\n    transaction_type,\n    account_id,\n    transfer_account_id,\n    currency,\n    transacted_at,\n    amount,\n    description,\n    note,\n    created_at\n  )\n  values (\n    v_jpy_transaction_id,\n    auth.uid(),\n    p_transaction_type,\n    p_account_id,\n    null,\n    p_currency,\n    p_transacted_at,\n    v_amount,\n    v_description,\n    coalesce(p_note, ''),\n    now()\n  );\n\n  insert into home_fixed_month_items (\n    id,\n    user_id,\n    template_id,\n    month_key,\n    currency,\n    direction,\n    name,\n    amount,\n    status,\n    account_id,\n    payment_group,\n    due_date,\n    term_no,\n    total_terms,\n    note,\n    linked_jpy_transaction_id,\n    created_at\n  )\n  values (\n    v_fixed_item_id,\n    auth.uid(),\n    null,\n    p_month_key,\n    p_currency,\n    v_direction,\n    v_description,\n    v_amount,\n    'paid',\n    p_account_id,\n    v_payment_group,\n    p_transacted_at,\n    null,\n    null,\n    coalesce(p_note, ''),\n    v_jpy_transaction_id,\n    now()\n  );\n\n  update home_jpy_transactions\n  set linked_fixed_month_item_id = v_fixed_item_id\n  where id = v_jpy_transaction_id\n    and user_id = auth.uid();\n\n  return jsonb_build_object(\n    'ok', true,\n    'message', format('%s已生成，金额 %s。', v_description, v_amount),\n    'amount', v_amount,\n    'fixed_item_id', v_fixed_item_id,\n    'jpy_transaction_id', v_jpy_transaction_id\n  );\nend;\n$function$\n"
+      },
+      {
+        "oid": "18631",
+        "name": "home_fixed_settlement_status",
+        "signature": "p_month_key text, p_currency text",
+        "prosecdef": false,
+        "provolatile": "s",
+        "proconfig": null,
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "e23be82d425b8fc6b5ee85cefff19305",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_fixed_settlement_status(p_month_key text, p_currency text DEFAULT 'JPY'::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE\nAS $function$\ndeclare\n  v_planned_income numeric := 0;\n  v_planned_expense numeric := 0;\n  v_actual_income numeric := 0;\n  v_actual_expense numeric := 0;\n  v_balance numeric := 0;\n  v_advance_amount_in_month numeric; v_repaid_amount_in_month numeric;\n  v_funding numeric; v_surplus numeric;\nbegin\n  with month_items as (\n    select\n      i.*,\n      case\n        when i.linked_jpy_transaction_id is not null then 'paid'\n        else i.status\n      end as effective_status\n    from home_fixed_month_items i\n    where i.user_id = auth.uid()\n      and i.month_key = p_month_key\n      and i.currency = p_currency\n  ),\n  planned_expense_groups as (\n    select\n      coalesce(payment_group, '未分组') as payment_group,\n      home_round_up_1000(coalesce(sum(amount), 0)) as planned_amount\n    from month_items\n    where direction = 'expense'\n    group by coalesce(payment_group, '未分组')\n  ),\n  paid_expense_groups as (\n    select\n      coalesce(payment_group, '未分组') as payment_group,\n      home_round_up_1000(coalesce(sum(amount), 0)) as paid_amount\n    from month_items\n    where direction = 'expense'\n      and effective_status in ('paid', 'settled')\n    group by coalesce(payment_group, '未分组')\n  )\n  select\n    coalesce(sum(amount) filter (where direction = 'income'), 0),\n    coalesce((select sum(planned_amount) from planned_expense_groups), 0),\n    coalesce(sum(amount) filter (where direction = 'income' and effective_status in ('paid', 'settled')), 0),\n    coalesce((select sum(paid_amount) from paid_expense_groups), 0)\n  into v_planned_income, v_planned_expense, v_actual_income, v_actual_expense\n  from month_items;\n\n  select coalesce(sum(a.amount) filter(where to_char(a.paid_at,'YYYY-MM')=p_month_key),0),\n    coalesce(sum(a.amount) filter(where a.status='repaid' and to_char(a.repaid_at,'YYYY-MM')=p_month_key),0)\n  into v_advance_amount_in_month,v_repaid_amount_in_month\n  from public.home_fixed_advance_payments a where a.user_id=auth.uid() and a.currency=p_currency;\n  v_balance := v_planned_income - v_planned_expense;\n  v_funding:= -v_balance-v_advance_amount_in_month+v_repaid_amount_in_month;\n  v_surplus:=public.home_fixed_transferable_surplus(auth.uid(),p_month_key,p_currency);\n\n  return jsonb_build_object(\n    'advance_amount_in_month',v_advance_amount_in_month,\n    'repaid_amount_in_month',v_repaid_amount_in_month,\n    'funding_required',v_funding,\n    'funding_state',case when v_funding>0 then 'deficit' when v_funding<0 then 'surplus' else 'balanced' end,\n    'funding_transfer_amount',case when v_funding>0 then v_funding else 0 end,\n    'transferable_surplus',v_surplus,\n    'transferable_transfer_amount',case when v_surplus>=1000 then floor(v_surplus/1000)*1000 else 0 end,\n    'funding_transaction_type',case when v_funding>0 then 'fixed_out' when v_surplus>=1000 then 'fixed_in' else null end,\n    'planned_income', v_planned_income,\n    'planned_expense', v_planned_expense,\n    'actual_income', v_actual_income,\n    'actual_expense', v_actual_expense,\n    'balance', v_balance,\n    'state', case\n      when v_balance < 0 then 'deficit'\n      when v_balance > 0 then 'surplus'\n      else 'balanced'\n    end,\n    'transaction_type', case\n      when v_balance < 0 then 'fixed_out'\n      when v_balance > 0 then 'fixed_in'\n      else null\n    end,\n    'transfer_amount', abs(v_balance),\n    'message', case\n      when v_balance < 0 then format('结算赤字 %s。', abs(v_balance))\n      when v_balance > 0 then format('结算盈余 %s。', v_balance)\n      else '本月固定收支结算已平衡。'\n    end\n  );\nend;\n$function$\n"
+      },
+      {
+        "oid": "18470",
+        "name": "home_get_fixed_month_page",
+        "signature": "p_month_key text, p_currency text",
+        "prosecdef": false,
+        "provolatile": "s",
+        "proconfig": null,
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "2086dc6ba92c36114bd5175dc8f385f1",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_get_fixed_month_page(p_month_key text, p_currency text DEFAULT 'JPY'::text)\n RETURNS jsonb\n LANGUAGE sql\n STABLE\nAS $function$\nwith advance_records as (\n  select\n    ap.*,\n    a.name as advance_account_name\n  from public.home_fixed_advance_payments ap\n  left join public.home_accounts a on a.id = ap.account_id\n    and a.user_id = auth.uid()\n  where ap.user_id = auth.uid()\n    and ap.month_key = p_month_key\n    and ap.currency = p_currency\n),\nmonth_items as (\n  select\n    i.*,\n    ar.id as advance_id,\n    ar.status as advance_status,\n    ar.account_id as advance_account_id,\n    ar.advance_account_name,\n    ar.amount as advance_amount,\n    ar.paid_at as advance_paid_at,\n    ar.repaid_at as advance_repaid_at\n  from public.home_fixed_month_items i\n  left join advance_records ar on ar.payment_group = coalesce(i.payment_group, '未分组')\n    and i.direction = 'expense'\n  where i.user_id = auth.uid()\n    and i.month_key = p_month_key\n    and i.currency = p_currency\n),\npaid_expense_groups as (\n  select\n    coalesce(payment_group, '未分组') as payment_group,\n    public.home_round_up_1000(coalesce(sum(amount), 0)) as paid_amount\n  from month_items\n  where direction = 'expense'\n    and status in ('paid', 'settled')\n  group by coalesce(payment_group, '未分组')\n),\nplanned_expense_groups as (\n  select\n    coalesce(payment_group, '未分组') as payment_group,\n    public.home_round_up_1000(coalesce(sum(amount), 0)) as planned_amount\n  from month_items\n  where direction = 'expense'\n  group by coalesce(payment_group, '未分组')\n),\nunpaid_expense_groups as (\n  select\n    coalesce(payment_group, '未分组') as payment_group,\n    public.home_round_up_1000(coalesce(sum(amount), 0)) as unpaid_amount\n  from month_items\n  where direction = 'expense'\n    and status = 'unpaid'\n  group by coalesce(payment_group, '未分组')\n),\nmetrics as (\n  select\n    coalesce(sum(amount) filter (where direction = 'income'), 0) as planned_income,\n    coalesce((select sum(planned_amount) from planned_expense_groups), 0) as planned_expense,\n    coalesce(sum(amount) filter (where direction = 'income' and status in ('paid', 'settled')), 0) as actual_income,\n    coalesce((select sum(paid_amount) from paid_expense_groups), 0) as actual_expense,\n    coalesce(sum(amount) filter (where direction = 'income' and status = 'unpaid'), 0) as unreceived_income,\n    coalesce((select sum(unpaid_amount) from unpaid_expense_groups), 0) as unpaid_expense\n  from month_items\n),\nexpense_groups as (\n  select\n    coalesce(payment_group, '未分组') as payment_group,\n    public.home_round_up_1000(coalesce(sum(amount), 0)) as total,\n    public.home_round_up_1000(coalesce(sum(amount) filter (where status in ('paid', 'settled')), 0)) as paid,\n    public.home_round_up_1000(coalesce(sum(amount) filter (where status = 'unpaid'), 0)) as unpaid\n  from month_items\n  where direction = 'expense'\n  group by coalesce(payment_group, '未分组')\n),\nexpense_sections as (\n  select\n    coalesce(payment_group, '未分组') as payment_group,\n    min(due_date) as first_due_date,\n    public.home_round_up_1000(coalesce(sum(amount), 0)) as total,\n    public.home_round_up_1000(coalesce(sum(amount) filter (where status in ('paid', 'settled')), 0)) as paid,\n    public.home_round_up_1000(coalesce(sum(amount) filter (where status = 'unpaid'), 0)) as unpaid,\n    (array_agg(advance_id) filter (where advance_id is not null))[1] as advance_id,\n    (array_agg(advance_status) filter (where advance_status is not null))[1] as advance_status,\n    (array_agg(advance_account_id) filter (where advance_account_id is not null))[1] as advance_account_id,\n    (array_agg(advance_account_name) filter (where advance_account_name is not null))[1] as advance_account_name,\n    (array_agg(advance_amount) filter (where advance_amount is not null))[1] as advance_amount,\n    (array_agg(advance_paid_at) filter (where advance_paid_at is not null))[1] as advance_paid_at,\n    (array_agg(advance_repaid_at) filter (where advance_repaid_at is not null))[1] as advance_repaid_at,\n    jsonb_agg(\n      (to_jsonb(month_items) - 'accounting_scope')\n        || jsonb_build_object('accounting_scope', month_items.accounting_scope)\n      order by due_date, created_at, name\n    ) as items\n  from month_items\n  where direction = 'expense'\n  group by coalesce(payment_group, '未分组')\n)\nselect jsonb_build_object(\n  'metrics', jsonb_build_object(\n    'income', (select planned_income from metrics),\n    'expense', (select planned_expense from metrics),\n    'balance', (select planned_income - planned_expense from metrics),\n    'planned_income', (select planned_income from metrics),\n    'planned_expense', (select planned_expense from metrics),\n    'planned_balance', (select planned_income - planned_expense from metrics),\n    'actual_income', (select actual_income from metrics),\n    'actual_expense', (select actual_expense from metrics),\n    'actual_balance', (select actual_income - actual_expense from metrics),\n    'unreceived_income', (select unreceived_income from metrics),\n    'unpaid_expense', (select unpaid_expense from metrics)\n  ),\n  'fixed_settlement_status', public.home_fixed_settlement_status(p_month_key, p_currency),\n  'expense_groups', coalesce((\n    select jsonb_agg(to_jsonb(expense_groups) order by payment_group)\n    from expense_groups\n  ), '[]'::jsonb),\n  'income_items', coalesce((\n    select jsonb_agg(\n      (to_jsonb(month_items) - 'accounting_scope')\n        || jsonb_build_object('accounting_scope', month_items.accounting_scope)\n      order by created_at, name\n    )\n    from month_items\n    where direction = 'income'\n  ), '[]'::jsonb),\n  'expense_items', coalesce((\n    select jsonb_agg(\n      (to_jsonb(month_items) - 'accounting_scope')\n        || jsonb_build_object('accounting_scope', month_items.accounting_scope)\n      order by payment_group, due_date, created_at, name\n    )\n    from month_items\n    where direction = 'expense'\n  ), '[]'::jsonb),\n  'expense_sections', coalesce((\n    select jsonb_agg(to_jsonb(expense_sections) order by first_due_date nulls last, payment_group)\n    from expense_sections\n  ), '[]'::jsonb),\n  'templates', coalesce((\n    select jsonb_agg(\n      (to_jsonb(t) - 'accounting_scope')\n        || jsonb_build_object('accounting_scope', t.accounting_scope)\n      order by sort_order, created_at, name\n    )\n    from public.home_fixed_templates t\n    where t.user_id = auth.uid()\n      and t.currency = p_currency\n      and t.is_active\n  ), '[]'::jsonb),\n  'stopped_templates', coalesce((\n    select jsonb_agg(\n      (to_jsonb(t) - 'accounting_scope')\n        || jsonb_build_object('accounting_scope', t.accounting_scope)\n      order by sort_order, created_at, name\n    )\n    from public.home_fixed_templates t\n    where t.user_id = auth.uid()\n      and t.currency = p_currency\n      and not t.is_active\n  ), '[]'::jsonb),\n  'accounts', coalesce((\n    select jsonb_agg(to_jsonb(a) order by sort_order, created_at, name)\n    from public.home_accounts a\n    where a.user_id = auth.uid()\n      and a.currency = p_currency\n      and a.is_active\n  ), '[]'::jsonb),\n  'payment_channels', coalesce((\n    select jsonb_agg(to_jsonb(c) order by sort_order, created_at, name)\n    from public.home_payment_channels c\n    where c.user_id = auth.uid()\n      and c.currency = p_currency\n      and c.is_active\n  ), '[]'::jsonb)\n);\n$function$\n"
+      },
+      {
+        "oid": "18627",
+        "name": "home_reset_plain_fixed_expenses_if_deficit",
+        "signature": "p_month_key text, p_currency text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": null,
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "f828df50947b0306140f8f3ef2e11ce7",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_reset_plain_fixed_expenses_if_deficit(p_month_key text, p_currency text DEFAULT 'JPY'::text)\n RETURNS jsonb\n LANGUAGE plpgsql\nAS $function$\ndeclare\n  v_check jsonb;\n  v_updated_count integer := 0;\nbegin\n  v_check := public.home_check_fixed_paid_balance(p_month_key, p_currency);\n\n  if coalesce((v_check ->> 'ok')::boolean, false) then\n    return jsonb_build_object(\n      'reset_expense_status', false,\n      'reset_count', 0,\n      'message', '删除后固定收支仍满足已付结算条件。'\n    );\n  end if;\n\n  update public.home_fixed_month_items i\n  set status = 'unpaid'\n  where i.user_id = auth.uid()\n    and i.month_key = p_month_key\n    and i.currency = p_currency\n    and i.direction = 'expense'\n    and i.linked_jpy_transaction_id is null\n    and i.status <> 'unpaid'\n    -- Phase 3F：School 投影项不参与赤字重置\n    and not public.home_fixed_item_has_external_projection(i.id)\n    and not exists (\n      select 1\n      from public.home_fixed_advance_payments ap\n      where ap.user_id = auth.uid()\n        and ap.month_key = i.month_key\n        and ap.currency = i.currency\n        and ap.payment_group = coalesce(i.payment_group, '未分组')\n    );\n\n  get diagnostics v_updated_count = row_count;\n\n  return jsonb_build_object(\n    'reset_expense_status', true,\n    'reset_count', v_updated_count,\n    'message', '删除后固定收支重新出现赤字，未进入垫付流程的普通固定支出已改回未付。'\n  );\nend;\n$function$\n"
+      },
+      {
+        "oid": "19212",
+        "name": "home_settle_fixed_advance_repayment",
+        "signature": "p_advance_id uuid, p_repaid_at date, p_note text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": null,
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "f78a57d840a4dd2d206071061f714c25",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_settle_fixed_advance_repayment(p_advance_id uuid, p_repaid_at date, p_note text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\nAS $function$\ndeclare\n  v_advance public.home_fixed_advance_payments%rowtype;\n  v_transaction_id uuid := gen_random_uuid();\n  v_currency text;\nbegin\n  if p_repaid_at is null then return jsonb_build_object('ok',false,'message','请选择补回日期。'); end if;\n  select currency into v_currency from public.home_fixed_advance_payments where id=p_advance_id and user_id=auth.uid();\n  perform pg_advisory_xact_lock(hashtextextended(format('home_fixed_surplus:%s:%s:%s',auth.uid(),to_char(p_repaid_at,'YYYY-MM'),v_currency),0));\n  select *\n  into v_advance\n  from public.home_fixed_advance_payments\n  where id = p_advance_id\n    and user_id = auth.uid() for update;\n\n  if not found then\n    return jsonb_build_object('ok', false, 'message', '没有找到可补回的固定垫付记录。');\n  end if;\n\n  if v_advance.status is distinct from 'pending' then\n    return jsonb_build_object('ok', false, 'message', '这笔固定垫付已经补回。');\n  end if;\n\n  if p_repaid_at < v_advance.paid_at then\n    return jsonb_build_object('ok', false, 'message', '补回日期不得早于垫付日。');\n  end if;\n\n  if v_currency is distinct from v_advance.currency then\n    raise exception using errcode='55000',message='HOME_FIXED_SCOPE_CHANGED';\n  end if;\n  if v_advance.amount>public.home_fixed_transferable_surplus(auth.uid(),to_char(p_repaid_at,'YYYY-MM'),v_advance.currency) then\n    return jsonb_build_object('ok',false,'code','HOME_FIXED_ADVANCE_REPAY_INSUFFICIENT_SURPLUS','message','补回月份的可转出盈余不足。');\n  end if;\n  insert into public.home_jpy_transactions (\n    id,\n    user_id,\n    transaction_type,\n    account_id,\n    transfer_account_id,\n    currency,\n    transacted_at,\n    amount,\n    description,\n    note,\n    created_at\n  )\n  values (\n    v_transaction_id,\n    auth.uid(),\n    'fixed_advance_in',\n    v_advance.account_id,\n    null,\n    v_advance.currency,\n    p_repaid_at,\n    v_advance.amount,\n    format('%s 固定垫付补回', v_advance.payment_group),\n    coalesce(p_note, v_advance.note, ''),\n    now()\n  );\n\n  update public.home_fixed_advance_payments\n  set\n    status = 'repaid',\n    repaid_at = p_repaid_at,\n    in_transaction_id = v_transaction_id\n  where id = v_advance.id\n    and user_id = auth.uid();\n\n  return jsonb_build_object(\n    'ok', true,\n    'message', format('%s 固定垫付已按原金额补回，金额 %s。', v_advance.payment_group, v_advance.amount),\n    'advance_id', v_advance.id,\n    'jpy_transaction_id', v_transaction_id,\n    'amount', v_advance.amount\n  );\nend;\n$function$\n"
+      },
+      {
+        "oid": "21382",
+        "name": "home_guard_projection_linked_fixed_item",
+        "signature": "",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "f25578b211be192e59a4108af76ece8b",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_guard_projection_linked_fixed_item()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nbegin\n  if exists (select 1 from public.home_external_fixed_payment_projections p where p.fixed_month_item_id=old.id) then\n    if tg_op='DELETE' then\n      raise exception using errcode='42501',message='HOME_PROJECTION_FIXED_ITEM_DELETE_FORBIDDEN';\n    end if;\n    -- Phase 3F：仅 home_confirm_projection_fixed_item_status 可改 status\n    if current_setting('home.phase3f_projection_status_write',true) is distinct from 'on'\n       or (to_jsonb(new)-'status') is distinct from (to_jsonb(old)-'status') then\n      raise exception using errcode='42501',message='HOME_PROJECTION_FIXED_ITEM_UPDATE_FORBIDDEN';\n    end if;\n  end if;\n  if exists (select 1 from public.home_card_statement_cycles c where c.household_remainder_fixed_item_id=old.id) then\n    if tg_op='DELETE' then\n      raise exception using errcode='42501',message='HOME_CARD_STATEMENT_ITEM_DELETE_FORBIDDEN';\n    end if;\n    if current_setting('home.phase3e_statement_item_write',true) is distinct from 'on'\n       or (to_jsonb(new)-'amount') is distinct from (to_jsonb(old)-'amount') then\n      raise exception using errcode='42501',message='HOME_CARD_STATEMENT_ITEM_UPDATE_FORBIDDEN';\n    end if;\n  end if;\n  return case when tg_op='DELETE' then old else new end;\nend;\n$function$\n"
+      },
+      {
+        "oid": "19211",
+        "name": "home_create_fixed_advance_payment",
+        "signature": "p_month_key text, p_currency text, p_payment_group text, p_account_id uuid, p_transacted_at date, p_note text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "b5d40b34f45e21149e54017904da9255",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_create_fixed_advance_payment(p_month_key text, p_currency text, p_payment_group text, p_account_id uuid, p_transacted_at date, p_note text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare v_group text:=coalesce(nullif(trim(p_payment_group),''),'未分组'); v_amount numeric:=0;\n  v_transaction_id uuid:=gen_random_uuid(); v_advance_id uuid:=gen_random_uuid(); v_item_count integer:=0;\nbegin\n  if p_currency<>'JPY' then return jsonb_build_object('ok',false,'message','固定垫付目前只支持日元。'); end if;\n  if to_char(p_transacted_at,'YYYY-MM')<>p_month_key then return jsonb_build_object('ok',false,'message','垫付日期必须在当前账期内。'); end if;\n  if not exists(select 1 from public.home_accounts where id=p_account_id and user_id=auth.uid() and currency=p_currency and is_active) then return jsonb_build_object('ok',false,'message','没有找到可使用的日元垫付账户。'); end if;\n  if public.home_fixed_advance_group_has_card_statement(p_month_key,p_currency,v_group) then\n    return jsonb_build_object('ok',false,'code','HOME_CARD_STATEMENT_GROUP_ADVANCE_FORBIDDEN','message','该支付分组包含信用卡statement关联固定项，Phase 3F前不能垫付。');\n  end if;\n  if public.home_fixed_scope_has_external_projection(p_month_key,p_currency,'expense',v_group) then\n    return jsonb_build_object('ok',false,'code','HOME_PROJECTION_FIXED_ITEM_ADVANCE_FORBIDDEN','message','该支付分组包含School信用卡projection固定项，Phase 3F前不能垫付。');\n  end if;\n  if exists(select 1 from public.home_fixed_advance_payments where user_id=auth.uid() and month_key=p_month_key and currency=p_currency and payment_group=v_group) then return jsonb_build_object('ok',false,'message','本账期该支付分组已经生成过垫付记录。'); end if;\n  select count(*),public.home_round_up_1000(coalesce(sum(amount),0)) into v_item_count,v_amount from public.home_fixed_month_items where user_id=auth.uid() and month_key=p_month_key and currency=p_currency and direction='expense' and linked_jpy_transaction_id is null and coalesce(payment_group,'未分组')=v_group;\n  if v_item_count<=0 or v_amount<=0 then return jsonb_build_object('ok',false,'message','该支付分组没有可垫付的固定支出。'); end if;\n  insert into public.home_jpy_transactions(id,user_id,transaction_type,account_id,transfer_account_id,currency,transacted_at,amount,description,note,created_at)\n  values(v_transaction_id,auth.uid(),'fixed_advance_out',p_account_id,null,p_currency,p_transacted_at,v_amount,format('%s 固定支出垫付',v_group),coalesce(p_note,''),now());\n  insert into public.home_fixed_advance_payments(id,user_id,month_key,currency,payment_group,account_id,amount,status,paid_at,out_transaction_id,note,created_at)\n  values(v_advance_id,auth.uid(),p_month_key,p_currency,v_group,p_account_id,v_amount,'pending',p_transacted_at,v_transaction_id,coalesce(p_note,''),now());\n  update public.home_fixed_month_items set status='paid' where user_id=auth.uid() and month_key=p_month_key and currency=p_currency and direction='expense' and linked_jpy_transaction_id is null and coalesce(payment_group,'未分组')=v_group;\n  return jsonb_build_object('ok',true,'message',format('%s 固定支出已垫付，金额 %s。',v_group,v_amount),'advance_id',v_advance_id,'jpy_transaction_id',v_transaction_id,'amount',v_amount,'item_count',v_item_count);\nend;\n$function$\n"
+      },
+      {
+        "oid": "18616",
+        "name": "home_update_fixed_month_items_status",
+        "signature": "p_month_key text, p_currency text, p_direction text, p_status text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "0eb62f6d2edb941d029d32dd8c96f664",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_update_fixed_month_items_status(p_month_key text, p_currency text, p_direction text, p_status text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare v_updated_count integer:=0; v_skipped integer:=0; v_check jsonb;\nbegin\n  perform pg_advisory_xact_lock(hashtextextended(format('home_fixed_surplus:%s:%s:%s',auth.uid(),p_month_key,p_currency),0));\n  if p_direction not in ('income','expense') then return jsonb_build_object('ok',false,'message','固定项收支方向无效。'); end if;\n  if p_status not in ('unpaid','paid','settled') then return jsonb_build_object('ok',false,'message','固定项状态无效。'); end if;\n  -- ① 原来这里是整批拒绝。改为跳过：projection 项由前端随后单独走\n  --    home_confirm_projection_fixed_item_status，那是它们唯一合法的入口。\n  if public.home_fixed_scope_has_card_statement(p_month_key,p_currency,p_direction) then return jsonb_build_object('ok',false,'code','HOME_CARD_STATEMENT_ITEM_BULK_STATUS_FORBIDDEN','message','范围内包含信用卡statement关联固定项，不能使用批量状态writer。'); end if;\n  if p_direction='expense' and p_status in ('paid','settled') then v_check:=public.home_check_fixed_paid_balance(p_month_key,p_currency,null,null,p_direction,p_status); if not coalesce((v_check->>'ok')::boolean,false) then return v_check; end if; end if;\n  -- ③ 先数清楚这次会跳过几条，返回里报出去，前端据此决定要不要补那一步\n  select count(*) into v_skipped\n  from public.home_fixed_month_items i\n  where i.user_id=auth.uid() and i.month_key=p_month_key and i.currency=p_currency\n    and i.direction=p_direction\n    and public.home_fixed_item_has_external_projection(i.id);\n  -- ② 排除 projection 项\n  update public.home_fixed_month_items i set status=p_status where i.user_id=auth.uid() and i.month_key=p_month_key and i.currency=p_currency and i.direction=p_direction and i.linked_jpy_transaction_id is null and not public.home_fixed_item_has_external_projection(i.id) and not(p_direction='expense' and exists(select 1 from public.home_fixed_advance_payments ap where ap.user_id=auth.uid() and ap.month_key=i.month_key and ap.currency=i.currency and ap.payment_group=coalesce(i.payment_group,'未分组')));\n  get diagnostics v_updated_count=row_count;\n  return jsonb_build_object('ok',true,'message','固定项状态已批量更新。','updated_count',v_updated_count,'skipped_projection_count',v_skipped);\nend;\n$function$\n"
+      },
+      {
+        "oid": "18615",
+        "name": "home_update_fixed_month_item_status",
+        "signature": "p_item_id uuid, p_status text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "87c8280de1c08261aa06386f33285f8f",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_update_fixed_month_item_status(p_item_id uuid, p_status text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare v_item public.home_fixed_month_items%rowtype; v_check jsonb;\nbegin\n  perform pg_advisory_xact_lock(hashtextextended(format('home_fixed_surplus:%s:%s:%s',auth.uid(),i.month_key,i.currency),0))\n  from public.home_fixed_month_items i where i.id=p_item_id and i.user_id=auth.uid();\n  if p_status not in ('unpaid','paid','settled') then return jsonb_build_object('ok',false,'message','固定项状态无效。'); end if;\n  select * into v_item from public.home_fixed_month_items where id=p_item_id and user_id=auth.uid();\n  if not found then return jsonb_build_object('ok',false,'message','没有找到可更新的固定项。'); end if;\n  if public.home_fixed_item_has_external_projection(v_item.id) then return jsonb_build_object('ok',false,'code','HOME_PROJECTION_FIXED_ITEM_STATUS_FORBIDDEN','message','School信用卡projection固定项不能使用普通状态writer。'); end if;\n  if public.home_fixed_item_has_card_statement(v_item.id) then return jsonb_build_object('ok',false,'code','HOME_CARD_STATEMENT_ITEM_STATUS_FORBIDDEN','message','信用卡statement关联固定项不能使用普通状态writer。'); end if;\n  if v_item.linked_jpy_transaction_id is not null then return jsonb_build_object('ok',false,'message','调拨记录状态固定为已付。'); end if;\n  if v_item.direction='expense' and exists(select 1 from public.home_fixed_advance_payments ap where ap.user_id=auth.uid() and ap.month_key=v_item.month_key and ap.currency=v_item.currency and ap.payment_group=coalesce(v_item.payment_group,'未分组')) then return jsonb_build_object('ok',false,'message','该固定支出分组已进入垫付流程，状态不能单独修改。'); end if;\n  if v_item.direction='expense' and p_status in ('paid','settled') then v_check:=public.home_check_fixed_paid_balance(v_item.month_key,v_item.currency,p_item_id,p_status); if not coalesce((v_check->>'ok')::boolean,false) then return v_check; end if; end if;\n  update public.home_fixed_month_items set status=p_status where id=p_item_id and user_id=auth.uid() and linked_jpy_transaction_id is null;\n  return jsonb_build_object('ok',true,'message','固定项状态已更新。','updated_count',1);\nend;\n$function$\n"
+      },
+      {
+        "oid": "22920",
+        "name": "home_guard_fixed_month_item_delete_contract",
+        "signature": "",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "876ce6ba9abdd2212789ce2d72f3bca1",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_guard_fixed_month_item_delete_contract()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare\n  v_authorization_id uuid;\n  v_check jsonb;\n  v_pair_transaction_id uuid;\nbegin\n  -- 先读不删：pair_transaction_id 需要在 eligibility 之前拿到，而消费\n  -- authorization 必须留在 eligibility 之后，否则无授权删除的错误码会变。\n  select a.pair_transaction_id\n  into v_pair_transaction_id\n  from public.home_fixed_month_item_delete_authorizations a\n  where a.transaction_id = pg_current_xact_id()\n    and a.fixed_month_item_id = old.id\n    and a.actor_id = old.user_id\n    and a.operation_type = 'delete'\n    and a.currency = old.currency\n  limit 1;\n\n  v_check := public.home_check_fixed_month_item_delete_eligibility(\n    old, old.user_id, v_pair_transaction_id);\n  if not coalesce((v_check ->> 'ok')::boolean, false) then\n    raise exception using\n      errcode = '42501',\n      message = coalesce(v_check ->> 'code', 'HOME_FIXED_ITEM_DELETE_INTERNAL_CONTRACT_ERROR');\n  end if;\n\n  delete from public.home_fixed_month_item_delete_authorizations a\n  where a.transaction_id = pg_current_xact_id()\n    and a.fixed_month_item_id = old.id\n    and a.actor_id = old.user_id\n    and a.operation_type = 'delete'\n    and a.currency = old.currency\n  returning a.authorization_id into v_authorization_id;\n\n  if v_authorization_id is null then\n    raise exception using\n      errcode = '42501',\n      message = 'HOME_FIXED_ITEM_DELETE_AUTHORIZATION_REQUIRED';\n  end if;\n\n  return old;\nend;\n$function$\n"
+      },
+      {
+        "oid": "18618",
+        "name": "home_delete_fixed_month_item",
+        "signature": "p_item_id uuid",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "60350489b0ea7a87c60c4f36316af6da",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_delete_fixed_month_item(p_item_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare\n  v_actor_id uuid := auth.uid();\nbegin\n  perform pg_advisory_xact_lock(hashtextextended(format('home_fixed_surplus:%s:%s:%s',auth.uid(),i.month_key,i.currency),0))\n  from public.home_fixed_month_items i where i.id=p_item_id and i.user_id=auth.uid();\n  if v_actor_id is null then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_ITEM_DELETE_UNAUTHENTICATED',\n      'message', '请先登录后再删除固定项。'\n    );\n  end if;\n\n  return public.home_delete_fixed_month_item_core(p_item_id, v_actor_id, 'JPY');\nend;\n$function$\n"
+      },
+      {
+        "oid": "24153",
+        "name": "home_confirm_projection_fixed_item_status",
+        "signature": "p_item_id uuid, p_status text",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "c8bfce7d86a30e0327816ab5a39886c7",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_confirm_projection_fixed_item_status(p_item_id uuid, p_status text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare\n  v_item public.home_fixed_month_items%rowtype;\nbegin\n  perform pg_advisory_xact_lock(hashtextextended(format('home_fixed_surplus:%s:%s:%s',auth.uid(),i.month_key,i.currency),0))\n  from public.home_fixed_month_items i where i.id=p_item_id and i.user_id=auth.uid();\n  if p_status not in ('unpaid','paid','settled') then\n    return jsonb_build_object('ok',false,'message','固定项状态无效。');\n  end if;\n\n  select * into v_item\n  from public.home_fixed_month_items\n  where id=p_item_id and user_id=auth.uid();\n\n  if not found then\n    return jsonb_build_object('ok',false,'message','没有找到可更新的固定项。');\n  end if;\n\n  if not public.home_fixed_item_has_external_projection(v_item.id) then\n    return jsonb_build_object(\n      'ok',false,\n      'code','HOME_NOT_PROJECTION_FIXED_ITEM',\n      'message','该固定项不是School投影项，请使用普通状态writer。');\n  end if;\n\n  if public.home_fixed_item_has_card_statement(v_item.id) then\n    return jsonb_build_object(\n      'ok',false,\n      'code','HOME_CARD_STATEMENT_ITEM_STATUS_FORBIDDEN',\n      'message','信用卡statement关联固定项不能使用本writer。');\n  end if;\n\n  if v_item.linked_jpy_transaction_id is not null then\n    return jsonb_build_object('ok',false,'message','调拨记录状态固定为已付。');\n  end if;\n\n  if v_item.status = p_status then\n    return jsonb_build_object('ok',true,'message','状态未变化。','updated_count',0);\n  end if;\n\n  perform set_config('home.phase3f_projection_status_write','on',true);\n\n  update public.home_fixed_month_items\n  set status=p_status\n  where id=v_item.id and user_id=auth.uid();\n\n  perform set_config('home.phase3f_projection_status_write','off',true);\n\n  return jsonb_build_object(\n    'ok',true,\n    'message','School投影固定项状态已更新。',\n    'updated_count',1,\n    'item_id',v_item.id,\n    'status',p_status);\nend;\n$function$\n"
+      },
+      {
+        "oid": "24255",
+        "name": "home_delete_fixed_transfer_pair_item",
+        "signature": "p_item_id uuid, p_pair_transaction_id uuid",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "fe438190537f4a1afee2fdb990aab35a",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_delete_fixed_transfer_pair_item(p_item_id uuid, p_pair_transaction_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare\n  v_actor uuid := auth.uid();\n  v_item public.home_fixed_month_items%rowtype;\n  v_txn public.home_jpy_transactions%rowtype;\nbegin\n  perform pg_advisory_xact_lock(hashtextextended(format('home_fixed_surplus:%s:%s:%s',auth.uid(),i.month_key,i.currency),0))\n  from public.home_fixed_month_items i where i.id=p_item_id and i.user_id=auth.uid();\n  if v_actor is null then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_ITEM_DELETE_UNAUTHENTICATED',\n      'message', '请先登录后再删除固定项。'\n    );\n  end if;\n\n  if p_item_id is null or p_pair_transaction_id is null then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_TRANSFER_PAIR_INVALID',\n      'message', '配对删除需要同时指定固定项与流水。'\n    );\n  end if;\n\n  -- 流水：必须属于本人，且是固定资金调拨\n  select * into v_txn\n  from public.home_jpy_transactions\n  where id = p_pair_transaction_id\n    and user_id = v_actor;\n\n  if not found then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_TRANSFER_PAIR_INVALID',\n      'message', '配对流水不存在或不属于当前用户。'\n    );\n  end if;\n\n  if v_txn.transaction_type not in ('fixed_in', 'fixed_out') then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_TRANSFER_PAIR_INVALID',\n      'message', '配对流水不是固定资金调拨，不能使用本入口。'\n    );\n  end if;\n\n  -- 固定项：必须属于本人\n  select * into v_item\n  from public.home_fixed_month_items\n  where id = p_item_id\n    and user_id = v_actor;\n\n  if not found then\n    -- 用 PAIR_INVALID 而非 ALREADY_ABSENT：本入口的语义是「校验配对关系」，\n    -- 而 user_id = auth.uid() 是查询条件的一部分。项不存在与项属于他人在\n    -- 这里不作区分，也不应区分——区分会泄露「该 id 确实存在但不属于你」。\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_TRANSFER_PAIR_INVALID',\n      'message', '配对固定项不存在或不属于当前用户。'\n    );\n  end if;\n\n  -- 必须构成真实配对：两个方向都成立。\n  -- 生产核查确认 5 组配对全部双向完整，无单向情形，故用 AND。\n  -- 详见文件头设计说明三。\n  if not (\n       v_item.linked_jpy_transaction_id is not distinct from v_txn.id\n       and v_txn.linked_fixed_month_item_id is not distinct from v_item.id\n     ) then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_TRANSFER_PAIR_INVALID',\n      'message', '该固定项与所传流水不构成配对关系。'\n    );\n  end if;\n\n  if v_item.currency is distinct from v_txn.currency then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_TRANSFER_PAIR_INVALID',\n      'message', '配对双方币种不一致。'\n    );\n  end if;\n\n  -- 其余七条检查全部交给 core，本入口不做任何豁免\n  return public.home_delete_fixed_month_item_core(\n    v_item.id,\n    v_actor,\n    v_item.currency,\n    v_txn.id\n  );\nend;\n$function$\n"
+      },
+      {
+        "oid": "24170",
+        "name": "home_delete_fixed_month_item_core",
+        "signature": "p_item_id uuid, p_actor_id uuid, p_expected_currency text, p_pair_transaction_id uuid",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "ec8aafb1d75ba80d0347d6aa7cde0217",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_delete_fixed_month_item_core(p_item_id uuid, p_actor_id uuid, p_expected_currency text DEFAULT NULL::text, p_pair_transaction_id uuid DEFAULT NULL::uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare\n  v_item public.home_fixed_month_items%rowtype;\n  v_check jsonb;\n  v_deleted_count integer := 0;\n  v_expected_currency text := nullif(upper(btrim(coalesce(p_expected_currency, ''))), '');\n  v_authorization_id uuid := gen_random_uuid();\n  v_core_nonce uuid := gen_random_uuid();\n  v_transaction_id xid8;\nbegin\n  if p_actor_id is null then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_ITEM_DELETE_UNAUTHENTICATED',\n      'message', '请先登录后再删除固定项。'\n    );\n  end if;\n\n  if p_item_id is null then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_ITEM_ALREADY_ABSENT',\n      'message', '该固定项已不存在，请刷新页面。'\n    );\n  end if;\n\n  select * into v_item\n  from public.home_fixed_month_items i\n  where i.id = p_item_id\n    and i.user_id = p_actor_id\n    and (v_expected_currency is null or i.currency = v_expected_currency)\n  for update;\n\n  if not found then\n    return jsonb_build_object(\n      'ok', false,\n      'code', 'HOME_FIXED_ITEM_ALREADY_ABSENT',\n      'message', '该固定项已不存在，请刷新页面。'\n    );\n  end if;\n\n  v_check := public.home_check_fixed_month_item_delete_eligibility(\n    v_item, p_actor_id, p_pair_transaction_id);\n  if not coalesce((v_check ->> 'ok')::boolean, false) then\n    return v_check;\n  end if;\n\n  v_transaction_id := pg_current_xact_id();\n\n  insert into public.home_fixed_month_item_delete_authorizations(\n    authorization_id,\n    transaction_id,\n    fixed_month_item_id,\n    actor_id,\n    operation_type,\n    currency,\n    core_nonce,\n    pair_transaction_id\n  ) values (\n    v_authorization_id,\n    v_transaction_id,\n    v_item.id,\n    p_actor_id,\n    'delete',\n    v_item.currency,\n    v_core_nonce,\n    p_pair_transaction_id\n  );\n\n  delete from public.home_fixed_month_items i\n  where i.id = v_item.id\n    and i.user_id = p_actor_id;\n  get diagnostics v_deleted_count = row_count;\n\n  if v_deleted_count <> 1 then\n    raise exception using\n      errcode = '55000',\n      message = 'HOME_FIXED_ITEM_DELETE_INTERNAL_CONTRACT_ERROR';\n  end if;\n\n  if exists (\n    select 1\n    from public.home_fixed_month_item_delete_authorizations a\n    where a.authorization_id = v_authorization_id\n  ) then\n    raise exception using\n      errcode = '55000',\n      message = 'HOME_FIXED_ITEM_DELETE_AUTHORIZATION_NOT_CONSUMED';\n  end if;\n\n  return jsonb_build_object(\n    'ok', true,\n    'code', 'HOME_FIXED_ITEM_DELETED',\n    'deleted_count', 1,\n    'item_id', v_item.id,\n    'currency', v_item.currency,\n    'message', case\n      when v_item.currency = 'CNY' then '人民币固定项已删除。'\n      else '固定项已删除。'\n    end\n  );\nend;\n$function$\n"
+      },
+      {
+        "oid": "18619",
+        "name": "home_delete_jpy_transaction",
+        "signature": "p_transaction_id uuid",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "c7098300cf3f06a20fcbcbe478175834",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_delete_jpy_transaction(p_transaction_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare\n  v_transaction public.home_jpy_transactions%rowtype;\n  v_linked_fixed_month_item_id uuid;\n  v_item public.home_fixed_month_items%rowtype;\n  v_reset jsonb := jsonb_build_object('reset_expense_status', false);\n  v_linked_deleted boolean := false;\n  v_message text := '已删除。';\n  v_core jsonb;\nbegin\n  perform pg_advisory_xact_lock(hashtextextended(format('home_fixed_surplus:%s:%s:%s',auth.uid(),\n    coalesce(i.month_key,to_char(t.transacted_at,'YYYY-MM')),coalesce(i.currency,t.currency)),0))\n  from public.home_jpy_transactions t left join public.home_fixed_month_items i\n    on i.id=t.linked_fixed_month_item_id and i.user_id=auth.uid()\n  where t.id=p_transaction_id and t.user_id=auth.uid();\n  select *\n  into v_transaction\n  from public.home_jpy_transactions\n  where id = p_transaction_id\n  for update;\n\n  if not found then\n    return jsonb_build_object('ok', false, 'message', '没有找到可删除的日元流水。');\n  end if;\n\n  if v_transaction.created_by_external is true\n     or nullif(btrim(v_transaction.external_source), '') is not null\n     or v_transaction.external_source_id is not null\n     or nullif(btrim(v_transaction.external_event_type), '') is not null\n     or nullif(btrim(v_transaction.external_idempotency_key), '') is not null\n     or nullif(btrim(v_transaction.external_reference_type), '') is not null\n     or v_transaction.external_reference_id is not null\n     or nullif(btrim(v_transaction.external_note), '') is not null\n     or nullif(btrim(v_transaction.external_payload_hash), '') is not null\n     or v_transaction.external_created_at is not null then\n    return jsonb_build_object(\n      'ok', false, 'code', 'EXTERNAL_TRANSACTION_IMMUTABLE',\n      'message', 'EXTERNAL_TRANSACTION_IMMUTABLE'\n    );\n  end if;\n\n  if v_transaction.user_id is distinct from auth.uid() then\n    return jsonb_build_object('ok', false, 'message', '没有找到可删除的日元流水。');\n  end if;\n\n  if v_transaction.transaction_type in ('fixed_advance_out', 'fixed_advance_in') then\n    return jsonb_build_object('ok', false, 'message', '固定垫付流水由固定收支流程控制，不能在零散收支中删除。');\n  end if;\n\n  v_linked_fixed_month_item_id := public.home_resolve_fixed_transfer_item_id(v_transaction);\n\n  if v_linked_fixed_month_item_id is not null then\n    select *\n    into v_item\n    from public.home_fixed_month_items\n    where id = v_linked_fixed_month_item_id\n      and user_id = auth.uid();\n\n    if not found then\n      return jsonb_build_object('ok', false, 'message', '调拨流水链接的固定项不存在，请检查旧数据后再删除。');\n    end if;\n\n    -- 2026-09-01 Step D：经窄 DEFINER 入口删除配对固定项。\n    -- 本函数是 INVOKER，无权直接调 postgres-only 的 core；窄入口内部从\n    -- auth.uid() 取 actor 并校验配对关系，再转调 core。\n    v_core := public.home_delete_fixed_transfer_pair_item(\n      v_linked_fixed_month_item_id,\n      v_transaction.id\n    );\n\n    -- 失败原样上抛。projection / statement / correction / funded / 垫付等\n    -- 保护命中时必须让整个删除失败；同一事务内 return 会连带回滚，\n    -- 流水不会被误删。\n    if not coalesce((v_core ->> 'ok')::boolean, false) then\n      return v_core;\n    end if;\n\n    v_linked_deleted := true;\n  elsif v_transaction.transaction_type in ('fixed_in', 'fixed_out') then\n    v_message := '已删除日元流水，但旧数据链接不完整，未能唯一匹配固定项。';\n  end if;\n\n  delete from public.home_jpy_transactions\n  where id = v_transaction.id\n    and user_id = auth.uid();\n\n  if v_linked_deleted then\n    v_reset := public.home_reset_plain_fixed_expenses_if_deficit(v_item.month_key, v_item.currency);\n  end if;\n\n  return jsonb_build_object(\n    'ok', true,\n    'deleted_count', 1,\n    'linked_deleted', v_linked_deleted,\n    'reset_expense_status', coalesce((v_reset ->> 'reset_expense_status')::boolean, false),\n    'message', case\n      when v_linked_deleted and coalesce((v_reset ->> 'reset_expense_status')::boolean, false)\n        then '已同步删除固定收支记录；删除后重新出现赤字，普通固定支出已改回未付。'\n      when v_linked_deleted\n        then '已同步删除固定收支记录。'\n      else v_message\n    end\n  );\nend;\n$function$\n"
+      },
+      {
+        "oid": "24344",
+        "name": "home_fixed_transferable_surplus",
+        "signature": "p_user_id uuid, p_month_key text, p_currency text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "41535b799f462aff28fc8be8c939e7c6",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_fixed_transferable_surplus(p_user_id uuid, p_month_key text, p_currency text)\n RETURNS numeric\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare v_result numeric;\nbegin\n  if auth.uid() is null then\n    raise exception using errcode='55000', message='HOME_FIXED_SURPLUS_AUTH_REQUIRED';\n  end if;\n  if p_user_id is distinct from auth.uid() then\n    raise exception using errcode='55000', message='HOME_FIXED_SURPLUS_ACTOR_MISMATCH';\n  end if;\n  with items as (\n    select i.* from public.home_fixed_month_items i\n    where i.user_id=p_user_id and i.month_key=p_month_key and i.currency=p_currency\n      and public.home_is_fixed_item_visible_to_business_reader(i.id)\n  ), expenses as (\n    select public.home_round_up_1000(sum(amount)) amount\n    from items where direction='expense' group by coalesce(payment_group,'未分组')\n  )\n  select coalesce((select sum(amount) from items where direction='income' and status in ('paid','settled')),0)\n    - coalesce((select sum(amount) from expenses),0)\n    + coalesce((select sum(a.amount) from public.home_fixed_advance_payments a\n        where a.user_id=p_user_id and a.currency=p_currency and to_char(a.paid_at,'YYYY-MM')=p_month_key),0)\n    - coalesce((select sum(a.amount) from public.home_fixed_advance_payments a\n        where a.user_id=p_user_id and a.currency=p_currency and a.status='repaid'\n          and to_char(a.repaid_at,'YYYY-MM')=p_month_key),0) into v_result;\n  return v_result;\nend;\n$function$\n"
+      },
+      {
+        "oid": "24345",
+        "name": "home_fixed_consumed_surplus",
+        "signature": "p_user_id uuid, p_month_key text, p_currency text",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "6f07e236e6705abc90ef5394229d2f02",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_fixed_consumed_surplus(p_user_id uuid, p_month_key text, p_currency text)\n RETURNS numeric\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare v_result numeric;\nbegin\n  if auth.uid() is null then\n    raise exception using errcode='55000', message='HOME_FIXED_SURPLUS_AUTH_REQUIRED';\n  end if;\n  if p_user_id is distinct from auth.uid() then\n    raise exception using errcode='55000', message='HOME_FIXED_SURPLUS_ACTOR_MISMATCH';\n  end if;\n  select coalesce((select sum(a.amount) from public.home_fixed_advance_payments a\n      where a.user_id=p_user_id and a.currency=p_currency and a.status='repaid'\n        and to_char(a.repaid_at,'YYYY-MM')=p_month_key),0)\n    + coalesce((select sum(t.amount) from public.home_jpy_transactions t\n      where t.user_id=p_user_id and t.currency=p_currency and t.transaction_type='fixed_in'\n        and to_char(t.transacted_at,'YYYY-MM')=p_month_key),0) into v_result;\n  return v_result;\nend;\n$function$\n"
+      },
+      {
+        "oid": "24346",
+        "name": "home_guard_fixed_income_reduction",
+        "signature": "",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "cdc5b3188635eefcaae1debc4c615350",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_guard_fixed_income_reduction()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare v_old numeric; v_new numeric; v_consumed numeric;\nbegin\n  v_old:=case when old.direction='income' and old.status in ('paid','settled') then old.amount else 0 end;\n  if tg_op='UPDATE' then\n    v_new:=case when new.direction='income' and new.status in ('paid','settled') then new.amount else 0 end;\n    if row(old.user_id,old.month_key,old.currency) is not distinct from row(new.user_id,new.month_key,new.currency) then\n      if v_new>=v_old then return null; end if;\n    elsif v_old<=0 then return null;\n    end if;\n  elsif v_old<=0 then return null;\n  end if;\n  v_consumed:=public.home_fixed_consumed_surplus(old.user_id,old.month_key,old.currency);\n  if v_consumed>0 and public.home_fixed_transferable_surplus(old.user_id,old.month_key,old.currency)<0 then\n    raise exception using errcode='55000', message='HOME_FIXED_SURPLUS_ALREADY_CONSUMED',\n      detail=format('本月已有 %s 的固定收支盈余用于补回或转出，此操作会使这部分资金失去来源，因此未执行。请核对本月的资金安排后再调整。',v_consumed);\n  end if;\n  return null;\nend;\n$function$\n"
+      },
+      {
+        "oid": "18626",
+        "name": "home_check_fixed_paid_balance",
+        "signature": "p_month_key text, p_currency text, p_target_item_id uuid, p_target_status text, p_bulk_direction text, p_bulk_status text",
+        "prosecdef": false,
+        "provolatile": "s",
+        "proconfig": null,
+        "proacl": [
+          "=X/postgres",
+          "postgres=X/postgres",
+          "anon=X/postgres",
+          "authenticated=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "e9c19a9afd01e15d3e30bb422cbc5edc",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_check_fixed_paid_balance(p_month_key text, p_currency text DEFAULT 'JPY'::text, p_target_item_id uuid DEFAULT NULL::uuid, p_target_status text DEFAULT NULL::text, p_bulk_direction text DEFAULT NULL::text, p_bulk_status text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE\nAS $function$\ndeclare\n  v_actual_income numeric := 0;\n  v_actual_expense numeric := 0;\n  v_advance_amount_in_month numeric; v_repaid_amount_in_month numeric;\nbegin\n  if p_target_status is not null and p_target_status not in ('unpaid', 'paid', 'settled') then\n    return jsonb_build_object('ok', false, 'message', '固定项状态无效。');\n  end if;\n\n  if p_bulk_status is not null and p_bulk_status not in ('unpaid', 'paid', 'settled') then\n    return jsonb_build_object('ok', false, 'message', '固定项状态无效。');\n  end if;\n\n  if p_bulk_direction is not null and p_bulk_direction not in ('income', 'expense') then\n    return jsonb_build_object('ok', false, 'message', '固定项收支方向无效。');\n  end if;\n\n  with month_items as (\n    select\n      i.*,\n      case\n        when i.linked_jpy_transaction_id is not null then 'paid'\n        when p_target_item_id is not null and i.id = p_target_item_id then p_target_status\n        when p_bulk_direction is not null and i.direction = p_bulk_direction then p_bulk_status\n        else i.status\n      end as next_status\n    from home_fixed_month_items i\n    where i.user_id = auth.uid()\n      and i.month_key = p_month_key\n      and i.currency = p_currency\n  ),\n  paid_expense_groups as (\n    select\n      coalesce(payment_group, '未分组') as payment_group,\n      home_round_up_1000(coalesce(sum(amount), 0)) as paid_amount\n    from month_items\n    where direction = 'expense'\n      and next_status in ('paid', 'settled')\n    group by coalesce(payment_group, '未分组')\n  )\n  select\n    coalesce(sum(amount) filter (where direction = 'income' and next_status in ('paid', 'settled')), 0),\n    coalesce((select sum(paid_amount) from paid_expense_groups), 0)\n  into v_actual_income, v_actual_expense\n  from month_items;\n\n  select coalesce(sum(a.amount) filter(where to_char(a.paid_at,'YYYY-MM')=p_month_key),0),\n    coalesce(sum(a.amount) filter(where a.status='repaid' and to_char(a.repaid_at,'YYYY-MM')=p_month_key),0)\n  into v_advance_amount_in_month,v_repaid_amount_in_month\n  from public.home_fixed_advance_payments a where a.user_id=auth.uid() and a.currency=p_currency;\n  if v_actual_income < v_actual_expense-v_advance_amount_in_month+v_repaid_amount_in_month then\n    return jsonb_build_object(\n      'ok', false,\n      'message', format('当前收入不足，请补充赤字后结算。当前已收 %s，取整后已付支出 %s。', v_actual_income, v_actual_expense),\n      'actual_income', v_actual_income,\n      'actual_expense', v_actual_expense\n    );\n  end if;\n\n  return jsonb_build_object(\n    'ok', true,\n    'message', '收入足以覆盖已付固定支出。',\n    'actual_income', v_actual_income,\n    'actual_expense', v_actual_expense\n  );\nend;\n$function$\n"
+      },
+      {
+        "oid": "24350",
+        "name": "home_update_fixed_month_item_amount",
+        "signature": "p_item_id uuid, p_amount numeric",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "24f2023c3f51231c72e3882dce8974ba",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_update_fixed_month_item_amount(p_item_id uuid, p_amount numeric)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\ndeclare v_item public.home_fixed_month_items%rowtype; v_count integer;\nbegin\n  if auth.uid() is null then raise exception using errcode='55000',message='HOME_FIXED_SURPLUS_AUTH_REQUIRED'; end if;\n  if p_amount is null or p_amount<0 or p_amount::text in ('NaN','Infinity','-Infinity') then\n    return jsonb_build_object('ok',false,'message','固定项金额无效。');\n  end if;\n  perform pg_advisory_xact_lock(hashtextextended(format('home_fixed_surplus:%s:%s:%s',auth.uid(),i.month_key,i.currency),0))\n    from public.home_fixed_month_items i where i.id=p_item_id and i.user_id=auth.uid();\n  select * into v_item from public.home_fixed_month_items where id=p_item_id and user_id=auth.uid() for update;\n  if not found then return jsonb_build_object('ok',false,'message','没有找到可更新的固定项。'); end if;\n  if v_item.linked_jpy_transaction_id is not null or v_item.linked_cny_transaction_id is not null then\n    return jsonb_build_object('ok',false,'message','关联流水的固定项金额不能单独修改。');\n  end if;\n  if v_item.direction='expense' and exists(select 1 from public.home_fixed_advance_payments a\n    where a.user_id=auth.uid() and a.month_key=v_item.month_key and a.currency=v_item.currency\n      and a.payment_group=coalesce(v_item.payment_group,'未分组')) then\n    return jsonb_build_object('ok',false,'message','已进入垫付流程的固定项金额不能单独修改。');\n  end if;\n  update public.home_fixed_month_items set amount=p_amount where id=p_item_id and user_id=auth.uid();\n  get diagnostics v_count=row_count;\n  return jsonb_build_object('ok',v_count=1,'updated_count',v_count,'message','固定项金额已更新。');\nend;\n$function$\n"
+      },
+      {
+        "oid": "24351",
+        "name": "home_list_pending_fixed_advances",
+        "signature": "",
+        "prosecdef": false,
+        "provolatile": "s",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": [
+          "postgres=X/postgres",
+          "authenticated=X/postgres"
+        ],
+        "owner": "postgres",
+        "md5": "0b02334657c80ba11b0a97ae70d69cb2",
+        "definition": "CREATE OR REPLACE FUNCTION public.home_list_pending_fixed_advances()\n RETURNS TABLE(advance_id uuid, month_key text, currency text, payment_group text, account_id uuid, account_name text, amount numeric, paid_at date)\n LANGUAGE sql\n STABLE\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  select a.id,a.month_key,a.currency,a.payment_group,a.account_id,b.name,a.amount,a.paid_at\n  from public.home_fixed_advance_payments a\n  left join public.home_accounts b on b.id=a.account_id and b.user_id=a.user_id\n  where a.user_id=auth.uid() and a.status='pending'\n  order by a.month_key,a.paid_at,a.id;\n$function$\n"
+      }
+    ],
+    "triggers": [
+      {
+        "oid": "24347",
+        "name": "home_fixed_income_reduction_guard",
+        "tgfoid": "24346",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER home_fixed_income_reduction_guard AFTER DELETE OR UPDATE ON public.home_fixed_month_items FOR EACH ROW EXECUTE FUNCTION home_guard_fixed_income_reduction()"
+      },
+      {
+        "oid": "19684",
+        "name": "home_fixed_month_items_assign_accounting_scope",
+        "tgfoid": "19683",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER home_fixed_month_items_assign_accounting_scope BEFORE INSERT ON public.home_fixed_month_items FOR EACH ROW EXECUTE FUNCTION home_assign_accounting_scope()"
+      },
+      {
+        "oid": "21383",
+        "name": "home_fixed_month_items_projection_guard",
+        "tgfoid": "21382",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER home_fixed_month_items_projection_guard BEFORE DELETE OR UPDATE ON public.home_fixed_month_items FOR EACH ROW EXECUTE FUNCTION home_guard_projection_linked_fixed_item()"
+      },
+      {
+        "oid": "22921",
+        "name": "zz_home_fixed_month_items_delete_contract_guard",
+        "tgfoid": "22920",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER zz_home_fixed_month_items_delete_contract_guard BEFORE DELETE ON public.home_fixed_month_items FOR EACH ROW EXECUTE FUNCTION home_guard_fixed_month_item_delete_contract()"
+      }
+    ]
+  },
+  "body_diff": [
+    {
+      "name": "home_fixed_transferable_surplus",
+      "body_equal": true
+    },
+    {
+      "name": "home_fixed_consumed_surplus",
+      "body_equal": true
+    },
+    {
+      "name": "home_guard_fixed_income_reduction",
+      "body_equal": true
+    },
+    {
+      "name": "home_fixed_settlement_status",
+      "body_equal": true
+    },
+    {
+      "name": "home_check_fixed_paid_balance",
+      "body_equal": true
+    },
+    {
+      "name": "home_create_fixed_transfer",
+      "body_equal": true
+    },
+    {
+      "name": "home_settle_fixed_advance_repayment",
+      "body_equal": true
+    },
+    {
+      "name": "home_update_fixed_month_items_status",
+      "body_equal": true
+    },
+    {
+      "name": "home_sync_fixed_month_items",
+      "body_equal": true
+    },
+    {
+      "name": "home_update_fixed_month_item_status",
+      "body_equal": true
+    },
+    {
+      "name": "home_confirm_projection_fixed_item_status",
+      "body_equal": true
+    },
+    {
+      "name": "home_delete_fixed_month_item",
+      "body_equal": true
+    },
+    {
+      "name": "home_delete_fixed_transfer_pair_item",
+      "body_equal": true
+    },
+    {
+      "name": "home_delete_jpy_transaction",
+      "body_equal": true
+    },
+    {
+      "name": "home_update_fixed_month_item_amount",
+      "body_equal": true
+    },
+    {
+      "name": "home_list_pending_fixed_advances",
+      "body_equal": true
+    }
+  ],
+  "fingerprints_after": {
+    "fingerprints": {
+      "advances": {
+        "md5": "6f81f2f45cc2865a4ebb5379facb72b0",
+        "count": 3
+      },
+      "fixed_items": {
+        "md5": "e0e2e195321ddbf9f7604ba262709c5e",
+        "count": 92
+      },
+      "transactions": {
+        "md5": "d72e45b2d2882bb0d52e0c7ede09cbf1",
+        "count": 10
+      }
+    },
+    "fingerprints_equal": true,
+    "columns_unchanged": true,
+    "policies_unchanged": true,
+    "other_triggers_unchanged": true
+  }
+}
