@@ -16,6 +16,13 @@ export const appState = {
   externalRequestStatusFilter: "pending",
   yearSummary: null,
   editingJpyTransactionId: null,
+  // 日元零散新增的草稿 id：稳定到保存成功为止。
+  // 这样「写入成功但响应丢失」之后的重试会落在同一条记录上，
+  // 由唯一键冲突 + 内容核验收敛，而不是插出第二条。
+  jpyDraftId: null,
+  // 结果未知的那次提交。独立于表单存在——取消、切换编辑/复制都不清除它，
+  // 且后续请求的明确失败也不能抹掉（前一次可能已经成功了）。
+  jpyPendingSubmission: null,
   editingCnyTransactionId: null,
   editingAccountId: null,
   editingCnyAccountId: null,

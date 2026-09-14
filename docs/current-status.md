@@ -24,6 +24,33 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
+2026-09-14 write-path auth classification and JPY casual insert contract
+(UI version `20260914-write-auth-classify-1`):
+
+- Root cause of the JPY casual save failure was **not** a missing privilege.
+  Production shows `authenticated = arwdm` on both `home_jpy_transactions` and
+  `home_cny_transactions`, with `anon = rm`. The request simply was not carrying
+  an authenticated identity; saving and deleting both recovered after the owner
+  signed in again. Whether that request was literally `anon`, and what triggered
+  the session loss, remain **unproven** — the log endpoint returned HTTP 403.
+- Frontend now classifies write errors in a fixed order: RLS refusal (matched on
+  message, because it is also 42501) → `42501 permission denied` → explicit
+  JWT/auth failure → business error. The 42501 branch **does not guess** whether
+  the cause is an expired session or a genuinely missing privilege — a client
+  cannot tell those apart. It reports the refusal, keeps the original error text,
+  and shows the outcome of one `auth.refreshSession()` as separate information.
+- JPY casual **creation** left the shared `upsert()` helper for a dedicated
+  `insert`, so pre-check, identity comparison and error classification are wired
+  in explicitly on that path. Unique-key conflicts are confirmed field by field
+  before being treated as success; a mismatch refuses to overwrite.
+- The draft transaction id is now stable until a save actually succeeds, the
+  submitted payload is frozen at submit time (including `user_id`), and the
+  handler holds a re-entry lock before its first `await`. These three plus the
+  insert contract are one release unit — shipping the insert without them would
+  turn "write succeeded but response lost" into a duplicate row.
+- No database, privilege, RLS or RPC change. Automatic retry after a refresh is
+  designed but **not implemented** in this change.
+
 2026-09-05 ICBC cross-currency deployment:
 
 - Published the urgent single-item frontend from exact commit `fb1a307` (Pages run `33897011753`), then published `145f4c3` after the bulk SQL passed rollback acceptance (run `33897596795`). The requested School JPY item was changed to paid through the UI.

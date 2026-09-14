@@ -13,6 +13,122 @@ function handleRpcResult(data, fallbackMessage) {
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// 写入错误的识别与呈现
+//
+// 2026-09-14 日元流水存不进去，报的是
+//     permission denied for table home_jpy_transactions
+// 生产实测 authenticated 对该表有完整 arwd 权限、anon 只有 r——也就是说那次请求
+// 并非以 authenticated 身份发出。但**客户端没有任何可靠办法区分「登录失效」和
+// 「这个角色确实缺权限」**：两者都是 42501 + permission denied。刷新 token 成功
+// 既不能反推原请求当时用的什么身份，也保证不了下一次请求带哪个 token。
+//
+// 所以这里不猜原因，只如实报告「操作被拒绝」并保留原始错误，把刷新结果作为附加
+// 信息单独呈现。详见 docs/lessons.md A7。
+// ---------------------------------------------------------------------------
+
+// 服务端明确拒绝了这个身份。与「连不上」必须分开——后者不能下任何结论。
+function isAuthRejection(error) {
+  if (!error) return false;
+  const status = Number(error.status || 0);
+  const code = String(error.code || "");
+  const message = String(error.message || "");
+  if (status === 401 || status === 403) return true;
+  if (code === "PGRST301" || code === "PGRST303") return true;
+  return /jwt|token|not authenticated|invalid claim/i.test(message);
+}
+
+function isNetworkFailure(error) {
+  if (!error) return false;
+  const message = String(error.message || "");
+  return /failed to fetch|networkerror|network request|timeout|aborted/i.test(message);
+}
+
+// 分类顺序不能调换：
+//   1. RLS 拒绝**也是 42501**，必须先按 message 分流出去，否则它会掉进权限分支；
+//   2. 匿名请求的 42501 可能同时带 HTTP 401，若先判 401，权限拒绝会被误判成
+//      认证失败。所以 42501 排在 JWT 判断之前。
+function classifyWriteError(error, httpStatus) {
+  if (!error) return "none";
+  const code = String(error.code || "");
+  const message = String(error.message || "");
+  if (/violates row-level security policy/i.test(message)) return "business";
+  if (code === "42501" && /permission denied/i.test(message)) return "denied";
+  if (isAuthRejection({ ...error, status: Number(httpStatus || error.status || 0) })) {
+    return "auth_failed";
+  }
+  if (isNetworkFailure(error)) return "unknown";
+  return "business";
+}
+
+// 统一呈现，返回分类供调用方决定后续状态。
+async function reportWriteError(error, fallbackPrefix, httpStatus) {
+  const kind = classifyWriteError(error, httpStatus);
+  const detail = error?.message || "";
+  if (kind === "auth_failed") {
+    setActionMessage("登录状态已失效，请重新登录后再试。", "error");
+  } else if (kind === "unknown") {
+    setActionMessage("网络异常，提交结果未确认，请勿重复提交。", "error");
+  } else if (kind === "denied") {
+    // 刷新只用来生成附加提示，既不参与分类，也不改变这次失败已经发生的事实。
+    const refreshed = await forceRefreshSession();
+    const hint =
+      refreshed.state === "refreshed"
+        ? "已刷新登录状态，可再试一次。"
+        : refreshed.state === "rejected"
+          ? "登录状态已失效，请重新登录。"
+          : "暂时无法确认登录状态。";
+    setActionMessage(
+      `操作被拒绝：当前请求没有执行该操作的权限。可能是登录状态已失效，也可能是当前账号缺少该权限。${hint}（${detail}）`,
+      "error",
+    );
+  } else {
+    setActionMessage(`${fallbackPrefix}${detail}`, "error");
+  }
+  return kind;
+}
+
+// 写操作前的会话检查。
+// getSession() 读本地会话，必要时 SDK 会自行刷新，但它**不保证**强制刷新，
+// 也证明不了 token 仍被服务端接受。
+async function checkAuthBeforeWrite() {
+  if (!appState.supabaseClient) return { state: "no_session", user: null };
+  try {
+    const { data, error } = await appState.supabaseClient.auth.getSession();
+    if (error) {
+      return isAuthRejection(error)
+        ? { state: "auth_rejected", user: null }
+        : { state: "unavailable", user: null };
+    }
+    const session = data?.session || null;
+    if (!session?.user) return { state: "no_session", user: null };
+    appState.currentUser = session.user;
+    return { state: "ok", user: session.user };
+  } catch (_error) {
+    return { state: "unavailable", user: null };
+  }
+}
+
+// auth.refreshSession() 是**明确请求**刷新，这是它与 getSession() 的区别。
+async function forceRefreshSession() {
+  if (!appState.supabaseClient) return { state: "unavailable", user: null };
+  try {
+    const { data, error } = await appState.supabaseClient.auth.refreshSession();
+    if (error) {
+      return isAuthRejection(error)
+        ? { state: "rejected", user: null }
+        : { state: "unavailable", user: null };
+    }
+    const session = data?.session || null;
+    // 没有 user 不算刷新成功。
+    if (!session?.user) return { state: "unavailable", user: null };
+    appState.currentUser = session.user;
+    return { state: "refreshed", user: session.user };
+  } catch (_error) {
+    return { state: "unavailable", user: null };
+  }
+}
+
 export function setCloudChangeHandler(handler) {
   onCloudChange = handler;
 }
@@ -466,20 +582,120 @@ export async function updateMonthItemsStatus(direction, status) {
   return handleRpcResult(data, "固定项状态更新失败。");
 }
 
-export async function saveJpyTransaction(record) {
-  const allowedRecord = {
-    id: record.id,
-    transaction_type: record.transaction_type,
-    account_id: record.account_id,
-    transfer_account_id: record.transfer_account_id,
+// 日元零散流水的新增走独立的 INSERT，不再复用公共 upsert()。
+//
+// 两个原因：一是 upsert 生成的 INSERT ... ON CONFLICT DO UPDATE 同时要求 INSERT 和
+// UPDATE 权限，而新增永远是插入新行，不该多要一项；二是 id 撞车时 upsert 会静默
+// 覆盖别人的记录，而这里必须先核验内容。
+//
+// 因为离开了 upsert()，预检、身份核对、错误分类都要在这里显式接上。
+//
+// 入参是调用方在**首次提交前**冻结的快照，含 user_id。重试必须传同一份，
+// 不能重新经 withUser() 绑定到当前登录用户。
+export async function saveJpyTransaction(snapshot) {
+  if (!appState.supabaseClient) {
+    const message = "请先登录后再保存日元流水。";
+    setActionMessage(message, "error");
+    return { ok: false, outcome: "no_session", message };
+  }
+
+  const auth = await checkAuthBeforeWrite();
+  if (auth.state !== "ok") {
+    const message =
+      auth.state === "unavailable"
+        ? "暂时无法确认登录状态，请稍后再试。"
+        : "登录状态已失效，请重新登录后再保存。";
+    setActionMessage(message, "error");
+    return { ok: false, outcome: auth.state, message };
+  }
+
+  // 快照里的 user_id 是点提交那一刻捕获的。若此刻会话已经换了人，
+  // 这条草稿不能替新账号写进去。
+  if (snapshot.user_id && auth.user.id !== snapshot.user_id) {
+    const message = "登录账号已变更，这条草稿不会保存到新账号，请确认后重新填写。";
+    setActionMessage(message, "error");
+    return { ok: false, outcome: "account_changed", message };
+  }
+
+  const record = {
+    id: snapshot.id,
+    user_id: snapshot.user_id,
+    transaction_type: snapshot.transaction_type,
+    account_id: snapshot.account_id,
+    transfer_account_id: snapshot.transfer_account_id,
     currency: "JPY",
-    transacted_at: record.transacted_at,
-    amount: record.amount,
-    description: record.description,
-    note: record.note,
-    created_at: record.created_at,
+    transacted_at: snapshot.transacted_at,
+    amount: snapshot.amount,
+    description: snapshot.description,
+    note: snapshot.note,
+    created_at: snapshot.created_at,
   };
-  return upsert("home_jpy_transactions", withUser(allowedRecord));
+
+  const { error, status } = await appState.supabaseClient
+    .from("home_jpy_transactions")
+    .insert(record);
+
+  if (!error) return { ok: true, outcome: "inserted" };
+
+  // 唯一键冲突：这个 id 已经有记录了。可能是上一次提交其实写成功了、只是响应没回来。
+  // 必须核验内容一致才能算成功——不能直接当成功，更不能覆盖。
+  if (String(error.code) === "23505") return confirmExistingJpyTransaction(record);
+
+  const kind = await reportWriteError(error, "Supabase 保存失败：", status);
+  const outcome =
+    kind === "denied"
+      ? "permission_denied"
+      : kind === "auth_failed"
+        ? "auth_failed"
+        : kind === "unknown"
+          ? "unknown"
+          : "rejected";
+  return { ok: false, outcome, code: error.code, message: error.message };
+}
+
+async function confirmExistingJpyTransaction(record) {
+  const { data, error } = await appState.supabaseClient
+    .from("home_jpy_transactions")
+    .select("id,user_id,transaction_type,account_id,transfer_account_id,currency,transacted_at,amount,description,note")
+    .eq("id", record.id)
+    .maybeSingle();
+
+  if (error || !data) {
+    // 读不到不等于没写进去——可能被 RLS 挡住，也可能只是这一刻读失败。
+    // 所以维持未决，不判为失败，也不泄露该 id 属于谁。
+    const message = "提交结果未确认，请勿重复提交。";
+    setActionMessage(message, "error");
+    return { ok: false, outcome: "unknown", message };
+  }
+  if (!isSameJpyTransaction(data, record)) {
+    const message = "该流水编号已被另一条记录占用，未覆盖。请检查后重新填写。";
+    setActionMessage(message, "error");
+    return { ok: false, outcome: "mismatch", message };
+  }
+  return { ok: true, outcome: "confirmed_existing" };
+}
+
+// 逐字段按类型比对，不整体比 JSON——数值、日期、NULL 与空串的序列化差异都会误判。
+// created_at 不参与：它不是业务内容，重试时精度可能不同。
+function isSameJpyTransaction(existing, record) {
+  // 必填的 uuid 缺失就不能确认
+  if (!existing.id || !existing.user_id || !existing.account_id) return false;
+  const sameNullableUuid = (a, b) => (a || null) === (b || null);
+  const sameText = (a, b) => String(a ?? "") === String(b ?? "");
+  return (
+    existing.id === record.id &&
+    existing.user_id === record.user_id &&
+    existing.account_id === record.account_id &&
+    sameNullableUuid(existing.transfer_account_id, record.transfer_account_id) &&
+    sameText(existing.transaction_type, record.transaction_type) &&
+    sameText(existing.currency, record.currency) &&
+    // transacted_at 是 date 列，PostgREST 返回 YYYY-MM-DD，表单也是同一形式，
+    // 直接比字符串即可，不做任何时区转换。
+    sameText(existing.transacted_at, record.transacted_at) &&
+    Number(existing.amount) === Number(record.amount) &&
+    sameText(existing.description, record.description) &&
+    sameText(existing.note, record.note)
+  );
 }
 
 export async function saveCnyTransaction(record) {
@@ -499,7 +715,7 @@ export async function saveCnyTransaction(record) {
 }
 
 export async function updateJpyTransaction(record) {
-  const { data, error } = await appState.supabaseClient.rpc("home_update_jpy_transaction", {
+  const { data, error, status } = await appState.supabaseClient.rpc("home_update_jpy_transaction", {
     p_transaction_id: record.id,
     p_account_id: record.account_id,
     p_transfer_account_id: record.transfer_account_id,
@@ -509,7 +725,7 @@ export async function updateJpyTransaction(record) {
     p_note: record.note,
   });
   if (error) {
-    setActionMessage(`日元流水更新失败：${error.message}`, "error");
+    await reportWriteError(error, "日元流水更新失败：", status);
     return null;
   }
   return handleRpcResult(data, "日元流水更新失败。");
@@ -758,11 +974,11 @@ export async function deleteMonthItem(id) {
 }
 
 export async function deleteJpyTransaction(id) {
-  const { data, error } = await appState.supabaseClient.rpc("home_delete_jpy_transaction", {
+  const { data, error, status } = await appState.supabaseClient.rpc("home_delete_jpy_transaction", {
     p_transaction_id: id,
   });
   if (error) {
-    setActionMessage(`日元流水删除失败：${error.message}`, "error");
+    await reportWriteError(error, "日元流水删除失败：", status);
     return null;
   }
   return handleRpcResult(data, "日元流水删除失败。");
@@ -822,9 +1038,9 @@ export async function deactivateAccount(id) {
 
 async function upsert(table, record) {
   if (!isCloudReady()) return false;
-  const { error } = await appState.supabaseClient.from(table).upsert(record);
+  const { error, status } = await appState.supabaseClient.from(table).upsert(record);
   if (error) {
-    setActionMessage(`Supabase 保存失败：${error.message}`, "error");
+    await reportWriteError(error, "Supabase 保存失败：", status);
     return false;
   }
   return true;

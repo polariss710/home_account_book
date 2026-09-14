@@ -13,6 +13,24 @@ import {
 import { setActionMessage } from "#ui";
 import { emptyRow, escapeHtml, formData, isExternalTransaction, money, moneyByCurrency, toNumber } from "#utils";
 
+// 提交期间的重入锁。必须在第一个 await 之前设置，否则双击会发出两个请求。
+let jpySubmitInFlight = false;
+
+// 新增用的流水 id 保持稳定，直到这一笔确实保存成功。
+// 若每次提交都重新生成 id，「写入成功但响应丢失」之后的重试就会变成第二条记录；
+// id 稳定时同一次重试会撞唯一键，再经内容核验收敛。
+function currentJpyDraftId() {
+  if (!appState.jpyDraftId) appState.jpyDraftId = crypto.randomUUID();
+  return appState.jpyDraftId;
+}
+
+// 只有确认成功才能清。取消按钮、切换编辑/复制都不清 ——
+// 那些只是改变表单显示，不改变「上一次提交到底写没写进去」这件事。
+function clearJpyDraft() {
+  appState.jpyDraftId = null;
+  appState.jpyPendingSubmission = null;
+}
+
 export function bindJpyEvents() {
   els.jpyTransactionForm.elements.transaction_type.addEventListener("change", updateTransferAccountControl);
   els.jpyTransactionCancelBtn.addEventListener("click", resetJpyTransactionForm);
@@ -20,6 +38,8 @@ export function bindJpyEvents() {
   els.jpyFilterForm.elements.reset_filter.addEventListener("click", resetFilters);
   els.jpyTransactionForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    // 必须在第一个 await 之前挡住重复进入；按钮 disabled 只是配套的视觉反馈。
+    if (jpySubmitInFlight) return;
     if (!isCloudReady()) {
       setActionMessage("请先登录后再保存日元流水。", "error");
       return;
@@ -47,7 +67,7 @@ export function bindJpyEvents() {
       return;
     }
     const record = {
-      id: appState.editingJpyTransactionId || crypto.randomUUID(),
+      id: appState.editingJpyTransactionId || currentJpyDraftId(),
       transaction_type: transactionType,
       account_id: data.account_id,
       transfer_account_id: transferAccountId,
@@ -59,17 +79,46 @@ export function bindJpyEvents() {
       note: data.note.trim(),
       created_at: existingTransaction?.created_at || new Date().toISOString(),
     };
-    const result =
-      transactionType === "fx_out"
-        ? appState.editingJpyTransactionId
-          ? await updateJpyToCnyFx(record)
-          : await createJpyToCnyFx(record)
-        : appState.editingJpyTransactionId
-          ? await updateJpyTransaction(record)
-          : await saveJpyTransaction(record);
-    if (!result) return;
-    resetJpyTransactionForm();
-    await refreshAfterJpyMutation(result.message || "日元流水已保存。", result.reset_expense_status ? "error" : "success");
+
+    jpySubmitInFlight = true;
+    els.jpyTransactionSubmitBtn.disabled = true;
+    try {
+      // 普通新增走独立的 INSERT 契约，返回结构化结果；其余路径的契约不变。
+      if (!appState.editingJpyTransactionId && transactionType !== "fx_out") {
+        // 冻结快照：内容与身份都在点提交这一刻定下来。
+        // 上一次结果未知时沿用原快照，让重试落在同一条记录上；
+        // 明确失败过的则按当前表单内容重新冻结（用户可能已经改过）。
+        const snapshot = appState.jpyPendingSubmission?.snapshot || {
+          ...record,
+          user_id: appState.currentUser?.id || null,
+        };
+        const result = await saveJpyTransaction(snapshot);
+        if (!result.ok) {
+          // 「结果未知」是粘性的：保留快照，后续的明确失败也不能抹掉它，
+          // 因为那一次到底写没写进去仍然不知道。
+          if (result.outcome === "unknown") appState.jpyPendingSubmission = { snapshot };
+          return;
+        }
+        clearJpyDraft();
+        resetJpyTransactionForm();
+        await refreshAfterJpyMutation("日元流水已保存。", "success");
+        return;
+      }
+
+      const result =
+        transactionType === "fx_out"
+          ? appState.editingJpyTransactionId
+            ? await updateJpyToCnyFx(record)
+            : await createJpyToCnyFx(record)
+          : await updateJpyTransaction(record);
+      if (!result) return;
+      if (!appState.editingJpyTransactionId) clearJpyDraft();
+      resetJpyTransactionForm();
+      await refreshAfterJpyMutation(result.message || "日元流水已保存。", result.reset_expense_status ? "error" : "success");
+    } finally {
+      jpySubmitInFlight = false;
+      els.jpyTransactionSubmitBtn.disabled = false;
+    }
   });
 }
 
@@ -315,6 +364,8 @@ function setJpyTransactionForm(transaction, mode) {
   form.elements.amount.focus();
 }
 
+// 注意：这里【不】清 jpyDraftId 与 jpyPendingSubmission。
+// 它只负责把表单恢复成新增态，而未决提交的去留由保存结果决定（见 clearJpyDraft）。
 function resetJpyTransactionForm() {
   appState.editingJpyTransactionId = null;
   els.jpyTransactionForm.elements.transaction_type.disabled = false;
