@@ -6,7 +6,14 @@ import { renderFixedTransferForm } from "#fixed-transfer";
 import { renderJpyPage } from "#jpy";
 import { appState, findFixedTemplate, findJpyAccount, getFixedTemplateTermStatus } from "#state";
 import { renderShell, setActionMessage } from "#ui";
-import { canRequestFixedMonthItemDelete, emptyRow, escapeHtml, fixedMonthItemDeleteLockLabel, money } from "#utils";
+import {
+  canRequestFixedMonthItemDelete,
+  emptyRow,
+  escapeHtml,
+  fixedMonthItemDeleteLockLabel,
+  money,
+  moneyByCurrency,
+} from "#utils";
 import {
   deactivatePaymentChannel,
   deactivateAccount,
@@ -16,7 +23,8 @@ import {
   loadAppData,
   loadFixedMonthPage,
   reactivateTemplate,
-  saveMonthItem,
+  updateFixedMonthItemAmount,
+  updateFixedMonthItemNote,
   settleFixedAdvanceRepayment,
   applySkippedProjectionItems,
   updateMonthItemsStatus,
@@ -35,6 +43,7 @@ export function render() {
   renderTemplates();
   renderAccounts();
   renderTemplatePaymentGroupOptions();
+  renderPendingAdvances();
   renderFixedTransferForm();
   renderExternalRequestsPage();
   renderPaymentChannels();
@@ -209,7 +218,7 @@ function fixedAdvanceControls(section) {
   if (status === "pending") {
     return `
       <div class="fixed-advance-controls" data-advance-controls>
-        <span class="badge">待补回</span>
+        <span class="badge">可补回</span>
         <span>${escapeHtml(section.advance_account_name || "-")} · ${money(section.advance_amount || 0)}</span>
         <input class="table-input compact-date-input" data-fixed-advance-date type="date" value="${escapeHtml(section.advance_paid_at || `${appState.activeMonth}-01`)}" />
         <button class="primary-button compact-button" data-settle-fixed-advance="${section.advance_id}" type="button">补回垫付</button>
@@ -227,6 +236,43 @@ function fixedAdvanceControls(section) {
       <button class="ghost-button compact-button" data-create-fixed-advance="${escapeHtml(encodeURIComponent(section.payment_group || "未分组"))}" type="button">垫付支付</button>
     </div>
   `;
+}
+
+// 历史待补回：只列**不属于当前账期**的垫付。
+//
+// 当月的那些仍显示在支出分组小结行上（fixedAdvanceControls），这里排除掉，
+// 否则同一笔会在同一个页面上出现两次。
+//
+// 这个区块存在的理由：固定月页面按账期加载，换到次月就再也看不到上个月挂着的
+// 垫付了——在此之前，那笔钱只能靠人记得切回原月份才找得到。
+function renderPendingAdvances() {
+  const rows = (appState.pendingFixedAdvances || []).filter(
+    (item) => item.month_key !== appState.activeMonth,
+  );
+  els.pendingAdvancePanel.hidden = rows.length === 0;
+  if (!rows.length) {
+    els.pendingAdvanceRows.innerHTML = "";
+    return;
+  }
+  els.pendingAdvanceRows.innerHTML = rows
+    .map(
+      (item) => `
+        <div class="fixed-advance-controls" data-advance-controls>
+          <span class="badge">可补回</span>
+          <span>${escapeHtml(item.month_key || "")} · ${escapeHtml(item.payment_group || "未分组")}</span>
+          <span>${escapeHtml(item.account_name || "-")} · ${moneyByCurrency(item.amount || 0, item.currency)}</span>
+          <input class="table-input compact-date-input" data-fixed-advance-date type="date" value="${escapeHtml(localToday())}" />
+          <button class="primary-button compact-button" data-settle-fixed-advance="${escapeHtml(item.advance_id)}" type="button">补回垫付</button>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+// 不用 toISOString()——那是 UTC，在日本时区会把凌晨的操作记成前一天。
+function localToday() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
 function fixedAdvanceAccountOptions() {
@@ -267,13 +313,13 @@ function termLabel(item) {
 
 function bindMonthItemControls() {
   document.querySelectorAll("[data-item-amount]").forEach((input) => {
-    input.addEventListener("change", () => saveItemPatch(input.dataset.itemAmount, { amount: Number(input.value || 0) }));
+    input.addEventListener("change", () => saveItemAmount(input.dataset.itemAmount, Number(input.value || 0)));
   });
   document.querySelectorAll("[data-item-status]").forEach((select) => {
     select.addEventListener("change", () => saveItemStatus(select.dataset.itemStatus, select.value));
   });
   document.querySelectorAll("[data-item-note]").forEach((input) => {
-    input.addEventListener("change", () => saveItemPatch(input.dataset.itemNote, { note: input.value.trim() }));
+    input.addEventListener("change", () => saveItemNote(input.dataset.itemNote, input.value.trim()));
   });
   document.querySelectorAll("[data-delete-item]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -377,10 +423,19 @@ function bindMonthItemControls() {
   });
 }
 
-async function saveItemPatch(id, patch) {
-  const item = findMonthItem(id);
-  if (!item) return;
-  const ok = await saveMonthItem({ ...item, ...patch });
+// 金额走 writer：改小一条收入项可能让本月已补回/已转出的钱失去来源，
+// 那个判断只有 DB 做得了。
+//
+// 成功与被拒都重新加载——被拒时输入框里还留着那个没生效的数字，
+// 不刷掉的话屏幕上的金额和库里的对不上。
+async function saveItemAmount(id, amount) {
+  await updateFixedMonthItemAmount(id, amount);
+  await loadFixedMonthPage();
+  render();
+}
+
+async function saveItemNote(id, note) {
+  const ok = await updateFixedMonthItemNote(id, note);
   if (!ok) return;
   await loadFixedMonthPage();
   render();

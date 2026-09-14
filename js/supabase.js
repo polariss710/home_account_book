@@ -224,7 +224,13 @@ function queuePageLoad() {
 }
 
 export async function loadAppData() {
-  await Promise.all([loadFixedMonthPage(), loadJpyAccountPage(), loadCnyAccountPage(), loadCnyFixedPage()]);
+  await Promise.all([
+    loadFixedMonthPage(),
+    loadJpyAccountPage(),
+    loadCnyAccountPage(),
+    loadCnyFixedPage(),
+    loadPendingFixedAdvances(),
+  ]);
 }
 
 export async function loadExternalTransactionRequests(status = appState.externalRequestStatusFilter) {
@@ -515,27 +521,62 @@ export async function updatePaymentChannel(id, patch) {
   return updateById("home_payment_channels", id, patch);
 }
 
-export async function saveMonthItem(record) {
-  const allowedRecord = {
-    id: record.id,
-    template_id: record.template_id,
-    month_key: record.month_key,
-    currency: record.currency,
-    direction: record.direction,
-    name: record.name,
-    amount: record.amount,
-    status: record.status,
-    account_id: record.account_id,
-    payment_group: record.payment_group,
-    due_date: record.due_date,
-    term_no: record.term_no,
-    total_terms: record.total_terms,
-    note: record.note,
-    linked_jpy_transaction_id: record.linked_jpy_transaction_id,
-    linked_cny_transaction_id: record.linked_cny_transaction_id,
-    created_at: record.created_at,
-  };
-  return upsert("home_fixed_month_items", withUser(allowedRecord));
+// 固定项金额走 writer，不再整行 upsert。
+//
+// 金额是资金口径的一部分：改小一条收入项，可能让本月已经补回或转出的钱失去来源。
+// 判断这件事需要读当月全部固定项、垫付与补回，只能在 DB 侧做。
+//
+// 真正的防线是 home_fixed_month_items 上的触发器——它对所有写入路径生效，
+// 包括旧页面和直接构造的 REST 请求。走这个 RPC 是为了拿到可读的业务错误文案，
+// 而不是让前端自己判断。
+export async function updateFixedMonthItemAmount(id, amount) {
+  const { data, error, status } = await appState.supabaseClient.rpc("home_update_fixed_month_item_amount", {
+    p_item_id: id,
+    p_amount: amount,
+  });
+  if (error) {
+    await reportWriteError(error, "固定项金额更新失败：", status);
+    return null;
+  }
+  return handleRpcResult(data, "固定项金额更新失败。");
+}
+
+// 备注不影响任何金额口径，保持客户端直写。
+//
+// 但不能再用 upsert：只传 id 与 note 时，INSERT ... ON CONFLICT 的 INSERT 阶段
+// 会先撞上 month_key / currency / direction / name 这些 NOT NULL 列，
+// 在判定冲突之前就报错。所以这里用明确的 UPDATE，并核验确实命中了目标行。
+export async function updateFixedMonthItemNote(id, note) {
+  if (!isCloudReady()) return false;
+  const { data, error, status } = await appState.supabaseClient
+    .from("home_fixed_month_items")
+    .update({ note })
+    .eq("id", id)
+    .eq("user_id", appState.currentUser.id)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    await reportWriteError(error, "固定项备注更新失败：", status);
+    return false;
+  }
+  if (!data) {
+    setActionMessage("固定项备注更新失败：没有找到可更新的固定项。", "error");
+    return false;
+  }
+  return true;
+}
+
+// 待补回垫付按用户全量读取，不按月过滤。
+// 固定月页面只加载当前账期，换到次月就看不见上个月挂着的垫付——这份补上那个缺口。
+export async function loadPendingFixedAdvances() {
+  if (!isCloudReady()) return;
+  const { data, error } = await appState.supabaseClient.rpc("home_list_pending_fixed_advances");
+  if (error) {
+    setActionMessage(`待补回垫付读取失败：${error.message}`, "error");
+    appState.pendingFixedAdvances = [];
+    return;
+  }
+  appState.pendingFixedAdvances = Array.isArray(data) ? data : [];
 }
 
 // School projection 固定项（accounting_scope='school'）不能走普通状态 writer——

@@ -342,6 +342,17 @@ input[type="month"] {
   color: var(--unpaid);
 }
 
+/* 整月差额下面那行小字。它要说明这个数「不是要准备的现金」，
+   所以必须跟着数字一起看见，不能靠 tooltip。 */
+.metric-note {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
 .negative-text {
   color: var(--unpaid);
   font-weight: 800;
@@ -390,6 +401,36 @@ input[type="month"] {
 
 .settlement-status.surplus strong {
   color: var(--paid);
+}
+
+/* 状态条现在是多行：整月差额 / 本月已垫付 / 还需补充（或可转出）。
+   三个数含义不同，必须分行且左右对齐，挤成一行会被当成同一个量。 */
+.settlement-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 210px;
+}
+
+.settlement-row span {
+  white-space: nowrap;
+}
+
+/* 只有最后一行（要动的钱）用大字号，前两行是背景信息。 */
+.settlement-row:last-child strong {
+  font-size: 18px;
+}
+
+.settlement-row:not(:last-child) strong {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.panel-subtitle {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .form-grid {

@@ -8,7 +8,7 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232d6a5f'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='34' fill='white' font-family='Arial, sans-serif'%3E%E5%AE%B6%3C/text%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=20260914-write-auth-classify-2" />
+    <link rel="stylesheet" href="styles.css?v=20260914-fixed-funding-scope-1" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
@@ -87,8 +87,11 @@
               <strong id="plannedExpenseTotal">0</strong>
             </article>
             <article class="metric">
-              <span>预计盈余 / 赤字</span>
+              <!-- 这个数含已支付与已垫付项目，是本月固定收支的规模，
+                   不等于还需要准备的现金。真正要补的钱在固定资金调拨区。 -->
+              <span>整月固定收支差额</span>
               <strong id="plannedBalanceTotal">0</strong>
+              <small class="metric-note">含已支付与已垫付项目</small>
             </article>
             <article class="metric">
               <span>已收收入</span>
@@ -306,6 +309,16 @@
                 <tbody id="expenseItemRows"></tbody>
               </table>
             </div>
+          </section>
+
+          <!-- 历史待补回：只列不属于当前账期的垫付。
+               当月的仍显示在支出分组小结行上，这里不重复。 -->
+          <section class="panel" id="pendingAdvancePanel" hidden>
+            <div class="panel-heading">
+              <h2>历史待补回垫付</h2>
+              <span class="panel-subtitle">往期由账户先行支付、尚未放回的金额</span>
+            </div>
+            <div id="pendingAdvanceRows"></div>
           </section>
 
           <section class="panel">
@@ -830,20 +843,20 @@
     <script type="importmap">
       {
         "imports": {
-          "#annual": "./js/annual.js?v=20260914-write-auth-classify-2",
-          "#app": "./app.js?v=20260914-write-auth-classify-2",
-          "#cny": "./js/cny.js?v=20260914-write-auth-classify-2",
-          "#config": "./js/config.js?v=20260914-write-auth-classify-2",
-          "#elements": "./js/elements.js?v=20260914-write-auth-classify-2",
-          "#events": "./js/events.js?v=20260914-write-auth-classify-2",
-          "#external-requests": "./js/external-requests.js?v=20260914-write-auth-classify-2",
-          "#fixed-transfer": "./js/fixed-transfer.js?v=20260914-write-auth-classify-2",
-          "#jpy": "./js/jpy.js?v=20260914-write-auth-classify-2",
-          "#render": "./js/render.js?v=20260914-write-auth-classify-2",
-          "#state": "./js/state.js?v=20260914-write-auth-classify-2",
-          "#supabase": "./js/supabase.js?v=20260914-write-auth-classify-2",
-          "#ui": "./js/ui.js?v=20260914-write-auth-classify-2",
-          "#utils": "./js/utils.js?v=20260914-write-auth-classify-2"
+          "#annual": "./js/annual.js?v=20260914-fixed-funding-scope-1",
+          "#app": "./app.js?v=20260914-fixed-funding-scope-1",
+          "#cny": "./js/cny.js?v=20260914-fixed-funding-scope-1",
+          "#config": "./js/config.js?v=20260914-fixed-funding-scope-1",
+          "#elements": "./js/elements.js?v=20260914-fixed-funding-scope-1",
+          "#events": "./js/events.js?v=20260914-fixed-funding-scope-1",
+          "#external-requests": "./js/external-requests.js?v=20260914-fixed-funding-scope-1",
+          "#fixed-transfer": "./js/fixed-transfer.js?v=20260914-fixed-funding-scope-1",
+          "#jpy": "./js/jpy.js?v=20260914-fixed-funding-scope-1",
+          "#render": "./js/render.js?v=20260914-fixed-funding-scope-1",
+          "#state": "./js/state.js?v=20260914-fixed-funding-scope-1",
+          "#supabase": "./js/supabase.js?v=20260914-fixed-funding-scope-1",
+          "#ui": "./js/ui.js?v=20260914-fixed-funding-scope-1",
+          "#utils": "./js/utils.js?v=20260914-fixed-funding-scope-1"
         }
       }
     </script>

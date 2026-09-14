@@ -13,6 +13,9 @@ export const appState = {
   cnyPage: null,
   cnyFixedPage: null,
   externalRequests: [],
+  // 跨月可见的待补回垫付。固定月页面只读当前账期，换月就看不到上个月的垫付，
+  // 所以这份单独全量加载，不按月过滤。
+  pendingFixedAdvances: [],
   externalRequestStatusFilter: "pending",
   yearSummary: null,
   editingJpyTransactionId: null,

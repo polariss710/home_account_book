@@ -37,6 +37,8 @@ const elementIds = [
   "fixedTransferStatus",
   "fixedTransferSubmitBtn",
   "fixedTransferAccountSelect",
+  "pendingAdvancePanel",
+  "pendingAdvanceRows",
   "activeTemplateTitle",
   "toggleActiveTemplatesBtn",
   "templateRows",
