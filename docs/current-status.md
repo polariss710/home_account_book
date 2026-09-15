@@ -24,7 +24,8 @@ This document keeps the current Cash System implementation checkpoint, safety no
 
 ## Latest Update
 
-2026-09-14 C rev8 database deployment (frontend push pending):
+2026-09-14 C rev8 — fixed funding scope, database and frontend both live
+(UI version `20260914-fixed-funding-scope-1`):
 
 - Deployed the approved funding/surplus calculations, income-reduction trigger,
   month locks, repayment gate, amount RPC and cross-month pending reader.
@@ -35,8 +36,32 @@ This document keeps the current Cash System implementation checkpoint, safety no
   Three real-data fingerprints match before/after; no test data was committed.
 - Commit-dependent contention scenarios and dual-session lock waiting remain
   unverified. F8's accepted direct-write concurrency limitation remains.
-- Frontend commit `4560070` remains local, awaiting separate push authorization.
-  Full evidence and remaining limitations: [deployment report](c-rev8-deployment-20260914.md).
+- Full database evidence and remaining limitations:
+  [deployment report](c-rev8-deployment-20260914.md).
+
+Frontend (commit `4560070`, pushed after the database landed):
+
+- The top metric is renamed to the monthly fixed gap and carries a subtitle
+  saying it includes paid and advanced items. It is the size of the month, not
+  the cash still to be found — reading it as the latter is what started this.
+- The transfer panel now shows three separately labelled numbers: the monthly
+  gap, what was advanced this month, and what still needs adding. Direction and
+  amount both come from the database; the button carries the rounded-down figure
+  beside the raw surplus so a leftover under a thousand stays visible.
+- Fixed-item amounts moved off the blanket upsert onto a writer, since lowering
+  an income line can strip the funding from money already repaid or transferred
+  out. Notes stay client-side but switched to an explicit UPDATE — a bare upsert
+  would trip the NOT NULL columns during its insert phase.
+- Advances pending from earlier months finally have an entry point. The fixed
+  page loads one period at a time, so changing month used to be enough to lose
+  sight of them entirely.
+- Verified against live September data: 710,000 monthly gap minus 397,000
+  advanced leaves 313,000 still to add, and the August view lists the September
+  advance with a working repayment button.
+- Two cosmetic rough edges, both pre-existing and neither a defect: the transfer
+  button stays enabled when the month already holds a transfer item (the backend
+  refuses with a readable message), and surplus-transfer groups still render an
+  advance button that cannot succeed.
 
 2026-09-14 write-path auth classification and JPY casual insert contract
 (UI version `20260914-write-auth-classify-1`):
